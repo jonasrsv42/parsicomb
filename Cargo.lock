@@ -3,13 +3,5 @@
 version = 4
 
 [[package]]
-name = "areamy"
-version = "0.1.0"
-source = "git+ssh://git@github.com/jonasrsv42/areamy#218254158b0578257f502afa5e3f3c6447262817"
-
-[[package]]
 name = "parsicomb"
 version = "0.1.0"
-dependencies = [
- "areamy",
-]
