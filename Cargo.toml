@@ -1,0 +1,11 @@
+[package]
+name = "parsicomb"
+version = "0.1.0"
+edition = "2024"
+
+[env]
+CARGO_NET_GIT_FETCH_WITH_CLI = { value = "true" }
+
+[dependencies]
+areamy = { git = "ssh://git@github.com/jonasrsv42/areamy"}
+
