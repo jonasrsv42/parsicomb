@@ -3,7 +3,7 @@ use crate::utf8::char::char;
 use crate::filter::FilterExt;
 
 /// Convenience function to create a Unicode digit parser
-pub fn unicode_digit() -> impl for<'a> Parser<'a, Output = char> {
+pub fn unicode_digit() -> impl for<'code> Parser<'code, Output = char> {
     char().filter(
         |c| c.is_numeric(), 
         "expected Unicode digit"

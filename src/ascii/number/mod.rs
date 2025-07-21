@@ -19,7 +19,7 @@ pub enum Number {
 }
 
 /// Parser that matches either an integer or a float and returns a Number enum
-pub fn number<'a>() -> impl Parser<'a, Output = Number> {
+pub fn number<'code>() -> impl Parser<'code, Output = Number> {
     f64().map(Number::F64).or(i64().map(Number::I64))
 }
 

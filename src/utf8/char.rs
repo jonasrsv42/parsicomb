@@ -2,25 +2,23 @@ use crate::byte::ByteParser;
 use crate::byte_cursor::ByteCursor;
 use crate::parser::Parser;
 use crate::{CodeLoc, ParsiCombError};
-use areamy::error::Error;
 
 /// Parser that consumes and returns a single UTF-8 character
 pub struct CharParser;
 
 // Helper function to reduce error creation boilerplate
-fn create_error(cursor: &ByteCursor, message: String) -> Error {
+fn create_error<'code>(cursor: &ByteCursor<'code>, message: String) -> ParsiCombError<'code> {
     let (data, position) = cursor.inner();
-    let code = data.to_vec(); // Assuming CodeLoc needs ownership
-    areamy::any_err!(ParsiCombError::SyntaxError {
+    ParsiCombError::SyntaxError {
         message,
-        loc: CodeLoc::new(code, position)
-    })
+        loc: CodeLoc::new(data, position)
+    }
 }
 
-impl<'a> Parser<'a> for CharParser {
+impl<'code> Parser<'code> for CharParser {
     type Output = char;
 
-    fn parse(&self, cursor: ByteCursor<'a>) -> Result<(Self::Output, ByteCursor<'a>), Error> {
+    fn parse(&self, cursor: ByteCursor<'code>) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
         let byte_parser = ByteParser::new();
 
         // 1. Read the first byte
@@ -145,10 +143,10 @@ pub fn char() -> CharParser {
 /// Parser that matches a specific character
 pub struct IsChar(char);
 
-impl<'a> Parser<'a> for IsChar {
+impl<'code> Parser<'code> for IsChar {
     type Output = char;
 
-    fn parse(&self, cursor: ByteCursor<'a>) -> Result<(Self::Output, ByteCursor<'a>), Error> {
+    fn parse(&self, cursor: ByteCursor<'code>) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
         let (ch, next_cursor) = char().parse(cursor)?;
         if ch == self.0 {
             Ok((ch, next_cursor))

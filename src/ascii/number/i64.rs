@@ -2,19 +2,18 @@ use super::u64::u64;
 use crate::byte_cursor::ByteCursor;
 use crate::parser::Parser;
 use crate::{CodeLoc, ParsiCombError};
-use areamy::error::Error;
 
 /// Parser that matches ASCII integer numbers (positive or negative)
-pub fn i64<'a>() -> impl Parser<'a, Output = i64> {
+pub fn i64<'code>() -> impl Parser<'code, Output = i64> {
     IntParser
 }
 
 struct IntParser;
 
-impl<'a> Parser<'a> for IntParser {
+impl<'code> Parser<'code> for IntParser {
     type Output = i64;
 
-    fn parse(&self, cursor: ByteCursor<'a>) -> Result<(Self::Output, ByteCursor<'a>), Error> {
+    fn parse(&self, cursor: ByteCursor<'code>) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
         let mut cursor = cursor;
         let mut is_negative = false;
 
@@ -39,22 +38,20 @@ impl<'a> Parser<'a> for IntParser {
             // Check for overflow when negating
             if value > i64::MAX as u64 + 1 {
                 let (data, position) = cursor.inner();
-                let code = data.to_vec();
-                return Err(areamy::any_err!(ParsiCombError::SyntaxError {
+                return Err(ParsiCombError::SyntaxError {
                     message: format!("negative number too large: -{}", value),
-                    loc: CodeLoc::new(code, position)
-                }));
+                    loc: CodeLoc::new(data, position)
+                });
             }
             -(value as i64)
         } else {
             // Check for positive overflow
             if value > i64::MAX as u64 {
                 let (data, position) = cursor.inner();
-                let code = data.to_vec();
-                return Err(areamy::any_err!(ParsiCombError::SyntaxError {
+                return Err(ParsiCombError::SyntaxError {
                     message: format!("positive number too large: {}", value),
-                    loc: CodeLoc::new(code, position)
-                }));
+                    loc: CodeLoc::new(data, position)
+                });
             }
             value as i64
         };

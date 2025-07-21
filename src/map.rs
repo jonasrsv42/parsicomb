@@ -1,6 +1,6 @@
 use super::byte_cursor::ByteCursor;
 use super::parser::Parser;
-use areamy::error::Error;
+use crate::ParsiCombError;
 
 /// Parser combinator that transforms the output of a parser using a mapping function
 pub struct Map<P, F> {
@@ -14,14 +14,14 @@ impl<P, F> Map<P, F> {
     }
 }
 
-impl<'a, P, F, T, U> Parser<'a> for Map<P, F>
+impl<'code, P, F, T, U> Parser<'code> for Map<P, F>
 where
-    P: Parser<'a, Output = T>,
+    P: Parser<'code, Output = T>,
     F: Fn(T) -> U,
 {
     type Output = U;
     
-    fn parse(&self, cursor: ByteCursor<'a>) -> Result<(Self::Output, ByteCursor<'a>), Error> {
+    fn parse(&self, cursor: ByteCursor<'code>) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
         let (value, cursor) = self.parser.parse(cursor)?;
         let mapped_value = (self.mapper)(value);
         Ok((mapped_value, cursor))
@@ -29,16 +29,16 @@ where
 }
 
 /// Convenience function to create a Map parser
-pub fn map<'a, P, F, T, U>(parser: P, mapper: F) -> Map<P, F>
+pub fn map<'code, P, F, T, U>(parser: P, mapper: F) -> Map<P, F>
 where
-    P: Parser<'a, Output = T>,
+    P: Parser<'code, Output = T>,
     F: Fn(T) -> U,
 {
     Map::new(parser, mapper)
 }
 
 /// Extension trait to add .map() method support for parsers
-pub trait MapExt<'a>: Parser<'a> + Sized {
+pub trait MapExt<'code>: Parser<'code> + Sized {
     fn map<F, U>(self, mapper: F) -> Map<Self, F>
     where
         F: Fn(Self::Output) -> U,
@@ -48,7 +48,7 @@ pub trait MapExt<'a>: Parser<'a> + Sized {
 }
 
 /// Implement MapExt for all parsers
-impl<'a, P> MapExt<'a> for P where P: Parser<'a> {}
+impl<'code, P> MapExt<'code> for P where P: Parser<'code> {}
 
 #[cfg(test)]
 mod tests {

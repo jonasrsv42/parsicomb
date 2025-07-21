@@ -2,7 +2,7 @@ use crate::parser::Parser;
 use crate::byte::between_bytes;
 
 /// Parser that matches a single ASCII digit (0-9)
-pub fn digit<'a>() -> impl Parser<'a, Output = u8> {
+pub fn digit<'code>() -> impl Parser<'code, Output = u8> {
     between_bytes(b'0', b'9')
 }
 

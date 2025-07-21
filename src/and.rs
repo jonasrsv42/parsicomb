@@ -1,6 +1,6 @@
 use super::byte_cursor::ByteCursor;
 use super::parser::Parser;
-use areamy::error::Error;
+use crate::ParsiCombError;
 
 /// Parser combinator that sequences two parsers and returns both results as a tuple
 /// 
@@ -38,14 +38,14 @@ impl<P1, P2> And<P1, P2> {
     }
 }
 
-impl<'a, P1, P2> Parser<'a> for And<P1, P2>
+impl<'code, P1, P2> Parser<'code> for And<P1, P2>
 where
-    P1: Parser<'a>,
-    P2: Parser<'a>,
+    P1: Parser<'code>,
+    P2: Parser<'code>,
 {
     type Output = (P1::Output, P2::Output);
     
-    fn parse(&self, cursor: ByteCursor<'a>) -> Result<(Self::Output, ByteCursor<'a>), Error> {
+    fn parse(&self, cursor: ByteCursor<'code>) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
         let (result1, cursor) = self.parser1.parse(cursor)?;
         let (result2, cursor) = self.parser2.parse(cursor)?;
         Ok(((result1, result2), cursor))
@@ -53,26 +53,26 @@ where
 }
 
 /// Convenience function to create an And parser
-pub fn and<'a, P1, P2>(parser1: P1, parser2: P2) -> And<P1, P2>
+pub fn and<'code, P1, P2>(parser1: P1, parser2: P2) -> And<P1, P2>
 where
-    P1: Parser<'a>,
-    P2: Parser<'a>,
+    P1: Parser<'code>,
+    P2: Parser<'code>,
 {
     And::new(parser1, parser2)
 }
 
 /// Extension trait to add .and() method support for parsers
-pub trait AndExt<'a>: Parser<'a> + Sized {
+pub trait AndExt<'code>: Parser<'code> + Sized {
     fn and<P>(self, other: P) -> And<Self, P>
     where
-        P: Parser<'a>,
+        P: Parser<'code>,
     {
         And::new(self, other)
     }
 }
 
 /// Implement AndExt for all parsers
-impl<'a, P> AndExt<'a> for P where P: Parser<'a> {}
+impl<'code, P> AndExt<'code> for P where P: Parser<'code> {}
 
 #[cfg(test)]
 mod tests {

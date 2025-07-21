@@ -2,20 +2,19 @@ use crate::parser::Parser;
 use crate::byte_cursor::ByteCursor;
 use crate::some::some;
 use crate::{ParsiCombError, CodeLoc};
-use areamy::error::Error;
 use super::digit::digit;
 
 /// Parser that matches one or more ASCII digits and returns them as a u64
-pub fn u64<'a>() -> impl Parser<'a, Output = u64> {
+pub fn u64<'code>() -> impl Parser<'code, Output = u64> {
     UIntParser
 }
 
 struct UIntParser;
 
-impl<'a> Parser<'a> for UIntParser {
+impl<'code> Parser<'code> for UIntParser {
     type Output = u64;
     
-    fn parse(&self, cursor: ByteCursor<'a>) -> Result<(Self::Output, ByteCursor<'a>), Error> {
+    fn parse(&self, cursor: ByteCursor<'code>) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
         let (digit_bytes, cursor) = some(digit()).parse(cursor)?;
         
         // Convert digits to string
@@ -23,11 +22,10 @@ impl<'a> Parser<'a> for UIntParser {
             Ok(s) => s,
             Err(_) => {
                 let (data, position) = cursor.inner();
-                let code = data.to_vec();
-                return Err(areamy::any_err!(ParsiCombError::SyntaxError {
+                return Err(ParsiCombError::SyntaxError {
                     message: "invalid UTF-8 in digits".to_string(),
-                    loc: CodeLoc::new(code, position)
-                }));
+                    loc: CodeLoc::new(data, position)
+                });
             }
         };
         
@@ -36,11 +34,10 @@ impl<'a> Parser<'a> for UIntParser {
             Ok(v) => v,
             Err(_) => {
                 let (data, position) = cursor.inner();
-                let code = data.to_vec();
-                return Err(areamy::any_err!(ParsiCombError::SyntaxError {
+                return Err(ParsiCombError::SyntaxError {
                     message: format!("number too large: {}", num_str),
-                    loc: CodeLoc::new(code, position)
-                }));
+                    loc: CodeLoc::new(data, position)
+                });
             }
         };
         

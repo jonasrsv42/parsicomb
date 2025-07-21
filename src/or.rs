@@ -1,6 +1,6 @@
 use super::byte_cursor::ByteCursor;
 use super::parser::Parser;
-use areamy::error::Error;
+use crate::ParsiCombError;
 
 /// Parser combinator that tries the first parser, and if it fails, tries the second parser
 pub struct Or<P1, P2> {
@@ -14,14 +14,14 @@ impl<P1, P2> Or<P1, P2> {
     }
 }
 
-impl<'a, P1, P2, O> Parser<'a> for Or<P1, P2>
+impl<'code, P1, P2, O> Parser<'code> for Or<P1, P2>
 where
-    P1: Parser<'a, Output = O>,
-    P2: Parser<'a, Output = O>,
+    P1: Parser<'code, Output = O>,
+    P2: Parser<'code, Output = O>,
 {
     type Output = O;
     
-    fn parse(&self, cursor: ByteCursor<'a>) -> Result<(Self::Output, ByteCursor<'a>), Error> {
+    fn parse(&self, cursor: ByteCursor<'code>) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
         match self.parser1.parse(cursor) {
             Ok(result) => Ok(result),
             Err(_) => self.parser2.parse(cursor),
@@ -30,23 +30,23 @@ where
 }
 
 /// Extension trait to add .or() method support for parsers
-pub trait OrExt<'a>: Parser<'a> + Sized {
+pub trait OrExt<'code>: Parser<'code> + Sized {
     fn or<P>(self, other: P) -> Or<Self, P>
     where
-        P: Parser<'a, Output = Self::Output>,
+        P: Parser<'code, Output = Self::Output>,
     {
         Or::new(self, other)
     }
 }
 
 /// Implement OrExt for all parsers
-impl<'a, P> OrExt<'a> for P where P: Parser<'a> {}
+impl<'code, P> OrExt<'code> for P where P: Parser<'code> {}
 
 /// Convenience function to create an Or parser
-pub fn or<'a, P1, P2, O>(parser1: P1, parser2: P2) -> Or<P1, P2>
+pub fn or<'code, P1, P2, O>(parser1: P1, parser2: P2) -> Or<P1, P2>
 where
-    P1: Parser<'a, Output = O>,
-    P2: Parser<'a, Output = O>,
+    P1: Parser<'code, Output = O>,
+    P2: Parser<'code, Output = O>,
 {
     Or::new(parser1, parser2)
 }

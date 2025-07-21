@@ -26,3 +26,4 @@ pub mod take_until;
 pub mod default;
 
 pub use error::{CodeLoc, ParsiCombError};
+pub use parser::Parser;

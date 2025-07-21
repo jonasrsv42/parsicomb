@@ -1,7 +1,6 @@
 use crate::byte_cursor::ByteCursor;
 use crate::parser::Parser;
 use crate::{ParsiCombError, CodeLoc};
-use areamy::error::Error;
 
 /// Parser that applies a predicate function to filter the output of another parser
 pub struct FilterParser<P, F> {
@@ -20,31 +19,30 @@ impl<P, F> FilterParser<P, F> {
     }
 }
 
-impl<'a, P, F, T> Parser<'a> for FilterParser<P, F>
+impl<'code, P, F, T> Parser<'code> for FilterParser<P, F>
 where
-    P: Parser<'a, Output = T>,
+    P: Parser<'code, Output = T>,
     F: Fn(&T) -> bool,
 {
     type Output = T;
     
-    fn parse(&self, cursor: ByteCursor<'a>) -> Result<(Self::Output, ByteCursor<'a>), Error> {
+    fn parse(&self, cursor: ByteCursor<'code>) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
         let (value, new_cursor) = self.parser.parse(cursor)?;
         
         if (self.predicate)(&value) {
             Ok((value, new_cursor))
         } else {
             let (data, position) = cursor.inner();
-            let code = data.to_vec();
-            Err(areamy::any_err!(ParsiCombError::SyntaxError {
+            Err(ParsiCombError::SyntaxError {
                 message: self.error_message.clone(),
-                loc: CodeLoc::new(code, position)
-            }))
+                loc: CodeLoc::new(data, position)
+            })
         }
     }
 }
 
 /// Extension trait to add filter method to all parsers
-pub trait FilterExt<'a>: Parser<'a> {
+pub trait FilterExt<'code>: Parser<'code> {
     fn filter<F>(self, predicate: F, error_message: &str) -> FilterParser<Self, F>
     where
         Self: Sized,
@@ -54,12 +52,12 @@ pub trait FilterExt<'a>: Parser<'a> {
     }
 }
 
-impl<'a, P: Parser<'a>> FilterExt<'a> for P {}
+impl<'code, P: Parser<'code>> FilterExt<'code> for P {}
 
 /// Convenience function to create a filtered parser
-pub fn filter<'a, P, F>(parser: P, predicate: F, error_message: &str) -> FilterParser<P, F>
+pub fn filter<'code, P, F>(parser: P, predicate: F, error_message: &str) -> FilterParser<P, F>
 where
-    P: Parser<'a>,
+    P: Parser<'code>,
     F: Fn(&P::Output) -> bool,
 {
     FilterParser::new(parser, predicate, error_message.to_string())

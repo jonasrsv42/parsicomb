@@ -1,6 +1,6 @@
 use super::byte_cursor::ByteCursor;
 use super::parser::Parser;
-use areamy::error::Error;
+use crate::ParsiCombError;
 
 /// Parser combinator that matches one or more occurrences of the given parser
 pub struct Some<P> {
@@ -13,13 +13,13 @@ impl<P> Some<P> {
     }
 }
 
-impl<'a, P> Parser<'a> for Some<P>
+impl<'code, P> Parser<'code> for Some<P>
 where
-    P: Parser<'a>,
+    P: Parser<'code>,
 {
     type Output = Vec<P::Output>;
     
-    fn parse(&self, cursor: ByteCursor<'a>) -> Result<(Self::Output, ByteCursor<'a>), Error> {
+    fn parse(&self, cursor: ByteCursor<'code>) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
         let mut results = Vec::new();
         
         // First parse must succeed
@@ -45,9 +45,9 @@ where
 }
 
 /// Convenience function to create a Some parser
-pub fn some<'a, P>(parser: P) -> Some<P>
+pub fn some<'code, P>(parser: P) -> Some<P>
 where
-    P: Parser<'a>,
+    P: Parser<'code>,
 {
     Some::new(parser)
 }

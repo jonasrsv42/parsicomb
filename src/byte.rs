@@ -1,7 +1,6 @@
 use super::byte_cursor::ByteCursor;
 use super::parser::Parser;
 use crate::{CodeLoc, ParsiCombError};
-use areamy::error::Error;
 
 /// Parser that consumes and returns a single byte
 pub struct ByteParser;
@@ -17,10 +16,13 @@ pub fn byte() -> ByteParser {
     ByteParser::new()
 }
 
-impl<'a> Parser<'a> for ByteParser {
+impl<'code> Parser<'code> for ByteParser {
     type Output = u8;
 
-    fn parse(&self, cursor: ByteCursor<'a>) -> Result<(Self::Output, ByteCursor<'a>), Error> {
+    fn parse(
+        &self,
+        cursor: ByteCursor<'code>,
+    ) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
         let byte = cursor.value()?;
         Ok((byte, cursor.next()))
     }
@@ -37,15 +39,17 @@ impl IsByteParser {
     }
 }
 
-impl<'a> Parser<'a> for IsByteParser {
+impl<'code> Parser<'code> for IsByteParser {
     type Output = u8;
 
-    fn parse(&self, cursor: ByteCursor<'a>) -> Result<(Self::Output, ByteCursor<'a>), Error> {
+    fn parse(
+        &self,
+        cursor: ByteCursor<'code>,
+    ) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
         match cursor.value() {
             Ok(byte) if byte == self.expected => Ok((byte, cursor.next())),
             Ok(byte) => {
                 let (data, position) = cursor.inner();
-                let code = data.to_vec();
                 let message = format!(
                     "expected byte 0x{:02X} ('{}'), found 0x{:02X} ('{}')",
                     self.expected,
@@ -53,10 +57,10 @@ impl<'a> Parser<'a> for IsByteParser {
                     byte,
                     std::str::from_utf8(&[byte]).unwrap_or("<non-utf8>")
                 );
-                Err(areamy::any_err!(ParsiCombError::SyntaxError {
+                Err(ParsiCombError::SyntaxError {
                     message,
-                    loc: CodeLoc::new(code, position)
-                }))
+                    loc: CodeLoc::new(data, position),
+                })
             }
             Err(e) => Err(e),
         }
@@ -75,15 +79,17 @@ impl BetweenBytesParser {
     }
 }
 
-impl<'a> Parser<'a> for BetweenBytesParser {
+impl<'code> Parser<'code> for BetweenBytesParser {
     type Output = u8;
 
-    fn parse(&self, cursor: ByteCursor<'a>) -> Result<(Self::Output, ByteCursor<'a>), Error> {
+    fn parse(
+        &self,
+        cursor: ByteCursor<'code>,
+    ) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
         match cursor.value() {
             Ok(byte) if byte >= self.start && byte <= self.end => Ok((byte, cursor.next())),
             Ok(byte) => {
                 let (data, position) = cursor.inner();
-                let code = data.to_vec();
                 let message = format!(
                     "expected byte in range 0x{:02X}-0x{:02X} ('{}'-'{}'), found 0x{:02X} ('{}')",
                     self.start,
@@ -93,10 +99,10 @@ impl<'a> Parser<'a> for BetweenBytesParser {
                     byte,
                     std::str::from_utf8(&[byte]).unwrap_or("<non-utf8>")
                 );
-                Err(areamy::any_err!(ParsiCombError::SyntaxError {
+                Err(ParsiCombError::SyntaxError {
                     message,
-                    loc: CodeLoc::new(code, position)
-                }))
+                    loc: CodeLoc::new(data, position)
+                })
             }
             Err(e) => Err(e),
         }

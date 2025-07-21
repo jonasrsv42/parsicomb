@@ -1,6 +1,6 @@
 use crate::byte_cursor::ByteCursor;
 use crate::parser::Parser;
-use areamy::error::Error;
+use crate::ParsiCombError;
 
 /// Parser that repeatedly applies another parser until a predicate is satisfied
 pub struct TakeUntilParser<P, F> {
@@ -14,14 +14,14 @@ impl<P, F> TakeUntilParser<P, F> {
     }
 }
 
-impl<'a, P, F, T> Parser<'a> for TakeUntilParser<P, F>
+impl<'code, P, F, T> Parser<'code> for TakeUntilParser<P, F>
 where
-    P: Parser<'a, Output = T>,
+    P: Parser<'code, Output = T>,
     F: Fn(&T) -> bool,
 {
     type Output = Vec<T>;
     
-    fn parse(&self, cursor: ByteCursor<'a>) -> Result<(Self::Output, ByteCursor<'a>), Error> {
+    fn parse(&self, cursor: ByteCursor<'code>) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
         let mut result = Vec::new();
         let mut current_cursor = cursor;
         

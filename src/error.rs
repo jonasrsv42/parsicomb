@@ -1,4 +1,3 @@
-use areamy::error::AnyErr;
 use std::error::Error;
 use std::fmt;
 
@@ -9,14 +8,14 @@ pub struct ReadablePosition {
 }
 
 #[derive(Debug)]
-pub struct CodeLoc {
-    code: Vec<u8>,
+pub struct CodeLoc<'code> {
+    code: &'code [u8],
     /// The byte position in `code` where the cursor encountered an error
     loc: usize,
 }
 
-impl CodeLoc {
-    pub fn new(code: Vec<u8>, loc: usize) -> Self {
+impl<'code> CodeLoc<'code> {
+    pub fn new(code: &'code [u8], loc: usize) -> Self {
         Self { code, loc }
     }
 
@@ -106,14 +105,14 @@ impl CodeLoc {
 }
 
 #[derive(Debug)]
-pub enum ParsiCombError {
-    UnexpectedEndOfFile(CodeLoc),
+pub enum ParsiCombError<'code> {
+    UnexpectedEndOfFile(CodeLoc<'code>),
     AlreadyAtEndOfFile,
     CannotReadValueAtEof,
-    SyntaxError { message: String, loc: CodeLoc },
+    SyntaxError { message: String, loc: CodeLoc<'code> },
 }
 
-impl fmt::Display for ParsiCombError {
+impl<'code> fmt::Display for ParsiCombError<'code> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ParsiCombError::UnexpectedEndOfFile(code_loc) => {
@@ -146,10 +145,4 @@ impl fmt::Display for ParsiCombError {
     }
 }
 
-impl Error for ParsiCombError {}
-impl AnyErr for ParsiCombError {}
-impl From<ParsiCombError> for Box<dyn AnyErr> {
-    fn from(value: ParsiCombError) -> Self {
-        Box::new(value) as Box<dyn AnyErr>
-    }
-}
+impl<'code> Error for ParsiCombError<'code> {}

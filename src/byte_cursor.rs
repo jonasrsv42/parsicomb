@@ -39,33 +39,27 @@ impl<'a> ByteCursor<'a> {
     }
 
     /// Advances the cursor to the next byte, returning an error if at EOF
-    pub fn try_next(self) -> Result<Self, Error> {
+    pub fn try_next(self) -> Result<Self, ParsiCombError<'a>> {
         match self {
             ByteCursor::Valid { .. } => {
                 let next = self.next();
                 match next {
                     ByteCursor::Valid { .. } => Ok(next),
-                    ByteCursor::EndOfFile { data } => {
-                        let code = data.to_vec();
-                        let loc = data.len();
-                        Err(areamy::any_err!(ParsiCombError::UnexpectedEndOfFile(
-                            CodeLoc::new(code, loc)
-                        )))
-                    }
+                    ByteCursor::EndOfFile { data } => Err(ParsiCombError::UnexpectedEndOfFile(
+                        CodeLoc::new(data, data.len()),
+                    )),
                 }
             }
-            ByteCursor::EndOfFile { .. } => {
-                Err(areamy::any_err!(ParsiCombError::AlreadyAtEndOfFile))
-            }
+            ByteCursor::EndOfFile { .. } => Err(ParsiCombError::AlreadyAtEndOfFile),
         }
     }
 
     /// Get the byte value at the current cursor position
-    pub fn value(&self) -> Result<u8, Error> {
+    pub fn value(&self) -> Result<u8, ParsiCombError<'a>> {
         match self {
             ByteCursor::Valid { data, position } => Ok(data[*position]),
             ByteCursor::EndOfFile { .. } => {
-                Err(areamy::any_err!(ParsiCombError::CannotReadValueAtEof))
+                Err(ParsiCombError::CannotReadValueAtEof)
             }
         }
     }

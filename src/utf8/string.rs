@@ -2,17 +2,15 @@ use crate::byte_cursor::ByteCursor;
 use crate::parser::Parser;
 use crate::utf8::char::char;
 use crate::{CodeLoc, ParsiCombError};
-use areamy::error::Error;
 use std::borrow::Cow;
 
 // Helper function to reduce error creation boilerplate
-fn create_string_error(cursor: &ByteCursor, message: String) -> Error {
+fn create_string_error<'code>(cursor: &ByteCursor<'code>, message: String) -> ParsiCombError<'code> {
     let (data, position) = cursor.inner();
-    let code = data.to_vec();
-    areamy::any_err!(ParsiCombError::SyntaxError {
+    ParsiCombError::SyntaxError {
         message,
-        loc: CodeLoc::new(code, position)
-    })
+        loc: CodeLoc::new(data, position)
+    }
 }
 
 /// Parser that matches an exact UTF-8 string character by character
@@ -28,10 +26,10 @@ impl IsStringParser {
     }
 }
 
-impl<'a> Parser<'a> for IsStringParser {
+impl<'code> Parser<'code> for IsStringParser {
     type Output = Cow<'static, str>;
 
-    fn parse(&self, cursor: ByteCursor<'a>) -> Result<(Self::Output, ByteCursor<'a>), Error> {
+    fn parse(&self, cursor: ByteCursor<'code>) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
         let mut current_cursor = cursor;
 
         for expected_char in self.expected.chars() {

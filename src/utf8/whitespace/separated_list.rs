@@ -4,7 +4,7 @@ use crate::many::many;
 use crate::parser::Parser;
 use crate::utf8::string::is_string;
 use crate::utf8::unicode_whitespace;
-use areamy::error::Error;
+use crate::ParsiCombError;
 
 /// Parser combinator that matches a list of items separated by a string separator,
 /// with optional whitespace around the separator
@@ -19,13 +19,13 @@ impl<P> SeparatedList<P> {
     }
 }
 
-impl<'a, P> Parser<'a> for SeparatedList<P>
+impl<'code, P> Parser<'code> for SeparatedList<P>
 where
-    P: Parser<'a>,
+    P: Parser<'code>,
 {
     type Output = Vec<P::Output>;
 
-    fn parse(&self, cursor: ByteCursor<'a>) -> Result<(Self::Output, ByteCursor<'a>), Error> {
+    fn parse(&self, cursor: ByteCursor<'code>) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
         let mut results = Vec::new();
 
         // Parse the first element (required)
@@ -59,12 +59,12 @@ where
 
 /// Creates a parser that matches a list of items separated by the given string,
 /// with optional whitespace around the separator
-pub fn separated_list<'a, P>(
+pub fn separated_list<'code, P>(
     parser: P,
     separator: &'static str,
-) -> impl Parser<'a, Output = Vec<P::Output>>
+) -> impl Parser<'code, Output = Vec<P::Output>>
 where
-    P: Parser<'a>,
+    P: Parser<'code>,
 {
     SeparatedList::new(parser, separator)
 }

@@ -5,21 +5,20 @@ use crate::byte::is_byte;
 use crate::byte_cursor::ByteCursor;
 use crate::parser::Parser;
 use crate::{CodeLoc, ParsiCombError};
-use areamy::error::Error;
 
 const MAX_FRACTIONAL_DIGITS: usize = 15;
 
 /// Parser for int.uint format (e.g., 123.456, -42.789)
-fn int_dot_uint<'a>() -> impl Parser<'a, Output = f64> {
+fn int_dot_uint<'code>() -> impl Parser<'code, Output = f64> {
     IntDotUintParser
 }
 
 struct IntDotUintParser;
 
-impl<'a> Parser<'a> for IntDotUintParser {
+impl<'code> Parser<'code> for IntDotUintParser {
     type Output = f64;
 
-    fn parse(&self, cursor: ByteCursor<'a>) -> Result<(Self::Output, ByteCursor<'a>), Error> {
+    fn parse(&self, cursor: ByteCursor<'code>) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
         let (((int_part, _), frac_part), cursor) =
             i64().and(is_byte(b'.')).and(u64()).parse(cursor)?;
 
@@ -28,14 +27,13 @@ impl<'a> Parser<'a> for IntDotUintParser {
         // Check for too many fractional digits
         if frac_digits > MAX_FRACTIONAL_DIGITS {
             let (data, position) = cursor.inner();
-            let code = data.to_vec();
-            return Err(areamy::any_err!(ParsiCombError::SyntaxError {
+            return Err(ParsiCombError::SyntaxError {
                 message: format!(
                     "too many fractional digits: {} (max {})",
                     frac_digits, MAX_FRACTIONAL_DIGITS
                 ),
-                loc: CodeLoc::new(code, position)
-            }));
+                loc: CodeLoc::new(data, position)
+            });
         }
 
         let frac_divisor = 10_f64.powi(frac_digits as i32);
@@ -45,11 +43,10 @@ impl<'a> Parser<'a> for IntDotUintParser {
         let int_as_f64 = int_part as f64;
         if int_as_f64 as i64 != int_part {
             let (data, position) = cursor.inner();
-            let code = data.to_vec();
-            return Err(areamy::any_err!(ParsiCombError::SyntaxError {
+            return Err(ParsiCombError::SyntaxError {
                 message: format!("integer part too large for f64 precision: {}", int_part),
-                loc: CodeLoc::new(code, position)
-            }));
+                loc: CodeLoc::new(data, position)
+            });
         }
 
         let result = if int_part >= 0 {
@@ -61,11 +58,10 @@ impl<'a> Parser<'a> for IntDotUintParser {
         // Check for overflow/infinity
         if !result.is_finite() {
             let (data, position) = cursor.inner();
-            let code = data.to_vec();
-            return Err(areamy::any_err!(ParsiCombError::SyntaxError {
+            return Err(ParsiCombError::SyntaxError {
                 message: "floating point overflow".to_string(),
-                loc: CodeLoc::new(code, position)
-            }));
+                loc: CodeLoc::new(data, position)
+            });
         }
 
         Ok((result, cursor))
@@ -73,7 +69,7 @@ impl<'a> Parser<'a> for IntDotUintParser {
 }
 
 /// Parser that matches ASCII floating point numbers
-pub fn f64<'a>() -> impl Parser<'a, Output = f64> {
+pub fn f64<'code>() -> impl Parser<'code, Output = f64> {
     int_dot_uint()
 }
 
