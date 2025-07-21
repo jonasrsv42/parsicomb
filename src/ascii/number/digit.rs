@@ -1,5 +1,5 @@
-use crate::parser::Parser;
 use crate::byte::between_bytes;
+use crate::parser::Parser;
 
 /// Parser that matches a single ASCII digit (0-9)
 pub fn digit<'code>() -> impl Parser<'code, Output = u8> {
@@ -14,9 +14,9 @@ mod tests {
     #[test]
     fn test_digit_zero() {
         let data = b"0abc";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = digit();
-        
+
         let (d, cursor) = parser.parse(cursor).unwrap();
         assert_eq!(d, b'0');
         assert_eq!(cursor.value().unwrap(), b'a');
@@ -25,9 +25,9 @@ mod tests {
     #[test]
     fn test_digit_nine() {
         let data = b"9xyz";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = digit();
-        
+
         let (d, cursor) = parser.parse(cursor).unwrap();
         assert_eq!(d, b'9');
         assert_eq!(cursor.value().unwrap(), b'x');
@@ -36,9 +36,9 @@ mod tests {
     #[test]
     fn test_digit_middle() {
         let data = b"5";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = digit();
-        
+
         let (d, cursor) = parser.parse(cursor).unwrap();
         assert_eq!(d, b'5');
         assert!(matches!(cursor, ByteCursor::EndOfFile { .. }));
@@ -47,9 +47,9 @@ mod tests {
     #[test]
     fn test_digit_non_digit_fails() {
         let data = b"abc";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = digit();
-        
+
         let result = parser.parse(cursor);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("expected byte"));
@@ -58,9 +58,9 @@ mod tests {
     #[test]
     fn test_digit_letter_fails() {
         let data = b"a123";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = digit();
-        
+
         let result = parser.parse(cursor);
         assert!(result.is_err());
     }

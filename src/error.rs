@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::error::Error;
 use std::fmt;
 
@@ -109,7 +110,7 @@ pub enum ParsiCombError<'code> {
     UnexpectedEndOfFile(CodeLoc<'code>),
     AlreadyAtEndOfFile,
     CannotReadValueAtEof,
-    SyntaxError { message: String, loc: CodeLoc<'code> },
+    SyntaxError { message: Cow<'static, str>, loc: CodeLoc<'code> },
 }
 
 impl<'code> fmt::Display for ParsiCombError<'code> {

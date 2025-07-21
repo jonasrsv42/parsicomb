@@ -2,23 +2,30 @@ use crate::byte::ByteParser;
 use crate::byte_cursor::ByteCursor;
 use crate::parser::Parser;
 use crate::{CodeLoc, ParsiCombError};
+use std::borrow::Cow;
 
 /// Parser that consumes and returns a single UTF-8 character
 pub struct CharParser;
 
 // Helper function to reduce error creation boilerplate
-fn create_error<'code>(cursor: &ByteCursor<'code>, message: String) -> ParsiCombError<'code> {
+fn create_error<'code>(
+    cursor: &ByteCursor<'code>,
+    message: Cow<'static, str>,
+) -> ParsiCombError<'code> {
     let (data, position) = cursor.inner();
     ParsiCombError::SyntaxError {
         message,
-        loc: CodeLoc::new(data, position)
+        loc: CodeLoc::new(data, position),
     }
 }
 
 impl<'code> Parser<'code> for CharParser {
     type Output = char;
 
-    fn parse(&self, cursor: ByteCursor<'code>) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
+    fn parse(
+        &self,
+        cursor: ByteCursor<'code>,
+    ) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
         let byte_parser = ByteParser::new();
 
         // 1. Read the first byte
@@ -30,74 +37,68 @@ impl<'code> Parser<'code> for CharParser {
             return Ok((b1 as char, current_cursor));
         } else if b1 < 0xC0 {
             // Continuation byte used as start byte (0x80-0xBF)
-            return Err(create_error(
-                &cursor,
-                "invalid UTF-8 start byte".to_string(),
-            ));
+            return Err(create_error(&cursor, "invalid UTF-8 start byte".into()));
         } else if b1 < 0xE0 {
             // 2-byte sequence: 110xxxxx 10xxxxxx
-            let (b2, new_cursor) = byte_parser.parse(current_cursor).map_err(|_| {
-                create_error(&current_cursor, "incomplete UTF-8 sequence".to_string())
-            })?;
+            let (b2, new_cursor) = byte_parser
+                .parse(current_cursor)
+                .map_err(|_| create_error(&current_cursor, "incomplete UTF-8 sequence".into()))?;
             current_cursor = new_cursor;
 
             if (b2 & 0xC0) != 0x80 {
                 return Err(create_error(
                     &current_cursor,
-                    "invalid UTF-8 continuation byte".to_string(),
+                    "invalid UTF-8 continuation byte".into(),
                 ));
             }
 
             let cp = ((b1 as u32 & 0x1F) << 6) | (b2 as u32 & 0x3F);
             if cp < 0x80 {
-                return Err(create_error(&cursor, "overlong UTF-8 encoding".to_string()));
+                return Err(create_error(&cursor, "overlong UTF-8 encoding".into()));
             }
             cp
         } else if b1 < 0xF0 {
             // 3-byte sequence: 1110xxxx 10xxxxxx 10xxxxxx
-            let (b2, c2) = byte_parser.parse(current_cursor).map_err(|_| {
-                create_error(&current_cursor, "incomplete UTF-8 sequence".to_string())
-            })?;
+            let (b2, c2) = byte_parser
+                .parse(current_cursor)
+                .map_err(|_| create_error(&current_cursor, "incomplete UTF-8 sequence".into()))?;
             let (b3, c3) = byte_parser
                 .parse(c2)
-                .map_err(|_| create_error(&c2, "incomplete UTF-8 sequence".to_string()))?;
+                .map_err(|_| create_error(&c2, "incomplete UTF-8 sequence".into()))?;
             current_cursor = c3;
 
             if (b2 & 0xC0) != 0x80 || (b3 & 0xC0) != 0x80 {
                 return Err(create_error(
                     &current_cursor,
-                    "invalid UTF-8 continuation byte".to_string(),
+                    "invalid UTF-8 continuation byte".into(),
                 ));
             }
 
             let cp = ((b1 as u32 & 0x0F) << 12) | ((b2 as u32 & 0x3F) << 6) | (b3 as u32 & 0x3F);
             if cp < 0x800 {
-                return Err(create_error(&cursor, "overlong UTF-8 encoding".to_string()));
+                return Err(create_error(&cursor, "overlong UTF-8 encoding".into()));
             }
             if (0xD800..=0xDFFF).contains(&cp) {
-                return Err(create_error(
-                    &cursor,
-                    "UTF-16 surrogate in UTF-8".to_string(),
-                ));
+                return Err(create_error(&cursor, "UTF-16 surrogate in UTF-8".into()));
             }
             cp
         } else if b1 < 0xF8 {
             // 4-byte sequence: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
-            let (b2, c2) = byte_parser.parse(current_cursor).map_err(|_| {
-                create_error(&current_cursor, "incomplete UTF-8 sequence".to_string())
-            })?;
+            let (b2, c2) = byte_parser
+                .parse(current_cursor)
+                .map_err(|_| create_error(&current_cursor, "incomplete UTF-8 sequence".into()))?;
             let (b3, c3) = byte_parser
                 .parse(c2)
-                .map_err(|_| create_error(&c2, "incomplete UTF-8 sequence".to_string()))?;
+                .map_err(|_| create_error(&c2, "incomplete UTF-8 sequence".into()))?;
             let (b4, c4) = byte_parser
                 .parse(c3)
-                .map_err(|_| create_error(&c3, "incomplete UTF-8 sequence".to_string()))?;
+                .map_err(|_| create_error(&c3, "incomplete UTF-8 sequence".into()))?;
             current_cursor = c4;
 
             if (b2 & 0xC0) != 0x80 || (b3 & 0xC0) != 0x80 || (b4 & 0xC0) != 0x80 {
                 return Err(create_error(
                     &current_cursor,
-                    "invalid UTF-8 continuation byte".to_string(),
+                    "invalid UTF-8 continuation byte".into(),
                 ));
             }
 
@@ -106,28 +107,25 @@ impl<'code> Parser<'code> for CharParser {
                 | ((b3 as u32 & 0x3F) << 6)
                 | (b4 as u32 & 0x3F);
             if cp < 0x10000 {
-                return Err(create_error(&cursor, "overlong UTF-8 encoding".to_string()));
+                return Err(create_error(&cursor, "overlong UTF-8 encoding".into()));
             }
             if cp > 0x10FFFF {
                 return Err(create_error(
                     &cursor,
-                    "codepoint beyond Unicode range".to_string(),
+                    "codepoint beyond Unicode range".into(),
                 ));
             }
             cp
         } else {
             // Invalid start byte
-            return Err(create_error(
-                &cursor,
-                "invalid UTF-8 start byte".to_string(),
-            ));
+            return Err(create_error(&cursor, "invalid UTF-8 start byte".into()));
         };
 
         // 3. Convert final codepoint to char
         let ch = char::from_u32(codepoint).ok_or_else(|| {
             create_error(
                 &cursor,
-                format!("invalid Unicode codepoint: U+{:04X}", codepoint),
+                format!("invalid Unicode codepoint: U+{:04X}", codepoint).into(),
             )
         })?;
 
@@ -146,14 +144,17 @@ pub struct IsChar(char);
 impl<'code> Parser<'code> for IsChar {
     type Output = char;
 
-    fn parse(&self, cursor: ByteCursor<'code>) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
+    fn parse(
+        &self,
+        cursor: ByteCursor<'code>,
+    ) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
         let (ch, next_cursor) = char().parse(cursor)?;
         if ch == self.0 {
             Ok((ch, next_cursor))
         } else {
             Err(create_error(
                 &cursor,
-                format!("expected '{}', found '{}'", self.0, ch),
+                format!("expected '{}', found '{}'", self.0, ch).into(),
             ))
         }
     }
@@ -171,7 +172,7 @@ mod tests {
     #[test]
     fn test_ascii_char() {
         let data = "hello".as_bytes();
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = char();
 
         let (ch, cursor) = parser.parse(cursor).unwrap();
@@ -185,7 +186,7 @@ mod tests {
     fn test_unicode_chars() {
         // Swedish characters (2-byte UTF-8)
         let data = "åäö".as_bytes();
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = char();
 
         let (ch, cursor) = parser.parse(cursor).unwrap();
@@ -202,7 +203,7 @@ mod tests {
     fn test_emoji() {
         // Emoji (4-byte UTF-8)
         let data = "🦀".as_bytes();
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = char();
 
         let (ch, cursor) = parser.parse(cursor).unwrap();
@@ -213,7 +214,7 @@ mod tests {
     #[test]
     fn test_mixed_chars() {
         let data = "café🦀".as_bytes();
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = char();
 
         let (ch, cursor) = parser.parse(cursor).unwrap();
@@ -237,7 +238,7 @@ mod tests {
     #[test]
     fn test_invalid_utf8() {
         let data = &[0xFF, 0xFE];
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = char();
 
         let result = parser.parse(cursor);
@@ -249,7 +250,7 @@ mod tests {
     fn test_incomplete_sequence() {
         // Start of 2-byte sequence but missing second byte
         let data = &[0xC3]; // Start of "ä" but incomplete
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = char();
 
         let result = parser.parse(cursor);
@@ -270,7 +271,7 @@ mod tests {
 
         for (byte_val, expected_char) in test_cases {
             let data = &[byte_val];
-            let cursor = ByteCursor::new(data).unwrap();
+            let cursor = ByteCursor::new(data);
             let parser = char();
 
             let (ch, _) = parser.parse(cursor).unwrap();
@@ -294,7 +295,7 @@ mod tests {
 
         for (input_str, expected_char) in test_cases {
             let data = input_str.as_bytes();
-            let cursor = ByteCursor::new(data).unwrap();
+            let cursor = ByteCursor::new(data);
             let parser = char();
 
             let (ch, _) = parser.parse(cursor).unwrap();
@@ -328,7 +329,7 @@ mod tests {
 
         for (input_str, expected_char) in test_cases {
             let data = input_str.as_bytes();
-            let cursor = ByteCursor::new(data).unwrap();
+            let cursor = ByteCursor::new(data);
             let parser = char();
 
             let (ch, _) = parser.parse(cursor).unwrap();
@@ -366,7 +367,7 @@ mod tests {
 
         for (input_str, expected_char) in test_cases {
             let data = input_str.as_bytes();
-            let cursor = ByteCursor::new(data).unwrap();
+            let cursor = ByteCursor::new(data);
             let parser = char();
 
             let (ch, _) = parser.parse(cursor).unwrap();
@@ -397,7 +398,7 @@ mod tests {
         ];
 
         for seq in invalid_sequences {
-            let cursor = ByteCursor::new(seq).unwrap();
+            let cursor = ByteCursor::new(seq);
             let parser = char();
             let result = parser.parse(cursor);
             assert!(
@@ -419,7 +420,7 @@ mod tests {
         ];
 
         for seq in invalid_sequences {
-            let cursor = ByteCursor::new(seq).unwrap();
+            let cursor = ByteCursor::new(seq);
             let parser = char();
             let result = parser.parse(cursor);
             assert!(
@@ -444,7 +445,7 @@ mod tests {
 
         for (input_str, expected_char) in test_cases {
             let data = input_str.as_bytes();
-            let cursor = ByteCursor::new(data).unwrap();
+            let cursor = ByteCursor::new(data);
             let parser = char();
 
             let (ch, _) = parser.parse(cursor).unwrap();
@@ -470,7 +471,7 @@ mod tests {
 
         for byte in invalid_start_bytes {
             let data = &[byte, 0x80]; // Add a continuation byte
-            let cursor = ByteCursor::new(data).unwrap();
+            let cursor = ByteCursor::new(data);
             let parser = char();
             let result = parser.parse(cursor);
             assert!(
@@ -503,7 +504,7 @@ mod tests {
         ];
 
         for (data, description) in truncated_cases {
-            let cursor = ByteCursor::new(data).unwrap();
+            let cursor = ByteCursor::new(data);
             let parser = char();
             let result = parser.parse(cursor);
             assert!(result.is_err(), "Expected error for {}", description);
@@ -534,7 +535,7 @@ mod tests {
         ];
 
         for (data, description) in mixed_invalid_cases {
-            let cursor = ByteCursor::new(data).unwrap();
+            let cursor = ByteCursor::new(data);
             let parser = char();
             let result = parser.parse(cursor);
             assert!(result.is_err(), "Expected error for {}", description);
@@ -559,7 +560,7 @@ mod tests {
         ];
 
         for data in beyond_unicode {
-            let cursor = ByteCursor::new(data).unwrap();
+            let cursor = ByteCursor::new(data);
             let parser = char();
             let result = parser.parse(cursor);
             assert!(
@@ -594,7 +595,7 @@ mod tests {
                 0x80 | (codepoint & 0x3F) as u8,
             ];
 
-            let cursor = ByteCursor::new(&bytes).unwrap();
+            let cursor = ByteCursor::new(&bytes);
             let parser = char();
             let result = parser.parse(cursor);
             assert!(
@@ -615,7 +616,7 @@ mod tests {
         // Test that we reject "Modified UTF-8" encoding of NULL
         // Modified UTF-8 encodes NULL as 0xC0 0x80 instead of 0x00
         let modified_utf8_null = &[0xC0, 0x80];
-        let cursor = ByteCursor::new(modified_utf8_null).unwrap();
+        let cursor = ByteCursor::new(modified_utf8_null);
         let parser = char();
         let result = parser.parse(cursor);
         assert!(
@@ -633,7 +634,7 @@ mod tests {
         // Test that cursor advances by exactly the right number of bytes
         let test_string = "A𝟘🦀"; // 1-byte + 4-byte + 4-byte
         let data = test_string.as_bytes();
-        let mut cursor = ByteCursor::new(data).unwrap();
+        let mut cursor = ByteCursor::new(data);
         let parser = char();
 
         // Parse 'A' (1 byte)
@@ -671,7 +672,7 @@ mod tests {
 
         for (byte_val, expected_char) in control_chars {
             let data = &[byte_val];
-            let cursor = ByteCursor::new(data).unwrap();
+            let cursor = ByteCursor::new(data);
             let parser = char();
 
             let (ch, _) = parser.parse(cursor).unwrap();

@@ -1,10 +1,10 @@
+use crate::ParsiCombError;
 use crate::and::AndExt;
 use crate::byte_cursor::ByteCursor;
 use crate::many::many;
 use crate::parser::Parser;
 use crate::utf8::string::is_string;
 use crate::utf8::unicode_whitespace;
-use crate::ParsiCombError;
 
 /// Parser combinator that matches a list of items separated by a string separator,
 /// with optional whitespace around the separator
@@ -25,7 +25,10 @@ where
 {
     type Output = Vec<P::Output>;
 
-    fn parse(&self, cursor: ByteCursor<'code>) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
+    fn parse(
+        &self,
+        cursor: ByteCursor<'code>,
+    ) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
         let mut results = Vec::new();
 
         // Parse the first element (required)
@@ -79,7 +82,7 @@ mod tests {
     #[test]
     fn test_empty_list_fails() {
         let data = b"";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = separated_list(
             some(unicode_alphanumeric()).map(|chrs| chrs.iter().collect::<String>()),
             ",",
@@ -92,7 +95,7 @@ mod tests {
     #[test]
     fn test_single_element() {
         let data = b"hello";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = separated_list(
             some(unicode_alphanumeric()).map(|chrs| chrs.iter().collect::<String>()),
             ",",
@@ -105,7 +108,7 @@ mod tests {
     #[test]
     fn test_multiple_elements_no_spaces() {
         let data = b"a,b,c";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = separated_list(
             some(unicode_alphanumeric()).map(|chrs| chrs.iter().collect::<String>()),
             ",",
@@ -118,7 +121,7 @@ mod tests {
     #[test]
     fn test_multiple_elements_with_spaces() {
         let data = b"a , b , c";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = separated_list(
             some(unicode_alphanumeric()).map(|chrs| chrs.iter().collect::<String>()),
             ",",
@@ -131,7 +134,7 @@ mod tests {
     #[test]
     fn test_multiple_elements_with_newlines() {
         let data = b"a ,\n  b ,\n  c";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = separated_list(
             some(unicode_alphanumeric()).map(|chrs| chrs.iter().collect::<String>()),
             ",",
@@ -144,7 +147,7 @@ mod tests {
     #[test]
     fn test_trailing_comma_causes_error() {
         let data = b"a,b,";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = separated_list(
             some(unicode_alphanumeric()).map(|chrs| chrs.iter().collect::<String>()),
             ",",
@@ -157,7 +160,7 @@ mod tests {
     #[test]
     fn test_list_without_trailing_comma() {
         let data = b"a,b";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = separated_list(
             some(unicode_alphanumeric()).map(|chrs| chrs.iter().collect::<String>()),
             ",",
@@ -172,7 +175,7 @@ mod tests {
     #[test]
     fn test_missing_element_after_separator_fails() {
         let data = b"a, b, "; // Space after last comma but no element
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = separated_list(some(unicode_alphanumeric()), ",");
 
         // Should fail because there's no identifier after the last comma
@@ -182,7 +185,7 @@ mod tests {
     #[test]
     fn test_invalid_element_after_separator_fails() {
         let data = b"a, b, |"; // Pipe instead of alphanumeric
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = separated_list(some(unicode_alphanumeric()), ",");
 
         // Should fail because 123 is not a valid identifier
@@ -192,7 +195,7 @@ mod tests {
     #[test]
     fn test_non_matching_separator() {
         let data = b"a;b;c";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = separated_list(
             some(unicode_alphanumeric()).map(|chrs| chrs.iter().collect::<String>()),
             ",",
@@ -203,4 +206,3 @@ mod tests {
         assert_eq!(cursor.value().unwrap(), b';');
     }
 }
-

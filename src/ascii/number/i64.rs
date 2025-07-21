@@ -13,7 +13,10 @@ struct IntParser;
 impl<'code> Parser<'code> for IntParser {
     type Output = i64;
 
-    fn parse(&self, cursor: ByteCursor<'code>) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
+    fn parse(
+        &self,
+        cursor: ByteCursor<'code>,
+    ) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
         let mut cursor = cursor;
         let mut is_negative = false;
 
@@ -39,8 +42,8 @@ impl<'code> Parser<'code> for IntParser {
             if value > i64::MAX as u64 + 1 {
                 let (data, position) = cursor.inner();
                 return Err(ParsiCombError::SyntaxError {
-                    message: format!("negative number too large: -{}", value),
-                    loc: CodeLoc::new(data, position)
+                    message: format!("negative number too large: -{}", value).into(),
+                    loc: CodeLoc::new(data, position),
                 });
             }
             -(value as i64)
@@ -49,8 +52,8 @@ impl<'code> Parser<'code> for IntParser {
             if value > i64::MAX as u64 {
                 let (data, position) = cursor.inner();
                 return Err(ParsiCombError::SyntaxError {
-                    message: format!("positive number too large: {}", value),
-                    loc: CodeLoc::new(data, position)
+                    message: format!("positive number too large: {}", value).into(),
+                    loc: CodeLoc::new(data, position),
                 });
             }
             value as i64
@@ -67,7 +70,7 @@ mod tests {
     #[test]
     fn test_positive_integer() {
         let data = b"123abc";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = i64();
 
         let (value, cursor) = parser.parse(cursor).unwrap();
@@ -78,7 +81,7 @@ mod tests {
     #[test]
     fn test_negative_integer() {
         let data = b"-456xyz";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = i64();
 
         let (value, cursor) = parser.parse(cursor).unwrap();
@@ -89,7 +92,7 @@ mod tests {
     #[test]
     fn test_integer_with_plus() {
         let data = b"+789";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = i64();
 
         let (value, cursor) = parser.parse(cursor).unwrap();
@@ -100,7 +103,7 @@ mod tests {
     #[test]
     fn test_single_digit() {
         let data = b"5";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = i64();
 
         let (value, cursor) = parser.parse(cursor).unwrap();
@@ -111,7 +114,7 @@ mod tests {
     #[test]
     fn test_zero() {
         let data = b"0";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = i64();
 
         let (value, cursor) = parser.parse(cursor).unwrap();
@@ -122,7 +125,7 @@ mod tests {
     #[test]
     fn test_no_digit_fails() {
         let data = b"abc";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = i64();
 
         let result = parser.parse(cursor);
@@ -132,7 +135,7 @@ mod tests {
     #[test]
     fn test_minus_only_fails() {
         let data = b"-abc";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = i64();
 
         let result = parser.parse(cursor);
@@ -142,7 +145,7 @@ mod tests {
     #[test]
     fn test_large_number() {
         let data = b"9876543210";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = i64();
 
         let (value, cursor) = parser.parse(cursor).unwrap();
@@ -150,4 +153,3 @@ mod tests {
         assert!(matches!(cursor, ByteCursor::EndOfFile { .. }));
     }
 }
-

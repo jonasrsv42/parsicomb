@@ -31,7 +31,7 @@ mod tests {
     #[test]
     fn test_number_float() {
         let data = b"3.14abc";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = number();
 
         let (num, cursor) = parser.parse(cursor).unwrap();
@@ -45,7 +45,7 @@ mod tests {
     #[test]
     fn test_number_int() {
         let data = b"123abc";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = number();
 
         let (num, cursor) = parser.parse(cursor).unwrap();
@@ -59,7 +59,7 @@ mod tests {
     #[test]
     fn test_number_negative_float() {
         let data = b"-2.5xyz";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = number();
 
         let (num, cursor) = parser.parse(cursor).unwrap();
@@ -73,7 +73,7 @@ mod tests {
     #[test]
     fn test_number_negative_int() {
         let data = b"-456xyz";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = number();
 
         let (num, cursor) = parser.parse(cursor).unwrap();
@@ -84,4 +84,3 @@ mod tests {
         assert_eq!(cursor.value().unwrap(), b'x');
     }
 }
-

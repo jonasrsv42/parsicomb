@@ -46,7 +46,7 @@ mod tests {
     #[test]
     fn test_brackets_number() {
         let data = b"[42.5]";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = between(is_byte(b'['), f64(), is_byte(b']'));
 
         let (value, cursor) = parser.parse(cursor).unwrap();
@@ -57,7 +57,7 @@ mod tests {
     #[test]
     fn test_brackets_with_spaces() {
         let data = b"[  3.14  ]";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = between(is_byte(b'['), f64(), is_byte(b']'));
 
         let (value, _) = parser.parse(cursor).unwrap();
@@ -67,7 +67,7 @@ mod tests {
     #[test]
     fn test_parentheses_string() {
         let data = b"( hello )";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = between(is_byte(b'('), is_string("hello"), is_byte(b')'));
 
         let (value, _) = parser.parse(cursor).unwrap();
@@ -77,7 +77,7 @@ mod tests {
     #[test]
     fn test_braces() {
         let data = b"{test}";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = between(is_byte(b'{'), is_string("test"), is_byte(b'}'));
 
         let (value, _) = parser.parse(cursor).unwrap();
@@ -88,7 +88,7 @@ mod tests {
     fn test_nested_with_separated_pair() {
         // Test the combination we'll use for intervals: [1.0, 2.0]
         let data = b"[1.0, 2.0]";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = between(
             is_byte(b'['),
             separated_pair(f64(), ",", f64()),
@@ -103,7 +103,7 @@ mod tests {
     #[test]
     fn test_nested_with_extra_whitespace() {
         let data = b"[  1.5  ,  2.5  ]";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = between(
             is_byte(b'['),
             separated_pair(f64(), ",", f64()),
@@ -120,7 +120,7 @@ mod tests {
         // Use various Unicode whitespace characters
         let input = "[\u{2000}42.0\u{3000}]"; // En quad + Ideographic space
         let data = input.as_bytes();
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = between(is_byte(b'['), f64(), is_byte(b']'));
 
         let (value, _) = parser.parse(cursor).unwrap();
@@ -130,7 +130,7 @@ mod tests {
     #[test]
     fn test_missing_open_delimiter_fails() {
         let data = b"42.0]";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = between(is_byte(b'['), f64(), is_byte(b']'));
 
         assert!(parser.parse(cursor).is_err());
@@ -139,7 +139,7 @@ mod tests {
     #[test]
     fn test_missing_close_delimiter_fails() {
         let data = b"[42.0";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = between(is_byte(b'['), f64(), is_byte(b']'));
 
         assert!(parser.parse(cursor).is_err());
@@ -148,7 +148,7 @@ mod tests {
     #[test]
     fn test_with_remaining_content() {
         let data = b"[42.0] extra";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = between(is_byte(b'['), f64(), is_byte(b']'));
 
         let (value, cursor) = parser.parse(cursor).unwrap();

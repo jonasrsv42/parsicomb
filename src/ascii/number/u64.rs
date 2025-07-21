@@ -23,7 +23,7 @@ impl<'code> Parser<'code> for UIntParser {
             Err(_) => {
                 let (data, position) = cursor.inner();
                 return Err(ParsiCombError::SyntaxError {
-                    message: "invalid UTF-8 in digits".to_string(),
+                    message: "invalid UTF-8 in digits".into(),
                     loc: CodeLoc::new(data, position)
                 });
             }
@@ -35,7 +35,7 @@ impl<'code> Parser<'code> for UIntParser {
             Err(_) => {
                 let (data, position) = cursor.inner();
                 return Err(ParsiCombError::SyntaxError {
-                    message: format!("number too large: {}", num_str),
+                    message: format!("number too large: {}", num_str).into(),
                     loc: CodeLoc::new(data, position)
                 });
             }
@@ -53,7 +53,7 @@ mod tests {
     #[test]
     fn test_uint_single_digit() {
         let data = b"5abc";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = u64();
         
         let (value, cursor) = parser.parse(cursor).unwrap();
@@ -64,7 +64,7 @@ mod tests {
     #[test]
     fn test_uint_multiple_digits() {
         let data = b"123abc";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = u64();
         
         let (value, cursor) = parser.parse(cursor).unwrap();
@@ -75,7 +75,7 @@ mod tests {
     #[test]
     fn test_uint_zero() {
         let data = b"0";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = u64();
         
         let (value, cursor) = parser.parse(cursor).unwrap();
@@ -86,7 +86,7 @@ mod tests {
     #[test]
     fn test_uint_large_number() {
         let data = b"9876543210";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = u64();
         
         let (value, cursor) = parser.parse(cursor).unwrap();
@@ -97,7 +97,7 @@ mod tests {
     #[test]
     fn test_uint_no_digit_fails() {
         let data = b"abc";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = u64();
         
         let result = parser.parse(cursor);
@@ -107,7 +107,7 @@ mod tests {
     #[test]
     fn test_uint_stops_at_non_digit() {
         let data = b"42.5";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = u64();
         
         let (value, cursor) = parser.parse(cursor).unwrap();
@@ -119,7 +119,7 @@ mod tests {
     fn test_uint_overflow() {
         // This number is larger than u64::MAX
         let data = b"99999999999999999999999999999999";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = u64();
         
         let result = parser.parse(cursor);

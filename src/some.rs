@@ -18,14 +18,17 @@ where
     P: Parser<'code>,
 {
     type Output = Vec<P::Output>;
-    
-    fn parse(&self, cursor: ByteCursor<'code>) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
+
+    fn parse(
+        &self,
+        cursor: ByteCursor<'code>,
+    ) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
         let mut results = Vec::new();
-        
+
         // First parse must succeed
         let (first_value, mut cursor) = self.parser.parse(cursor)?;
         results.push(first_value);
-        
+
         // Continue parsing zero or more times
         loop {
             match self.parser.parse(cursor) {
@@ -39,7 +42,7 @@ where
                 }
             }
         }
-        
+
         Ok((results, cursor))
     }
 }
@@ -60,9 +63,9 @@ mod tests {
     #[test]
     fn test_some_zero_matches_fails() {
         let data = b"xyz";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = some(is_byte(b'a'));
-        
+
         let result = parser.parse(cursor);
         assert!(result.is_err());
     }
@@ -70,9 +73,9 @@ mod tests {
     #[test]
     fn test_some_one_match() {
         let data = b"abc";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = some(is_byte(b'a'));
-        
+
         let (results, cursor) = parser.parse(cursor).unwrap();
         assert_eq!(results, vec![b'a']);
         assert_eq!(cursor.value().unwrap(), b'b');
@@ -81,9 +84,9 @@ mod tests {
     #[test]
     fn test_some_multiple_matches() {
         let data = b"aaabcd";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = some(is_byte(b'a'));
-        
+
         let (results, cursor) = parser.parse(cursor).unwrap();
         assert_eq!(results, vec![b'a', b'a', b'a']);
         assert_eq!(cursor.value().unwrap(), b'b');
@@ -92,9 +95,9 @@ mod tests {
     #[test]
     fn test_some_all_matches() {
         let data = b"aaaa";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = some(is_byte(b'a'));
-        
+
         let (results, cursor) = parser.parse(cursor).unwrap();
         assert_eq!(results, vec![b'a', b'a', b'a', b'a']);
         assert!(matches!(cursor, ByteCursor::EndOfFile { .. }));
@@ -103,9 +106,9 @@ mod tests {
     #[test]
     fn test_some_with_byte_parser() {
         let data = b"hello";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = some(ByteParser::new());
-        
+
         let (results, cursor) = parser.parse(cursor).unwrap();
         assert_eq!(results, vec![b'h', b'e', b'l', b'l', b'o']);
         assert!(matches!(cursor, ByteCursor::EndOfFile { .. }));
@@ -114,9 +117,9 @@ mod tests {
     #[test]
     fn test_some_empty_input() {
         let data = b"";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = some(is_byte(b'a'));
-        
+
         let result = parser.parse(cursor);
         assert!(result.is_err());
     }

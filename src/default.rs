@@ -20,8 +20,11 @@ where
     T: Default,
 {
     type Output = T;
-    
-    fn parse(&self, cursor: ByteCursor<'code>) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
+
+    fn parse(
+        &self,
+        cursor: ByteCursor<'code>,
+    ) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
         Ok((T::default(), cursor))
     }
 }
@@ -41,9 +44,9 @@ mod tests {
     #[test]
     fn test_default_string() {
         let data = b"hello";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = default::<String>();
-        
+
         let (result, remaining) = parser.parse(cursor).unwrap();
         assert_eq!(result, String::default());
         // Should not consume any input
@@ -53,9 +56,9 @@ mod tests {
     #[test]
     fn test_default_i32() {
         let data = b"123";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = default::<i32>();
-        
+
         let (result, remaining) = parser.parse(cursor).unwrap();
         assert_eq!(result, 0);
         // Should not consume any input
@@ -65,11 +68,12 @@ mod tests {
     #[test]
     fn test_default_empty_input() {
         let data = b"";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = default::<String>();
-        
+
         let (result, remaining) = parser.parse(cursor).unwrap();
         assert_eq!(result, String::default());
         assert!(matches!(remaining, ByteCursor::EndOfFile { .. }));
     }
 }
+

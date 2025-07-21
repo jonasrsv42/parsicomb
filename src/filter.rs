@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use crate::byte_cursor::ByteCursor;
 use crate::parser::Parser;
 use crate::{ParsiCombError, CodeLoc};
@@ -6,11 +7,11 @@ use crate::{ParsiCombError, CodeLoc};
 pub struct FilterParser<P, F> {
     parser: P,
     predicate: F,
-    error_message: String,
+    error_message: Cow<'static, str>,
 }
 
 impl<P, F> FilterParser<P, F> {
-    pub fn new(parser: P, predicate: F, error_message: String) -> Self {
+    pub fn new(parser: P, predicate: F, error_message: Cow<'static, str>) -> Self {
         Self {
             parser,
             predicate,
@@ -43,24 +44,24 @@ where
 
 /// Extension trait to add filter method to all parsers
 pub trait FilterExt<'code>: Parser<'code> {
-    fn filter<F>(self, predicate: F, error_message: &str) -> FilterParser<Self, F>
+    fn filter<F>(self, predicate: F, error_message: impl Into<Cow<'static, str>>) -> FilterParser<Self, F>
     where
         Self: Sized,
         F: Fn(&Self::Output) -> bool,
     {
-        FilterParser::new(self, predicate, error_message.to_string())
+        FilterParser::new(self, predicate, error_message.into())
     }
 }
 
 impl<'code, P: Parser<'code>> FilterExt<'code> for P {}
 
 /// Convenience function to create a filtered parser
-pub fn filter<'code, P, F>(parser: P, predicate: F, error_message: &str) -> FilterParser<P, F>
+pub fn filter<'code, P, F>(parser: P, predicate: F, error_message: impl Into<Cow<'static, str>>) -> FilterParser<P, F>
 where
     P: Parser<'code>,
     F: Fn(&P::Output) -> bool,
 {
-    FilterParser::new(parser, predicate, error_message.to_string())
+    FilterParser::new(parser, predicate, error_message.into())
 }
 
 #[cfg(test)]
@@ -72,7 +73,7 @@ mod tests {
     fn test_filter_success() {
         let input = "a";
         let data = input.as_bytes();
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         
         let parser = char().filter(|c| c.is_alphabetic(), "expected alphabetic character");
         let (result, _) = parser.parse(cursor).unwrap();
@@ -83,7 +84,7 @@ mod tests {
     fn test_filter_failure() {
         let input = "1";
         let data = input.as_bytes();
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         
         let parser = char().filter(|c| c.is_alphabetic(), "expected alphabetic character");
         let result = parser.parse(cursor);
@@ -105,7 +106,7 @@ mod tests {
         
         for (input, should_succeed) in test_cases {
             let data = input.as_bytes();
-            let cursor = ByteCursor::new(data).unwrap();
+            let cursor = ByteCursor::new(data);
             
             let parser = char().filter(|c| c.is_alphabetic(), "expected letter");
             let result = parser.parse(cursor);
@@ -133,7 +134,7 @@ mod tests {
         
         for (input, should_succeed) in test_cases {
             let data = input.as_bytes();
-            let cursor = ByteCursor::new(data).unwrap();
+            let cursor = ByteCursor::new(data);
             
             let parser = char().filter(|c| c.is_numeric(), "expected digit");
             let result = parser.parse(cursor);
@@ -162,7 +163,7 @@ mod tests {
         
         for (input, should_succeed) in test_cases {
             let data = input.as_bytes();
-            let cursor = ByteCursor::new(data).unwrap();
+            let cursor = ByteCursor::new(data);
             
             let parser = char().filter(|c| c.is_alphanumeric(), "expected alphanumeric");
             let result = parser.parse(cursor);
@@ -191,7 +192,7 @@ mod tests {
         
         for (input, should_succeed) in test_cases {
             let data = input.as_bytes();
-            let cursor = ByteCursor::new(data).unwrap();
+            let cursor = ByteCursor::new(data);
             
             let parser = char().filter(|c| c.is_whitespace(), "expected whitespace");
             let result = parser.parse(cursor);
@@ -208,7 +209,7 @@ mod tests {
     fn test_chained_filters() {
         let input = "A";
         let data = input.as_bytes();
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         
         // Filter for alphabetic AND uppercase
         let parser = char()
@@ -223,7 +224,7 @@ mod tests {
     fn test_chained_filters_failure() {
         let input = "a";
         let data = input.as_bytes();
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         
         // Filter for alphabetic AND uppercase - should fail on uppercase check
         let parser = char()

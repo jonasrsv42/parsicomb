@@ -5,11 +5,14 @@ use crate::{CodeLoc, ParsiCombError};
 use std::borrow::Cow;
 
 // Helper function to reduce error creation boilerplate
-fn create_string_error<'code>(cursor: &ByteCursor<'code>, message: String) -> ParsiCombError<'code> {
+fn create_string_error<'code>(
+    cursor: &ByteCursor<'code>,
+    message: String,
+) -> ParsiCombError<'code> {
     let (data, position) = cursor.inner();
     ParsiCombError::SyntaxError {
-        message,
-        loc: CodeLoc::new(data, position)
+        message: message.into(),
+        loc: CodeLoc::new(data, position),
     }
 }
 
@@ -29,7 +32,10 @@ impl IsStringParser {
 impl<'code> Parser<'code> for IsStringParser {
     type Output = Cow<'static, str>;
 
-    fn parse(&self, cursor: ByteCursor<'code>) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
+    fn parse(
+        &self,
+        cursor: ByteCursor<'code>,
+    ) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
         let mut current_cursor = cursor;
 
         for expected_char in self.expected.chars() {
@@ -77,7 +83,7 @@ mod tests {
     fn test_exact_match() {
         let input = "hello";
         let data = input.as_bytes();
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = is_string("hello");
 
         let (result, _) = parser.parse(cursor).unwrap();
@@ -88,7 +94,7 @@ mod tests {
     fn test_partial_match_with_remaining() {
         let input = "hello world";
         let data = input.as_bytes();
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = is_string("hello");
 
         let (result, remaining_cursor) = parser.parse(cursor).unwrap();
@@ -103,7 +109,7 @@ mod tests {
     fn test_unicode_string() {
         let input = "こんにちは世界";
         let data = input.as_bytes();
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = is_string("こんにちは");
 
         let (result, remaining_cursor) = parser.parse(cursor).unwrap();
@@ -118,7 +124,7 @@ mod tests {
     fn test_empty_string() {
         let input = "hello";
         let data = input.as_bytes();
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = is_string("");
 
         let (result, cursor_after) = parser.parse(cursor).unwrap();
@@ -133,7 +139,7 @@ mod tests {
     fn test_mismatch_first_char() {
         let input = "world";
         let data = input.as_bytes();
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = is_string("hello");
 
         let result = parser.parse(cursor);
@@ -150,7 +156,7 @@ mod tests {
     fn test_mismatch_middle_char() {
         let input = "help";
         let data = input.as_bytes();
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = is_string("hello");
 
         let result = parser.parse(cursor);
@@ -167,7 +173,7 @@ mod tests {
     fn test_insufficient_input() {
         let input = "hel";
         let data = input.as_bytes();
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = is_string("hello");
 
         let result = parser.parse(cursor);
@@ -183,7 +189,7 @@ mod tests {
     #[test]
     fn test_empty_input() {
         let data = b"";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = is_string("hello");
 
         let result = parser.parse(cursor);
@@ -200,7 +206,7 @@ mod tests {
     fn test_case_sensitive() {
         let input = "Hello";
         let data = input.as_bytes();
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = is_string("hello");
 
         let result = parser.parse(cursor);
@@ -221,7 +227,7 @@ mod tests {
 
         for keyword in test_cases {
             let data = keyword.as_bytes();
-            let cursor = ByteCursor::new(data).unwrap();
+            let cursor = ByteCursor::new(data);
             let parser = is_string(keyword);
 
             let (result, _) = parser.parse(cursor).unwrap();
@@ -235,7 +241,7 @@ mod tests {
 
         for expected in test_cases {
             let data = expected.as_bytes();
-            let cursor = ByteCursor::new(data).unwrap();
+            let cursor = ByteCursor::new(data);
             let parser = is_string(expected);
 
             let (result, _) = parser.parse(cursor).unwrap();
@@ -256,7 +262,7 @@ mod tests {
 
         for symbol in test_cases {
             let data = symbol.as_bytes();
-            let cursor = ByteCursor::new(data).unwrap();
+            let cursor = ByteCursor::new(data);
             let parser = is_string(symbol);
 
             let (result, _) = parser.parse(cursor).unwrap();
@@ -269,7 +275,7 @@ mod tests {
         // Test complex emoji sequences
         let input = "👨‍💻🔥";
         let data = input.as_bytes();
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = is_string("👨‍💻");
 
         let (result, remaining_cursor) = parser.parse(cursor).unwrap();

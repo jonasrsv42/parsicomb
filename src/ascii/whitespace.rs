@@ -19,7 +19,7 @@ mod tests {
     #[test]
     fn test_whitespace_parser_space() {
         let data = b" abc";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = whitespace();
 
         let (ws, cursor) = parser.parse(cursor).unwrap();
@@ -30,7 +30,7 @@ mod tests {
     #[test]
     fn test_whitespace_parser_tab() {
         let data = b"\txyz";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = whitespace();
 
         let (ws, cursor) = parser.parse(cursor).unwrap();
@@ -41,7 +41,7 @@ mod tests {
     #[test]
     fn test_whitespace_parser_newline() {
         let data = b"\nabc";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = whitespace();
 
         let (ws, cursor) = parser.parse(cursor).unwrap();
@@ -52,7 +52,7 @@ mod tests {
     #[test]
     fn test_whitespace_parser_carriage_return() {
         let data = b"\rxyz";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = whitespace();
 
         let (ws, cursor) = parser.parse(cursor).unwrap();
@@ -63,7 +63,7 @@ mod tests {
     #[test]
     fn test_whitespace_parser_non_whitespace_fails() {
         let data = b"abc";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = whitespace();
 
         let result = parser.parse(cursor);
@@ -74,7 +74,7 @@ mod tests {
     #[test]
     fn test_whitespaces_parser_zero_matches() {
         let data = b"abc";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = many(whitespace());
 
         let (ws_vec, cursor) = parser.parse(cursor).unwrap();
@@ -85,7 +85,7 @@ mod tests {
     #[test]
     fn test_whitespaces_parser_multiple_matches() {
         let data = b"  \t\n abc";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = many(whitespace());
 
         let (ws_vec, cursor) = parser.parse(cursor).unwrap();
@@ -96,7 +96,7 @@ mod tests {
     #[test]
     fn test_whitespaces_parser_all_whitespace() {
         let data = b" \t\n\r";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = many(whitespace());
 
         let (ws_vec, cursor) = parser.parse(cursor).unwrap();

@@ -18,7 +18,10 @@ struct IntDotUintParser;
 impl<'code> Parser<'code> for IntDotUintParser {
     type Output = f64;
 
-    fn parse(&self, cursor: ByteCursor<'code>) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
+    fn parse(
+        &self,
+        cursor: ByteCursor<'code>,
+    ) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
         let (((int_part, _), frac_part), cursor) =
             i64().and(is_byte(b'.')).and(u64()).parse(cursor)?;
 
@@ -31,8 +34,9 @@ impl<'code> Parser<'code> for IntDotUintParser {
                 message: format!(
                     "too many fractional digits: {} (max {})",
                     frac_digits, MAX_FRACTIONAL_DIGITS
-                ),
-                loc: CodeLoc::new(data, position)
+                )
+                .into(),
+                loc: CodeLoc::new(data, position),
             });
         }
 
@@ -44,8 +48,8 @@ impl<'code> Parser<'code> for IntDotUintParser {
         if int_as_f64 as i64 != int_part {
             let (data, position) = cursor.inner();
             return Err(ParsiCombError::SyntaxError {
-                message: format!("integer part too large for f64 precision: {}", int_part),
-                loc: CodeLoc::new(data, position)
+                message: format!("integer part too large for f64 precision: {}", int_part).into(),
+                loc: CodeLoc::new(data, position),
             });
         }
 
@@ -59,8 +63,8 @@ impl<'code> Parser<'code> for IntDotUintParser {
         if !result.is_finite() {
             let (data, position) = cursor.inner();
             return Err(ParsiCombError::SyntaxError {
-                message: "floating point overflow".to_string(),
-                loc: CodeLoc::new(data, position)
+                message: "floating point overflow".into(),
+                loc: CodeLoc::new(data, position),
             });
         }
 
@@ -80,7 +84,7 @@ mod tests {
     #[test]
     fn test_int_dot_uint() {
         let data = b"123.456abc";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = f64();
 
         let (value, cursor) = parser.parse(cursor).unwrap();
@@ -91,7 +95,7 @@ mod tests {
     #[test]
     fn test_negative_int_dot_uint() {
         let data = b"-42.789xyz";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = f64();
 
         let (value, cursor) = parser.parse(cursor).unwrap();
@@ -102,7 +106,7 @@ mod tests {
     #[test]
     fn test_dot_uint_fails() {
         let data = b".456abc";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = f64();
 
         let result = parser.parse(cursor);
@@ -112,7 +116,7 @@ mod tests {
     #[test]
     fn test_int_dot_fails() {
         let data = b"123.abc";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = f64();
 
         let result = parser.parse(cursor);
@@ -122,7 +126,7 @@ mod tests {
     #[test]
     fn test_negative_int_dot_fails() {
         let data = b"-456.xyz";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = f64();
 
         let result = parser.parse(cursor);
@@ -132,7 +136,7 @@ mod tests {
     #[test]
     fn test_zero_patterns() {
         let data = b"0.0";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = f64();
         let (value, _) = parser.parse(cursor).unwrap();
         assert!((value - 0.0).abs() < f64::EPSILON);
@@ -141,7 +145,7 @@ mod tests {
     #[test]
     fn test_no_match_fails() {
         let data = b"abc";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = f64();
 
         let result = parser.parse(cursor);
@@ -151,7 +155,7 @@ mod tests {
     #[test]
     fn test_just_dot_fails() {
         let data = b".abc";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = f64();
 
         let result = parser.parse(cursor);
@@ -162,7 +166,7 @@ mod tests {
     fn test_too_many_fractional_digits() {
         // 20 fractional digits (exceeds MAX_FRACTIONAL_DIGITS = 15)
         let data = b"1.12345678901234567890";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = f64();
 
         let result = parser.parse(cursor);
@@ -179,7 +183,7 @@ mod tests {
     fn test_max_fractional_digits_ok() {
         // Exactly 15 fractional digits should work
         let data = b"1.123456789012345";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = f64();
 
         let result = parser.parse(cursor);

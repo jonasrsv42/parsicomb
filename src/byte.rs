@@ -58,7 +58,7 @@ impl<'code> Parser<'code> for IsByteParser {
                     std::str::from_utf8(&[byte]).unwrap_or("<non-utf8>")
                 );
                 Err(ParsiCombError::SyntaxError {
-                    message,
+                    message: message.into(),
                     loc: CodeLoc::new(data, position),
                 })
             }
@@ -100,7 +100,7 @@ impl<'code> Parser<'code> for BetweenBytesParser {
                     std::str::from_utf8(&[byte]).unwrap_or("<non-utf8>")
                 );
                 Err(ParsiCombError::SyntaxError {
-                    message,
+                    message: message.into(),
                     loc: CodeLoc::new(data, position)
                 })
             }
@@ -126,7 +126,7 @@ mod tests {
     #[test]
     fn test_byte_parser_success() {
         let data = b"hello";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = ByteParser::new();
 
         let result = parser.parse(cursor).unwrap();
@@ -139,7 +139,7 @@ mod tests {
     #[test]
     fn test_byte_parser_eof() {
         let data = b"x";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = ByteParser::new();
 
         // First parse succeeds
@@ -155,7 +155,7 @@ mod tests {
     #[test]
     fn test_byte_parser_sequence() {
         let data = b"abc";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = ByteParser::new();
 
         let (b1, cursor) = parser.parse(cursor).unwrap();
@@ -174,7 +174,7 @@ mod tests {
     #[test]
     fn test_is_byte_parser_success() {
         let data = b"hello";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = is_byte(b'h');
 
         let (byte, cursor) = parser.parse(cursor).unwrap();
@@ -185,7 +185,7 @@ mod tests {
     #[test]
     fn test_is_byte_parser_failure() {
         let data = b"world";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = is_byte(b'h');
 
         let result = parser.parse(cursor);
@@ -201,7 +201,7 @@ mod tests {
     #[test]
     fn test_is_byte_parser_non_utf8() {
         let data = &[0xFF, 0xFE];
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = is_byte(0xAA);
 
         let result = parser.parse(cursor);
@@ -213,7 +213,7 @@ mod tests {
     #[test]
     fn test_in_range_parser_success() {
         let data = b"5abc";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = between_bytes(b'0', b'9');
 
         let (byte, cursor) = parser.parse(cursor).unwrap();
@@ -224,7 +224,7 @@ mod tests {
     #[test]
     fn test_in_range_parser_failure_below() {
         let data = b"/abc"; // '/' is 0x2F, '0' is 0x30
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = between_bytes(b'0', b'9');
 
         let result = parser.parse(cursor);
@@ -240,7 +240,7 @@ mod tests {
     #[test]
     fn test_in_range_parser_failure_above() {
         let data = b":abc"; // ':' is 0x3A, '9' is 0x39
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = between_bytes(b'0', b'9');
 
         let result = parser.parse(cursor);
@@ -256,7 +256,7 @@ mod tests {
     #[test]
     fn test_in_range_parser_eof() {
         let data = b"";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
         let parser = between_bytes(b'a', b'z');
 
         let result = parser.parse(cursor);

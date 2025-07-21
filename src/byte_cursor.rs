@@ -1,5 +1,4 @@
 use crate::{CodeLoc, ParsiCombError};
-use areamy::error::Error;
 
 #[derive(Debug, Copy, Clone)]
 pub enum ByteCursor<'a> {
@@ -14,11 +13,11 @@ pub enum ByteCursor<'a> {
 }
 
 impl<'a> ByteCursor<'a> {
-    pub fn new(data: &'a [u8]) -> Result<Self, Error> {
+    pub fn new(data: &'a [u8]) -> Self {
         if data.is_empty() {
-            return Ok(ByteCursor::EndOfFile { data });
+            return ByteCursor::EndOfFile { data };
         }
-        Ok(ByteCursor::Valid { data, position: 0 })
+        ByteCursor::Valid { data, position: 0 }
     }
 
     /// Advances the cursor to the next byte
@@ -58,9 +57,7 @@ impl<'a> ByteCursor<'a> {
     pub fn value(&self) -> Result<u8, ParsiCombError<'a>> {
         match self {
             ByteCursor::Valid { data, position } => Ok(data[*position]),
-            ByteCursor::EndOfFile { .. } => {
-                Err(ParsiCombError::CannotReadValueAtEof)
-            }
+            ByteCursor::EndOfFile { .. } => Err(ParsiCombError::CannotReadValueAtEof),
         }
     }
 
@@ -98,7 +95,7 @@ mod tests {
     #[test]
     fn test_basic_operations() {
         let data = b"hello\nworld";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
 
         assert_eq!(cursor.value().unwrap(), b'h');
 
@@ -109,7 +106,7 @@ mod tests {
     #[test]
     fn test_newline_handling() {
         let data = b"ab\ncd";
-        let mut cursor = ByteCursor::new(data).unwrap();
+        let mut cursor = ByteCursor::new(data);
 
         // Move to 'a'
         assert_eq!(cursor.value().unwrap(), b'a');
@@ -130,7 +127,7 @@ mod tests {
     #[test]
     fn test_eof() {
         let data = b"ab";
-        let mut cursor = ByteCursor::new(data).unwrap();
+        let mut cursor = ByteCursor::new(data);
 
         assert_eq!(cursor.value().unwrap(), b'a');
         cursor = cursor.next();
@@ -144,7 +141,7 @@ mod tests {
     #[test]
     fn test_edge_case_single_byte() {
         let data = b"x";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
 
         assert_eq!(cursor.value().unwrap(), b'x');
 
@@ -156,7 +153,7 @@ mod tests {
     #[test]
     fn test_empty_data() {
         let data = b"";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
 
         // Empty data should return EOF cursor
         assert!(matches!(cursor, ByteCursor::EndOfFile { .. }));
@@ -168,7 +165,7 @@ mod tests {
     #[test]
     fn test_null_byte_handling() {
         let data = b"a\0b";
-        let mut cursor = ByteCursor::new(data).unwrap();
+        let mut cursor = ByteCursor::new(data);
 
         assert_eq!(cursor.value().unwrap(), b'a');
 
@@ -185,7 +182,7 @@ mod tests {
     #[test]
     fn test_consecutive_eof_checks() {
         let data = b"x";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
 
         // First advance should return EOF
         let cursor = cursor.next();
@@ -199,7 +196,7 @@ mod tests {
     #[test]
     fn test_try_next_success() {
         let data = b"abc";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
 
         assert_eq!(cursor.value().unwrap(), b'a');
 
@@ -213,7 +210,7 @@ mod tests {
     #[test]
     fn test_try_next_eof_error() {
         let data = b"x";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
 
         // try_next should return error at EOF
         let result = cursor.try_next();
@@ -229,7 +226,7 @@ mod tests {
     #[test]
     fn test_copy_independence() {
         let data = b"abcd";
-        let cursor = ByteCursor::new(data).unwrap();
+        let cursor = ByteCursor::new(data);
 
         // Make copies before advancing
         let saved_at_a = cursor;
