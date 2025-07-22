@@ -3,15 +3,43 @@ use super::parser::Parser;
 use crate::error::ErrorPosition;
 use std::fmt;
 
-/// Trait for terminal/leaf error types that can be converted to a base type for comparison
+/// Trait for error types that can be converted to a comparable base type
+///
+/// Downstream crates can implement this for their custom error types to enable
+/// automatic furthest-error selection in Or combinators.
+///
+/// # Example for downstream crates
+///
+/// ```rust
+/// use parsicomb::error::ErrorPosition;
+/// use parsicomb::or::OrBranch;
+///
+/// // Your custom error type
+/// #[derive(Debug)]
+/// struct MyError {
+///     position: usize,
+///     message: String,
+/// }
+///
+/// // Implement ErrorPosition
+/// impl ErrorPosition for MyError {
+///     fn byte_position(&self) -> usize {
+///         self.position
+///     }
+/// }
+///
+/// // Implement OrBranch (converts to itself since it's already a terminal type)
+/// impl OrBranch for MyError {
+///     type Base = Self;
+///     fn furthest(self) -> Self::Base {
+///         self
+///     }
+/// }
+/// ```
 pub trait OrBranch {
-    type Base: OrBase;
+    type Base: ErrorPosition;
     fn furthest(self) -> Self::Base;
 }
-
-/// Trait for error types that can be directly compared by position
-/// This is a marker trait for the "flattened" error types
-pub trait OrBase: ErrorPosition {}
 
 /// Error type for Or parser that can wrap errors from both parsers when both fail
 #[derive(Debug)]
@@ -41,9 +69,7 @@ where
 {
 }
 
-// ParsicombError is both OrBranch (converts to itself) and OrBase (terminal type)
-impl<'code> OrBase for crate::ParsicombError<'code> {}
-
+// ParsicombError implements OrBranch (converts to itself since it's a terminal type)
 impl<'code> OrBranch for crate::ParsicombError<'code> {
     type Base = Self;
 

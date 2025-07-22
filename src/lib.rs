@@ -26,5 +26,6 @@ pub mod some;
 pub mod take_until;
 pub mod utf8;
 
-pub use error::{CodeLoc, ParsicombError};
+pub use error::{CodeLoc, ErrorPosition, ParsicombError};
+pub use or::OrBranch;
 pub use parser::Parser;
