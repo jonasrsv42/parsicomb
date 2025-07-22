@@ -48,13 +48,13 @@ where
     E1: ErrorNode<'code>,
     E2: ErrorNode<'code>,
 {
-    fn actual(self) -> Box<dyn ErrorLeaf + 'code> {
+    fn likely_error(self) -> Box<dyn ErrorLeaf + 'code> {
         match self {
-            SeparatedPairError::LeftParser(e1) => e1.actual(),
-            SeparatedPairError::LeftWhitespace(e) => e.actual(),
-            SeparatedPairError::Separator(e) => e.actual(),
-            SeparatedPairError::RightWhitespace(e) => e.actual(),
-            SeparatedPairError::RightParser(e2) => e2.actual(),
+            SeparatedPairError::LeftParser(e1) => e1.likely_error(),
+            SeparatedPairError::LeftWhitespace(e) => e.likely_error(),
+            SeparatedPairError::Separator(e) => e.likely_error(),
+            SeparatedPairError::RightWhitespace(e) => e.likely_error(),
+            SeparatedPairError::RightParser(e2) => e2.likely_error(),
         }
     }
 }

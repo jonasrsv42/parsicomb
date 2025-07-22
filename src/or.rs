@@ -37,11 +37,11 @@ where
     E1: ErrorNode<'code>,
     E2: ErrorNode<'code>,
 {
-    fn actual(self) -> Box<dyn ErrorLeaf + 'code> {
+    fn likely_error(self) -> Box<dyn ErrorLeaf + 'code> {
         match self {
             OrError::BothFailed { first, second } => {
-                let first_base = first.actual();
-                let second_base = second.actual();
+                let first_base = first.likely_error();
+                let second_base = second.likely_error();
 
                 if first_base.byte_position() >= second_base.byte_position() {
                     first_base
@@ -211,7 +211,7 @@ mod tests {
             first: error1,
             second: error2,
         };
-        let furthest = or_error.actual();
+        let furthest = or_error.likely_error();
 
         assert_eq!(furthest.byte_position(), 2);
         assert!(furthest.to_string().contains("second error"));
@@ -233,7 +233,7 @@ mod tests {
             first: error1,
             second: error2,
         };
-        let furthest = or_error.actual();
+        let furthest = or_error.likely_error();
 
         assert_eq!(furthest.byte_position(), 3);
         assert!(furthest.to_string().contains("first error"));
@@ -268,7 +268,7 @@ mod tests {
         };
 
         // Use the new ErrorBranch system - this automatically handles recursion!
-        let furthest = outer_or.actual();
+        let furthest = outer_or.likely_error();
 
         assert_eq!(furthest.byte_position(), 8);
         assert!(furthest.to_string().contains("error at pos 8"));
@@ -300,7 +300,7 @@ mod tests {
         // The furthest() should automatically flatten all the nested Or and And structures
         // and find the error that made it furthest (position 3)
         let error = result.unwrap_err();
-        let furthest_error = error.actual();
+        let furthest_error = error.likely_error();
 
         assert_eq!(
             furthest_error.byte_position(),
@@ -336,7 +336,7 @@ mod tests {
         // OrError -> FilterError -> AndError -> ParsicombError
         // and find the error that got furthest (position 2)
         let error = result.unwrap_err();
-        let furthest_error = error.actual();
+        let furthest_error = error.likely_error();
 
         assert_eq!(
             furthest_error.byte_position(),

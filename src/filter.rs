@@ -31,10 +31,10 @@ impl<'code, E> ErrorNode<'code> for FilterError<'code, E>
 where
     E: ErrorNode<'code>,
 {
-    fn actual(self) -> Box<dyn ErrorLeaf + 'code> {
+    fn likely_error(self) -> Box<dyn ErrorLeaf + 'code> {
         match self {
-            FilterError::ParserError(e) => e.actual(),
-            FilterError::FilterFailed(parsicomb_error) => parsicomb_error.actual(),
+            FilterError::ParserError(e) => e.likely_error(),
+            FilterError::FilterFailed(parsicomb_error) => parsicomb_error.likely_error(),
         }
     }
 }

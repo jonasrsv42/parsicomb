@@ -51,13 +51,13 @@ where
     E2: ErrorNode<'code>,
     E3: ErrorNode<'code>,
 {
-    fn actual(self) -> Box<dyn ErrorLeaf + 'code> {
+    fn likely_error(self) -> Box<dyn ErrorLeaf + 'code> {
         match self {
-            BetweenError::OpenDelimiter(e1) => e1.actual(),
-            BetweenError::OpenWhitespace(e) => e.actual(),
-            BetweenError::Content(e2) => e2.actual(),
-            BetweenError::CloseWhitespace(e) => e.actual(),
-            BetweenError::CloseDelimiter(e3) => e3.actual(),
+            BetweenError::OpenDelimiter(e1) => e1.likely_error(),
+            BetweenError::OpenWhitespace(e) => e.likely_error(),
+            BetweenError::Content(e2) => e2.likely_error(),
+            BetweenError::CloseWhitespace(e) => e.likely_error(),
+            BetweenError::CloseDelimiter(e3) => e3.likely_error(),
         }
     }
 }
@@ -132,6 +132,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::and::AndExt;
     use crate::ascii::number::f64;
     use crate::byte::is_byte;
     use crate::byte_cursor::ByteCursor;
@@ -253,11 +254,7 @@ mod tests {
     }
 
     #[test]
-    fn test_between_with_or_combinator_and_actual_error_flattening() {
-        use crate::and::AndExt;
-        use crate::or::OrExt;
-        use crate::utf8::string::is_string;
-
+    fn test_between_with_or_combinator_and_likely_error_flattening() {
         let data = b"[hello,xyz]";
         let cursor = ByteCursor::new(data);
 
@@ -292,7 +289,7 @@ mod tests {
     }
 
     #[test]
-    fn test_complex_nested_combinators_with_actual_error_flattening() {
+    fn test_complex_nested_combinators_with_likely_error_flattening() {
         let data = b"{start: [hello, badvalue], end: finish}";
         let cursor = ByteCursor::new(data);
 
@@ -334,7 +331,7 @@ mod tests {
         let complex_error = result.unwrap_err();
 
         // This demonstrates the full power of our ErrorBranch recursion system
-        let actual_error = complex_error.actual();
+        let actual_error = complex_error.likely_error();
 
         // The actual error should be at the position where "badvalue" starts (after "hello, ")
         // Position should be around 15-16 where "badvalue" begins

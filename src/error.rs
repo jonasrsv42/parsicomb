@@ -46,14 +46,14 @@ pub trait ErrorLeaf: Error {
 ///
 /// // Implement ErrorNode (converts to itself since it's already a terminal type)
 /// impl<'a> ErrorNode<'a> for MyError {
-///     fn actual(self) -> Box<dyn ErrorLeaf + 'a> {
+///     fn likely_error(self) -> Box<dyn ErrorLeaf + 'a> {
 ///         Box::new(self)
 ///     }
 /// }
 /// ```
 pub trait ErrorNode<'code> {
-    /// Flatten nested error structures and return the actual error that made it furthest
-    fn actual(self) -> Box<dyn ErrorLeaf + 'code>;
+    /// Flatten nested error structures and return the likely error that made it furthest
+    fn likely_error(self) -> Box<dyn ErrorLeaf + 'code>;
 }
 
 #[derive(Debug)]
@@ -234,7 +234,7 @@ impl<'code> ErrorLeaf for ParsicombError<'code> {
 
 // ParsicombError implements ErrorBranch (converts to itself since it's a terminal type)
 impl<'code> ErrorNode<'code> for ParsicombError<'code> {
-    fn actual(self) -> Box<dyn ErrorLeaf + 'code> {
+    fn likely_error(self) -> Box<dyn ErrorLeaf + 'code> {
         Box::new(self) // Already the base type
     }
 }

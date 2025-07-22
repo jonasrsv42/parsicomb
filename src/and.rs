@@ -58,13 +58,13 @@ where
     E1: ErrorNode<'code>,
     E2: ErrorNode<'code>,
 {
-    fn actual(self) -> Box<dyn ErrorLeaf + 'code> {
+    fn likely_error(self) -> Box<dyn ErrorLeaf + 'code> {
         match self {
             // First parser failed - return its error
-            AndError::FirstParser(e1) => e1.actual(),
+            AndError::FirstParser(e1) => e1.likely_error(),
             // Second parser failed - this means first parser succeeded and advanced the cursor,
             // so the second parser's error is further in the input
-            AndError::SecondParser(e2) => e2.actual(),
+            AndError::SecondParser(e2) => e2.likely_error(),
         }
     }
 }
