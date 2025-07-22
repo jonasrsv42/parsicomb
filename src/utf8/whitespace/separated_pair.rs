@@ -1,6 +1,8 @@
 use super::unicode_whitespace;
 use crate::ParsicombError;
-use crate::error::ErrorBranch;
+use crate::byte_cursor::ByteCursor;
+use crate::error::{ErrorLeaf, ErrorNode};
+use crate::filter::FilterError;
 use crate::many::many;
 use crate::parser::Parser;
 use crate::utf8::string::is_string;
@@ -8,22 +10,20 @@ use std::fmt;
 
 /// Error type for SeparatedPair parser that can wrap errors from all constituent parsers
 #[derive(Debug)]
-pub enum SeparatedPairError<E1, E2, WS, SEP> {
+pub enum SeparatedPairError<'code, E1, E2> {
     /// Error from the left parser
     LeftParser(E1),
     /// Error from whitespace after left parser
-    LeftWhitespace(WS),
+    LeftWhitespace(FilterError<'code, ParsicombError<'code>>),
     /// Error from the separator parser
-    Separator(SEP),
+    Separator(ParsicombError<'code>),
     /// Error from whitespace after separator
-    RightWhitespace(WS),
+    RightWhitespace(FilterError<'code, ParsicombError<'code>>),
     /// Error from the right parser
     RightParser(E2),
 }
 
-impl<E1: fmt::Display, E2: fmt::Display, WS: fmt::Display, SEP: fmt::Display> fmt::Display
-    for SeparatedPairError<E1, E2, WS, SEP>
-{
+impl<E1: fmt::Display, E2: fmt::Display> fmt::Display for SeparatedPairError<'_, E1, E2> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             SeparatedPairError::LeftParser(e) => write!(f, "Left parser failed: {}", e),
@@ -35,26 +35,20 @@ impl<E1: fmt::Display, E2: fmt::Display, WS: fmt::Display, SEP: fmt::Display> fm
     }
 }
 
-impl<E1, E2, WS, SEP> std::error::Error for SeparatedPairError<E1, E2, WS, SEP>
+impl<E1, E2> std::error::Error for SeparatedPairError<'_, E1, E2>
 where
     E1: std::error::Error,
     E2: std::error::Error,
-    WS: std::error::Error,
-    SEP: std::error::Error,
 {
 }
 
 // Implement ErrorBranch for SeparatedPairError to enable furthest-error selection
-impl<E1, E2, WS, SEP> ErrorBranch for SeparatedPairError<E1, E2, WS, SEP>
+impl<'code, E1, E2> ErrorNode<'code> for SeparatedPairError<'code, E1, E2>
 where
-    E1: ErrorBranch,
-    E2: ErrorBranch<Base = E1::Base>,
-    WS: ErrorBranch<Base = E1::Base>,
-    SEP: ErrorBranch<Base = E1::Base>,
+    E1: ErrorNode<'code>,
+    E2: ErrorNode<'code>,
 {
-    type Base = E1::Base;
-
-    fn actual(self) -> Self::Base {
+    fn actual(self) -> Box<dyn ErrorLeaf + 'code> {
         match self {
             SeparatedPairError::LeftParser(e1) => e1.actual(),
             SeparatedPairError::LeftWhitespace(e) => e.actual(),
@@ -84,22 +78,18 @@ pub struct SeparatedPair<P1, P2> {
     right: P2,
 }
 
-impl<'a, P1, P2, E> Parser<'a> for SeparatedPair<P1, P2>
+impl<'code, P1, P2> Parser<'code> for SeparatedPair<P1, P2>
 where
-    P1: Parser<'a>,
-    P2: Parser<'a>,
-    P1::Error: ErrorBranch<Base = E>,
-    P2::Error: ErrorBranch<Base = E>,
-    ParsicombError<'a>: Into<E>,
-    E: crate::error::ErrorPosition + std::error::Error,
+    P1: Parser<'code>,
+    P2: Parser<'code>,
 {
     type Output = (P1::Output, P2::Output);
-    type Error = SeparatedPairError<P1::Error, P2::Error, E, E>;
+    type Error = SeparatedPairError<'code, P1::Error, P2::Error>;
 
     fn parse(
         &self,
-        cursor: crate::byte_cursor::ByteCursor<'a>,
-    ) -> Result<(Self::Output, crate::byte_cursor::ByteCursor<'a>), Self::Error> {
+        cursor: ByteCursor<'code>,
+    ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
         // Parse: left + whitespace + separator + whitespace + right
         let (left_val, cursor) = self
             .left
@@ -107,13 +97,13 @@ where
             .map_err(SeparatedPairError::LeftParser)?;
         let (_, cursor) = many(unicode_whitespace())
             .parse(cursor)
-            .map_err(|e| SeparatedPairError::LeftWhitespace(e.actual().into()))?;
+            .map_err(|e| SeparatedPairError::LeftWhitespace(e))?;
         let (_, cursor) = is_string(self.separator.clone())
             .parse(cursor)
-            .map_err(|e| SeparatedPairError::Separator(e.actual().into()))?;
+            .map_err(SeparatedPairError::Separator)?;
         let (_, cursor) = many(unicode_whitespace())
             .parse(cursor)
-            .map_err(|e| SeparatedPairError::RightWhitespace(e.actual().into()))?;
+            .map_err(|e| SeparatedPairError::RightWhitespace(e))?;
         let (right_val, cursor) = self
             .right
             .parse(cursor)
@@ -123,14 +113,10 @@ where
     }
 }
 
-pub fn separated_pair<'a, P1, P2, S, E>(left: P1, separator: S, right: P2) -> SeparatedPair<P1, P2>
+pub fn separated_pair<'code, P1, P2, S>(left: P1, separator: S, right: P2) -> SeparatedPair<P1, P2>
 where
-    P1: Parser<'a>,
-    P2: Parser<'a>,
-    P1::Error: ErrorBranch<Base = E>,
-    P2::Error: ErrorBranch<Base = E>,
-    ParsicombError<'a>: Into<E>,
-    E: crate::error::ErrorPosition + std::error::Error,
+    P1: Parser<'code>,
+    P2: Parser<'code>,
     S: Into<std::borrow::Cow<'static, str>>,
 {
     SeparatedPair {

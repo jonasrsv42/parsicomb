@@ -1,27 +1,29 @@
 use super::unicode_whitespace;
 use crate::ParsicombError;
-use crate::error::ErrorBranch;
+use crate::byte_cursor::ByteCursor;
+use crate::error::{ErrorLeaf, ErrorNode};
+use crate::filter::FilterError;
 use crate::many::many;
 use crate::parser::Parser;
 use std::fmt;
 
 /// Error type for Between parser that can wrap errors from all constituent parsers
 #[derive(Debug)]
-pub enum BetweenError<E1, E2, E3, WS> {
+pub enum BetweenError<'code, E1, E2, E3> {
     /// Error from the opening delimiter parser
     OpenDelimiter(E1),
     /// Error from whitespace after open delimiter
-    OpenWhitespace(WS),
+    OpenWhitespace(FilterError<'code, ParsicombError<'code>>),
     /// Error from the content parser
     Content(E2),
     /// Error from whitespace before close delimiter
-    CloseWhitespace(WS),
+    CloseWhitespace(FilterError<'code, ParsicombError<'code>>),
     /// Error from the closing delimiter parser
     CloseDelimiter(E3),
 }
 
-impl<E1: fmt::Display, E2: fmt::Display, E3: fmt::Display, WS: fmt::Display> fmt::Display
-    for BetweenError<E1, E2, E3, WS>
+impl<E1: fmt::Display, E2: fmt::Display, E3: fmt::Display> fmt::Display
+    for BetweenError<'_, E1, E2, E3>
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -34,26 +36,22 @@ impl<E1: fmt::Display, E2: fmt::Display, E3: fmt::Display, WS: fmt::Display> fmt
     }
 }
 
-impl<E1, E2, E3, WS> std::error::Error for BetweenError<E1, E2, E3, WS>
+impl<E1, E2, E3> std::error::Error for BetweenError<'_, E1, E2, E3>
 where
     E1: std::error::Error,
     E2: std::error::Error,
     E3: std::error::Error,
-    WS: std::error::Error,
 {
 }
 
 // Implement ErrorBranch for BetweenError to enable furthest-error selection
-impl<E1, E2, E3, WS> ErrorBranch for BetweenError<E1, E2, E3, WS>
+impl<'code, E1, E2, E3> ErrorNode<'code> for BetweenError<'code, E1, E2, E3>
 where
-    E1: ErrorBranch,
-    E2: ErrorBranch<Base = E1::Base>,
-    E3: ErrorBranch<Base = E1::Base>,
-    WS: ErrorBranch<Base = E1::Base>,
+    E1: ErrorNode<'code>,
+    E2: ErrorNode<'code>,
+    E3: ErrorNode<'code>,
 {
-    type Base = E1::Base;
-
-    fn actual(self) -> Self::Base {
+    fn actual(self) -> Box<dyn ErrorLeaf + 'code> {
         match self {
             BetweenError::OpenDelimiter(e1) => e1.actual(),
             BetweenError::OpenWhitespace(e) => e.actual(),
@@ -84,24 +82,19 @@ pub struct Between<P1, P2, P3> {
     close: P3,
 }
 
-impl<'a, P1, P2, P3, E> Parser<'a> for Between<P1, P2, P3>
+impl<'code, P1, P2, P3> Parser<'code> for Between<P1, P2, P3>
 where
-    P1: Parser<'a>,
-    P2: Parser<'a>,
-    P3: Parser<'a>,
-    P1::Error: ErrorBranch<Base = E>,
-    P2::Error: ErrorBranch<Base = E>,
-    P3::Error: ErrorBranch<Base = E>,
-    ParsicombError<'a>: Into<E>,
-    E: crate::error::ErrorPosition + std::error::Error,
+    P1: Parser<'code>,
+    P2: Parser<'code>,
+    P3: Parser<'code>,
 {
     type Output = P2::Output;
-    type Error = BetweenError<P1::Error, P2::Error, P3::Error, E>;
+    type Error = BetweenError<'code, P1::Error, P2::Error, P3::Error>;
 
     fn parse(
         &self,
-        cursor: crate::byte_cursor::ByteCursor<'a>,
-    ) -> Result<(Self::Output, crate::byte_cursor::ByteCursor<'a>), Self::Error> {
+        cursor: ByteCursor<'code>,
+    ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
         // Parse: open + whitespace + content + whitespace + close
         let (_, cursor) = self
             .open
@@ -109,11 +102,11 @@ where
             .map_err(BetweenError::OpenDelimiter)?;
         let (_, cursor) = many(unicode_whitespace())
             .parse(cursor)
-            .map_err(|e| BetweenError::OpenWhitespace(e.actual().into()))?;
+            .map_err(|e| BetweenError::OpenWhitespace(e))?;
         let (content_val, cursor) = self.content.parse(cursor).map_err(BetweenError::Content)?;
         let (_, cursor) = many(unicode_whitespace())
             .parse(cursor)
-            .map_err(|e| BetweenError::CloseWhitespace(e.actual().into()))?;
+            .map_err(|e| BetweenError::CloseWhitespace(e))?;
         let (_, cursor) = self
             .close
             .parse(cursor)
@@ -123,16 +116,11 @@ where
     }
 }
 
-pub fn between<'a, P1, P2, P3, E>(open: P1, content: P2, close: P3) -> Between<P1, P2, P3>
+pub fn between<'code, P1, P2, P3>(open: P1, content: P2, close: P3) -> Between<P1, P2, P3>
 where
-    P1: Parser<'a>,
-    P2: Parser<'a>,
-    P3: Parser<'a>,
-    P1::Error: ErrorBranch<Base = E>,
-    P2::Error: ErrorBranch<Base = E>,
-    P3::Error: ErrorBranch<Base = E>,
-    ParsicombError<'a>: Into<E>,
-    E: crate::error::ErrorPosition + std::error::Error,
+    P1: Parser<'code>,
+    P2: Parser<'code>,
+    P3: Parser<'code>,
 {
     Between {
         open,
@@ -304,8 +292,6 @@ mod tests {
 
     #[test]
     fn test_complex_nested_combinators_with_actual_error_flattening() {
-        use crate::and::AndExt;
-        use crate::error::ErrorPosition;
         use crate::or::OrExt;
         use crate::utf8::string::is_string;
         use crate::utf8::whitespace::separated_pair;

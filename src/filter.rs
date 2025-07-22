@@ -1,8 +1,8 @@
 use crate::byte_cursor::ByteCursor;
+use crate::error::{ErrorLeaf, ErrorNode};
 use crate::parser::Parser;
 use crate::{CodeLoc, ParsicombError};
 use std::borrow::Cow;
-
 use std::fmt;
 
 /// Error type for filter parser that can wrap either the child parser's error
@@ -27,13 +27,11 @@ impl<'code, E: fmt::Display> fmt::Display for FilterError<'code, E> {
 impl<'code, E: std::error::Error> std::error::Error for FilterError<'code, E> {}
 
 // Implement ErrorBranch for FilterError to enable furthest-error selection in nested structures
-impl<'code, E> crate::error::ErrorBranch for FilterError<'code, E>
+impl<'code, E> ErrorNode<'code> for FilterError<'code, E>
 where
-    E: crate::error::ErrorBranch<Base = crate::ParsicombError<'code>>,
+    E: ErrorNode<'code>,
 {
-    type Base = crate::ParsicombError<'code>;
-
-    fn actual(self) -> Self::Base {
+    fn actual(self) -> Box<dyn ErrorLeaf + 'code> {
         match self {
             FilterError::ParserError(e) => e.actual(),
             FilterError::FilterFailed(parsicomb_error) => parsicomb_error.actual(),

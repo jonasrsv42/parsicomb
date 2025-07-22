@@ -1,5 +1,6 @@
 use super::byte_cursor::ByteCursor;
 use super::parser::Parser;
+use crate::error::{ErrorLeaf, ErrorNode};
 use std::fmt;
 
 /// Error type for And parser that can wrap errors from either the first or second parser
@@ -52,14 +53,12 @@ where
 }
 
 // Implement ErrorBranch for AndError to enable furthest-error selection in nested structures
-impl<E1, E2> crate::error::ErrorBranch for AndError<E1, E2>
+impl<'code, E1, E2> ErrorNode<'code> for AndError<E1, E2>
 where
-    E1: crate::error::ErrorBranch,
-    E2: crate::error::ErrorBranch<Base = E1::Base>,
+    E1: ErrorNode<'code>,
+    E2: ErrorNode<'code>,
 {
-    type Base = E1::Base;
-
-    fn actual(self) -> Self::Base {
+    fn actual(self) -> Box<dyn ErrorLeaf + 'code> {
         match self {
             // First parser failed - return its error
             AndError::FirstParser(e1) => e1.actual(),

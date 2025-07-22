@@ -4,7 +4,7 @@ use std::fmt;
 
 /// Trait for errors that can report their byte position in the input
 /// This enables selecting the error that progressed furthest when multiple parsers fail
-pub trait ErrorPosition {
+pub trait ErrorLeaf: Error {
     /// Returns the byte position where this error occurred
     fn byte_position(&self) -> usize;
 }
@@ -18,7 +18,9 @@ pub trait ErrorPosition {
 /// # Example for downstream crates
 ///
 /// ```rust
-/// use parsicomb::error::{ErrorPosition, ErrorBranch};
+/// use parsicomb::error::{ErrorLeaf, ErrorNode};
+/// use std::error::Error;
+/// use std::fmt;
 ///
 /// // Your custom error type
 /// #[derive(Debug)]
@@ -27,25 +29,31 @@ pub trait ErrorPosition {
 ///     message: String,
 /// }
 ///
-/// // Implement ErrorPosition
-/// impl ErrorPosition for MyError {
+/// impl fmt::Display for MyError {
+///     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+///         write!(f, "{}", self.message)
+///     }
+/// }
+///
+/// impl Error for MyError {}
+///
+/// // Implement ErrorLeaf
+/// impl ErrorLeaf for MyError {
 ///     fn byte_position(&self) -> usize {
 ///         self.position
 ///     }
 /// }
 ///
-/// // Implement ErrorBranch (converts to itself since it's already a terminal type)
-/// impl ErrorBranch for MyError {
-///     type Base = Self;
-///     fn actual(self) -> Self::Base {
-///         self
+/// // Implement ErrorNode (converts to itself since it's already a terminal type)
+/// impl<'a> ErrorNode<'a> for MyError {
+///     fn actual(self) -> Box<dyn ErrorLeaf + 'a> {
+///         Box::new(self)
 ///     }
 /// }
 /// ```
-pub trait ErrorBranch {
-    type Base: ErrorPosition;
+pub trait ErrorNode<'code> {
     /// Flatten nested error structures and return the actual error that made it furthest
-    fn actual(self) -> Self::Base;
+    fn actual(self) -> Box<dyn ErrorLeaf + 'code>;
 }
 
 #[derive(Debug)]
@@ -218,17 +226,15 @@ impl<'code> ParsicombError<'code> {
     }
 }
 
-impl<'code> ErrorPosition for ParsicombError<'code> {
+impl<'code> ErrorLeaf for ParsicombError<'code> {
     fn byte_position(&self) -> usize {
         self.byte_offset()
     }
 }
 
 // ParsicombError implements ErrorBranch (converts to itself since it's a terminal type)
-impl<'code> ErrorBranch for ParsicombError<'code> {
-    type Base = Self;
-
-    fn actual(self) -> Self::Base {
-        self // Already the base type
+impl<'code> ErrorNode<'code> for ParsicombError<'code> {
+    fn actual(self) -> Box<dyn ErrorLeaf + 'code> {
+        Box::new(self) // Already the base type
     }
 }

@@ -1,6 +1,6 @@
 use super::byte_cursor::ByteCursor;
 use super::parser::Parser;
-use crate::error::{ErrorBranch, ErrorPosition};
+use crate::error::{ErrorLeaf, ErrorNode};
 use std::fmt;
 
 /// Error type for Or parser that can wrap errors from both parsers when both fail
@@ -31,15 +31,13 @@ where
 {
 }
 
-// OrError implements ErrorBranch when both sides are ErrorBranch with the same Base type
-impl<E1, E2> ErrorBranch for OrError<E1, E2>
+// OrError implements ErrorBranch when both sides are ErrorBranch
+impl<'code, E1, E2> ErrorNode<'code> for OrError<E1, E2>
 where
-    E1: ErrorBranch,
-    E2: ErrorBranch<Base = E1::Base>,
+    E1: ErrorNode<'code>,
+    E2: ErrorNode<'code>,
 {
-    type Base = E1::Base;
-
-    fn actual(self) -> Self::Base {
+    fn actual(self) -> Box<dyn ErrorLeaf + 'code> {
         match self {
             OrError::BothFailed { first, second } => {
                 let first_base = first.actual();
@@ -117,7 +115,11 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::and::AndExt;
     use crate::byte::is_byte;
+    use crate::error::{CodeLoc, ParsicombError};
+    use crate::filter::FilterExt;
+    use crate::map::MapExt;
 
     #[test]
     fn test_or_first_succeeds() {
@@ -195,8 +197,6 @@ mod tests {
 
     #[test]
     fn test_or_error_furthest_simple() {
-        use crate::error::{CodeLoc, ErrorPosition, ParsicombError};
-
         let data = b"xyz";
         let error1 = ParsicombError::SyntaxError {
             message: "first error".into(),
@@ -219,8 +219,6 @@ mod tests {
 
     #[test]
     fn test_or_error_furthest_first_wins() {
-        use crate::error::{CodeLoc, ErrorPosition, ParsicombError};
-
         let data = b"xyz";
         let error1 = ParsicombError::SyntaxError {
             message: "first error".into(),
@@ -243,8 +241,6 @@ mod tests {
 
     #[test]
     fn test_or_error_auto_recursive_furthest() {
-        use crate::error::{CodeLoc, ErrorPosition, ParsicombError};
-
         let data = b"abcdefghij";
 
         // Create deeply nested structure: OrError<OrError<E1, E2>, E3>
@@ -280,11 +276,6 @@ mod tests {
 
     #[test]
     fn test_multiple_nested_ors_furthest_flattening() {
-        use crate::and::AndExt;
-        use crate::byte::is_byte;
-        use crate::error::ErrorPosition;
-        use crate::map::MapExt;
-
         let data = b"start_test";
         let cursor = ByteCursor::new(data);
 
@@ -320,12 +311,6 @@ mod tests {
 
     #[test]
     fn test_comprehensive_error_recursion() {
-        use crate::and::AndExt;
-        use crate::byte::is_byte;
-        use crate::error::ErrorPosition;
-        use crate::filter::FilterExt;
-        use crate::map::MapExt;
-
         let data = b"hello_world";
         let cursor = ByteCursor::new(data);
 

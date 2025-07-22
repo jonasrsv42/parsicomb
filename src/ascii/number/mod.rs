@@ -1,7 +1,4 @@
-use crate::ParsicombError;
-use crate::error::ErrorBranch;
 use crate::map::MapExt;
-use crate::map_err::MapErrExt;
 use crate::or::OrExt;
 use crate::parser::Parser;
 
@@ -22,11 +19,8 @@ pub enum Number {
 }
 
 /// Parser that matches either an integer or a float and returns a Number enum
-pub fn number<'code>() -> impl Parser<'code, Output = Number, Error = ParsicombError<'code>> {
-    f64()
-        .map(Number::F64)
-        .or(i64().map(Number::I64))
-        .map_err(|or_err| or_err.actual())
+pub fn number<'code>() -> impl Parser<'code, Output = Number> {
+    f64().map(Number::F64).or(i64().map(Number::I64))
 }
 
 #[cfg(test)]
