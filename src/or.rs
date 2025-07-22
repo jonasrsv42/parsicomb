@@ -1,6 +1,17 @@
 use super::byte_cursor::ByteCursor;
 use super::parser::Parser;
+use crate::error::ErrorPosition;
 use std::fmt;
+
+/// Trait for terminal/leaf error types that can be converted to a base type for comparison
+pub trait OrBranch {
+    type Base: OrBase;
+    fn furthest(self) -> Self::Base;
+}
+
+/// Trait for error types that can be directly compared by position
+/// This is a marker trait for the "flattened" error types
+pub trait OrBase: ErrorPosition {}
 
 /// Error type for Or parser that can wrap errors from both parsers when both fail
 #[derive(Debug)]
@@ -30,42 +41,35 @@ where
 {
 }
 
-impl<E> OrError<E, E>
-where
-    E: crate::error::ErrorPosition,
-{
-    /// Returns the error that progressed furthest in the input when both errors are the same type
-    pub fn furthest(self) -> E {
-        match self {
-            OrError::BothFailed { first, second } => {
-                if first.byte_position() >= second.byte_position() {
-                    first
-                } else {
-                    second
-                }
-            }
-        }
+// ParsicombError is both OrBranch (converts to itself) and OrBase (terminal type)
+impl<'code> OrBase for crate::ParsicombError<'code> {}
+
+impl<'code> OrBranch for crate::ParsicombError<'code> {
+    type Base = Self;
+
+    fn furthest(self) -> Self::Base {
+        self // Already the base type
     }
 }
 
-impl<E1, E2> OrError<E1, E2>
+// OrError implements OrBranch when both sides are OrBranch with the same Base type
+impl<E1, E2> OrBranch for OrError<E1, E2>
 where
-    E1: crate::error::ErrorPosition,
-    E2: crate::error::ErrorPosition,
+    E1: OrBranch,
+    E2: OrBranch<Base = E1::Base>,
 {
-    /// Select the furthest error and convert it using the provided functions
-    /// This enables handling nested OrError types and different error types
-    pub fn select_furthest<F1, F2, T>(self, convert_first: F1, convert_second: F2) -> T
-    where
-        F1: FnOnce(E1) -> T,
-        F2: FnOnce(E2) -> T,
-    {
+    type Base = E1::Base;
+
+    fn furthest(self) -> Self::Base {
         match self {
             OrError::BothFailed { first, second } => {
-                if first.byte_position() >= second.byte_position() {
-                    convert_first(first)
+                let first_base = first.furthest();
+                let second_base = second.furthest();
+
+                if first_base.byte_position() >= second_base.byte_position() {
+                    first_base
                 } else {
-                    convert_second(second)
+                    second_base
                 }
             }
         }
@@ -208,5 +212,90 @@ mod tests {
         let (byte, cursor) = parser.parse(cursor).unwrap();
         assert_eq!(byte, b'd');
         assert!(matches!(cursor, ByteCursor::EndOfFile { .. }));
+    }
+
+    #[test]
+    fn test_or_error_furthest_simple() {
+        use crate::error::{CodeLoc, ErrorPosition, ParsicombError};
+
+        let data = b"xyz";
+        let error1 = ParsicombError::SyntaxError {
+            message: "first error".into(),
+            loc: CodeLoc::new(data, 0), // position 0
+        };
+        let error2 = ParsicombError::SyntaxError {
+            message: "second error".into(),
+            loc: CodeLoc::new(data, 2), // position 2 (further)
+        };
+
+        let or_error = OrError::BothFailed {
+            first: error1,
+            second: error2,
+        };
+        let furthest = or_error.furthest();
+
+        assert_eq!(furthest.byte_position(), 2);
+        assert!(furthest.to_string().contains("second error"));
+    }
+
+    #[test]
+    fn test_or_error_furthest_first_wins() {
+        use crate::error::{CodeLoc, ErrorPosition, ParsicombError};
+
+        let data = b"xyz";
+        let error1 = ParsicombError::SyntaxError {
+            message: "first error".into(),
+            loc: CodeLoc::new(data, 3), // position 3 (further)
+        };
+        let error2 = ParsicombError::SyntaxError {
+            message: "second error".into(),
+            loc: CodeLoc::new(data, 1), // position 1
+        };
+
+        let or_error = OrError::BothFailed {
+            first: error1,
+            second: error2,
+        };
+        let furthest = or_error.furthest();
+
+        assert_eq!(furthest.byte_position(), 3);
+        assert!(furthest.to_string().contains("first error"));
+    }
+
+    #[test]
+    fn test_or_error_auto_recursive_furthest() {
+        use crate::error::{CodeLoc, ErrorPosition, ParsicombError};
+
+        let data = b"abcdefghij";
+
+        // Create deeply nested structure: OrError<OrError<E1, E2>, E3>
+        let error1 = ParsicombError::SyntaxError {
+            message: "error at pos 1".into(),
+            loc: CodeLoc::new(data, 1),
+        };
+        let error2 = ParsicombError::SyntaxError {
+            message: "error at pos 8".into(), // This should be furthest
+            loc: CodeLoc::new(data, 8),
+        };
+        let error3 = ParsicombError::SyntaxError {
+            message: "error at pos 5".into(),
+            loc: CodeLoc::new(data, 5),
+        };
+
+        // Build the nested structure
+        let inner_or = OrError::BothFailed {
+            first: error1,
+            second: error2,
+        };
+        let outer_or = OrError::BothFailed {
+            first: inner_or,
+            second: error3,
+        };
+
+        // Use the new OrBranch system - this automatically handles recursion!
+        let furthest = outer_or.furthest();
+
+        assert_eq!(furthest.byte_position(), 8);
+        assert!(furthest.to_string().contains("error at pos 8"));
     }
 }

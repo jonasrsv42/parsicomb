@@ -1,7 +1,7 @@
 use crate::ParsicombError;
 use crate::map::MapExt;
 use crate::map_err::MapErrExt;
-use crate::or::OrExt;
+use crate::or::{OrBranch, OrExt};
 use crate::parser::Parser;
 
 pub mod digit;
