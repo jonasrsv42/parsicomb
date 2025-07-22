@@ -135,6 +135,7 @@ mod tests {
     use crate::ascii::number::f64;
     use crate::byte::is_byte;
     use crate::byte_cursor::ByteCursor;
+    use crate::or::OrExt;
     use crate::utf8::string::is_string;
     use crate::utf8::whitespace::separated_pair;
 
@@ -292,10 +293,6 @@ mod tests {
 
     #[test]
     fn test_complex_nested_combinators_with_actual_error_flattening() {
-        use crate::or::OrExt;
-        use crate::utf8::string::is_string;
-        use crate::utf8::whitespace::separated_pair;
-
         let data = b"{start: [hello, badvalue], end: finish}";
         let cursor = ByteCursor::new(data);
 
