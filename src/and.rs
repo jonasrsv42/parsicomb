@@ -61,7 +61,7 @@ where
 
     fn furthest(self) -> Self::Base {
         match self {
-            // First parser failed - return its error  
+            // First parser failed - return its error
             AndError::FirstParser(e1) => e1.furthest(),
             // Second parser failed - this means first parser succeeded and advanced the cursor,
             // so the second parser's error is further in the input

@@ -338,21 +338,31 @@ mod tests {
         // Create multiple nested or combinators that fail at different positions:
         // This creates a structure like: Or<Or<Or<P1, P2>, P3>, P4>
         // Using map to convert all outputs to u8 so they're compatible
-        let parser = is_byte(b'X')                    // fails at pos 0
-            .or(is_byte(b's').and(is_byte(b'Y')).map(|(a, _)| a))    // fails at pos 1 
-            .or(is_byte(b's').and(is_byte(b't')).and(is_byte(b'Z')).map(|((a, _), _)| a))  // fails at pos 2
-            .or(is_byte(b's').and(is_byte(b't')).and(is_byte(b'a')).and(is_byte(b'Q')).map(|(((a, _), _), _)| a)); // fails at pos 3
+        let parser = is_byte(b'X') // fails at pos 0
+            .or(is_byte(b's').and(is_byte(b'Y')).map(|(a, _)| a)) // fails at pos 1
+            .or(is_byte(b's')
+                .and(is_byte(b't'))
+                .and(is_byte(b'Z'))
+                .map(|((a, _), _)| a)) // fails at pos 2
+            .or(is_byte(b's')
+                .and(is_byte(b't'))
+                .and(is_byte(b'a'))
+                .and(is_byte(b'Q'))
+                .map(|(((a, _), _), _)| a)); // fails at pos 3
 
         let result = parser.parse(cursor);
         assert!(result.is_err());
-        
+
         // The furthest() should automatically flatten all the nested Or and And structures
         // and find the error that made it furthest (position 3)
         let error = result.unwrap_err();
         let furthest_error = error.furthest();
-        
-        assert_eq!(furthest_error.byte_position(), 3, 
-                  "furthest() should traverse nested Or<Or<Or<...>>> and And structures to find the deepest error");
+
+        assert_eq!(
+            furthest_error.byte_position(),
+            3,
+            "furthest() should traverse nested Or<Or<Or<...>>> and And structures to find the deepest error"
+        );
     }
 
     #[test]
@@ -369,13 +379,13 @@ mod tests {
         // Create a complex nested structure mixing Or, And, Filter, and Map
         // Structure: Or<Filter<And<byte, byte>>, Filter<And<And<byte, byte>, byte>>>
         let branch1 = is_byte(b'h')
-            .and(is_byte(b'X'))  // fails at pos 1
+            .and(is_byte(b'X')) // fails at pos 1
             .filter(|(_, b)| *b == b'e', "expected 'e' as second byte")
             .map(|(a, _)| a);
 
         let branch2 = is_byte(b'h')
             .and(is_byte(b'e'))
-            .and(is_byte(b'Z'))  // fails at pos 2  
+            .and(is_byte(b'Z')) // fails at pos 2
             .filter(|((_, _), c)| *c == b'l', "expected 'l' as third byte")
             .map(|((a, _), _)| a);
 
@@ -383,14 +393,17 @@ mod tests {
 
         let result = parser.parse(cursor);
         assert!(result.is_err());
-        
+
         // The furthest() should recursively traverse:
         // OrError -> FilterError -> AndError -> ParsicombError
         // and find the error that got furthest (position 2)
         let error = result.unwrap_err();
         let furthest_error = error.furthest();
-        
-        assert_eq!(furthest_error.byte_position(), 2, 
-                  "furthest() should traverse complex Or<Filter<And<...>>> structures");
+
+        assert_eq!(
+            furthest_error.byte_position(),
+            2,
+            "furthest() should traverse complex Or<Filter<And<...>>> structures"
+        );
     }
 }
