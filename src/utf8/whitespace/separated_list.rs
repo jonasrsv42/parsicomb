@@ -309,9 +309,7 @@ mod tests {
             .or(is_string("negative"))
             .or(i64().map(|_| "number".into()));
 
-        let category_or_word = is_string("even")
-            .or(is_string("odd"))
-            .or(number_or_word);
+        let category_or_word = is_string("even").or(is_string("odd")).or(number_or_word);
 
         let size_or_category = is_string("small")
             .or(is_string("large"))

@@ -71,8 +71,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ErrorLeaf, ParsicombError};
     use crate::byte_cursor::ByteCursor;
+    use crate::{ErrorLeaf, ParsicombError};
 
     use std::fmt;
 
@@ -93,7 +93,7 @@ mod tests {
     }
 
     impl std::error::Error for CustomError {}
-    
+
     impl<'code> ErrorNode<'code> for CustomError {
         fn likely_error(self) -> Box<dyn ErrorLeaf + 'code> {
             Box::new(crate::ParsicombError::SyntaxError {
