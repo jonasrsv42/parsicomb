@@ -1,8 +1,8 @@
+use crate::ParsicombError;
 use crate::map::MapExt;
 use crate::map_err::MapErrExt;
 use crate::or::OrExt;
 use crate::parser::Parser;
-use crate::ParsicombError;
 
 pub mod digit;
 pub mod f64;
@@ -22,7 +22,9 @@ pub enum Number {
 
 /// Parser that matches either an integer or a float and returns a Number enum
 pub fn number<'code>() -> impl Parser<'code, Output = Number, Error = ParsicombError<'code>> {
-    f64().map(Number::F64).or(i64().map(Number::I64))
+    f64()
+        .map(Number::F64)
+        .or(i64().map(Number::I64))
         .map_err(|or_err| or_err.furthest())
 }
 

@@ -23,8 +23,10 @@ impl<'code> Parser<'code> for IntDotUintParser {
         &self,
         cursor: ByteCursor<'code>,
     ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
-        let (((int_part, _), frac_part), cursor) =
-            i64().and(is_byte(b'.')).and(u64()).parse(cursor)
+        let (((int_part, _), frac_part), cursor) = i64()
+            .and(is_byte(b'.'))
+            .and(u64())
+            .parse(cursor)
             .map_err(|e| ParsicombError::from(e))?;
 
         let frac_digits = frac_part.to_string().len();

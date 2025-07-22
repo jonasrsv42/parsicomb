@@ -1,8 +1,8 @@
-use crate::parser::Parser;
-use crate::byte_cursor::ByteCursor;
-use crate::some::some;
-use crate::{ParsicombError, CodeLoc};
 use super::digit::digit;
+use crate::byte_cursor::ByteCursor;
+use crate::parser::Parser;
+use crate::some::some;
+use crate::{CodeLoc, ParsicombError};
 
 /// Parser that matches one or more ASCII digits and returns them as a u64
 pub fn u64<'code>() -> impl Parser<'code, Output = u64, Error = ParsicombError<'code>> {
@@ -14,10 +14,13 @@ struct UIntParser;
 impl<'code> Parser<'code> for UIntParser {
     type Output = u64;
     type Error = ParsicombError<'code>;
-    
-    fn parse(&self, cursor: ByteCursor<'code>) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
+
+    fn parse(
+        &self,
+        cursor: ByteCursor<'code>,
+    ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
         let (digit_bytes, cursor) = some(digit()).parse(cursor)?;
-        
+
         // Convert digits to string
         let num_str = match std::str::from_utf8(&digit_bytes) {
             Ok(s) => s,
@@ -25,11 +28,11 @@ impl<'code> Parser<'code> for UIntParser {
                 let (data, position) = cursor.inner();
                 return Err(ParsicombError::SyntaxError {
                     message: "invalid UTF-8 in digits".into(),
-                    loc: CodeLoc::new(data, position)
+                    loc: CodeLoc::new(data, position),
                 });
             }
         };
-        
+
         // Parse the number
         let value = match num_str.parse::<u64>() {
             Ok(v) => v,
@@ -37,11 +40,11 @@ impl<'code> Parser<'code> for UIntParser {
                 let (data, position) = cursor.inner();
                 return Err(ParsicombError::SyntaxError {
                     message: format!("number too large: {}", num_str).into(),
-                    loc: CodeLoc::new(data, position)
+                    loc: CodeLoc::new(data, position),
                 });
             }
         };
-        
+
         Ok((value, cursor))
     }
 }
@@ -56,7 +59,7 @@ mod tests {
         let data = b"5abc";
         let cursor = ByteCursor::new(data);
         let parser = u64();
-        
+
         let (value, cursor) = parser.parse(cursor).unwrap();
         assert_eq!(value, 5);
         assert_eq!(cursor.value().unwrap(), b'a');
@@ -67,7 +70,7 @@ mod tests {
         let data = b"123abc";
         let cursor = ByteCursor::new(data);
         let parser = u64();
-        
+
         let (value, cursor) = parser.parse(cursor).unwrap();
         assert_eq!(value, 123);
         assert_eq!(cursor.value().unwrap(), b'a');
@@ -78,7 +81,7 @@ mod tests {
         let data = b"0";
         let cursor = ByteCursor::new(data);
         let parser = u64();
-        
+
         let (value, cursor) = parser.parse(cursor).unwrap();
         assert_eq!(value, 0);
         assert!(matches!(cursor, ByteCursor::EndOfFile { .. }));
@@ -89,7 +92,7 @@ mod tests {
         let data = b"9876543210";
         let cursor = ByteCursor::new(data);
         let parser = u64();
-        
+
         let (value, cursor) = parser.parse(cursor).unwrap();
         assert_eq!(value, 9876543210);
         assert!(matches!(cursor, ByteCursor::EndOfFile { .. }));
@@ -100,7 +103,7 @@ mod tests {
         let data = b"abc";
         let cursor = ByteCursor::new(data);
         let parser = u64();
-        
+
         let result = parser.parse(cursor);
         assert!(result.is_err());
     }
@@ -110,7 +113,7 @@ mod tests {
         let data = b"42.5";
         let cursor = ByteCursor::new(data);
         let parser = u64();
-        
+
         let (value, cursor) = parser.parse(cursor).unwrap();
         assert_eq!(value, 42);
         assert_eq!(cursor.value().unwrap(), b'.');
@@ -122,7 +125,7 @@ mod tests {
         let data = b"99999999999999999999999999999999";
         let cursor = ByteCursor::new(data);
         let parser = u64();
-        
+
         let result = parser.parse(cursor);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("number too large"));

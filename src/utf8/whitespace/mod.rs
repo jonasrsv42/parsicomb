@@ -164,4 +164,3 @@ mod tests {
         assert!(result.is_err(), "Expected error for empty input");
     }
 }
-

@@ -77,4 +77,3 @@ mod tests {
         assert!(matches!(remaining, ByteCursor::EndOfFile { .. }));
     }
 }
-

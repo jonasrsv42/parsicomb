@@ -15,4 +15,3 @@ pub trait Parser<'code>: Sized {
         cursor: ByteCursor<'code>,
     ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error>;
 }
-

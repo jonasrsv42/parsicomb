@@ -141,4 +141,3 @@ mod tests {
         assert_eq!(right.as_ref(), "output");
     }
 }
-

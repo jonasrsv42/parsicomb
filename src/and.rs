@@ -30,11 +30,12 @@ impl<E1: fmt::Display, E2: fmt::Display> fmt::Display for AndError<E1, E2> {
     }
 }
 
-impl<E1, E2> std::error::Error for AndError<E1, E2> 
+impl<E1, E2> std::error::Error for AndError<E1, E2>
 where
     E1: std::error::Error,
     E2: std::error::Error,
-{}
+{
+}
 
 // Implement From<AndError<E1, E2>> for ParsicombError where both E1 and E2 can convert to ParsicombError
 impl<'code, E1, E2> From<AndError<E1, E2>> for crate::ParsicombError<'code>
@@ -98,10 +99,8 @@ where
         &self,
         cursor: ByteCursor<'code>,
     ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
-        let (result1, cursor) = self.parser1.parse(cursor)
-            .map_err(AndError::FirstParser)?;
-        let (result2, cursor) = self.parser2.parse(cursor)
-            .map_err(AndError::SecondParser)?;
+        let (result1, cursor) = self.parser1.parse(cursor).map_err(AndError::FirstParser)?;
+        let (result2, cursor) = self.parser2.parse(cursor).map_err(AndError::SecondParser)?;
         Ok(((result1, result2), cursor))
     }
 }

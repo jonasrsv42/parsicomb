@@ -14,9 +14,9 @@ impl<P, F> MapErr<P, F> {
     }
 }
 
-impl<P, F> fmt::Debug for MapErr<P, F> 
-where 
-    P: fmt::Debug 
+impl<P, F> fmt::Debug for MapErr<P, F>
+where
+    P: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("MapErr")
@@ -39,8 +39,7 @@ where
         &self,
         cursor: ByteCursor<'code>,
     ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
-        self.parser.parse(cursor)
-            .map_err(&self.mapper)
+        self.parser.parse(cursor).map_err(&self.mapper)
     }
 }
 
@@ -71,8 +70,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::byte_cursor::ByteCursor;
     use crate::ParsicombError;
+    use crate::byte_cursor::ByteCursor;
 
     use std::fmt;
 
@@ -101,7 +100,10 @@ mod tests {
         type Output = char;
         type Error = ParsicombError<'code>;
 
-        fn parse(&self, cursor: ByteCursor<'code>) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
+        fn parse(
+            &self,
+            cursor: ByteCursor<'code>,
+        ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
             let (data, position) = cursor.inner();
             Err(ParsicombError::SyntaxError {
                 message: "always fails".into(),
@@ -117,7 +119,10 @@ mod tests {
         type Output = char;
         type Error = ParsicombError<'code>;
 
-        fn parse(&self, cursor: ByteCursor<'code>) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
+        fn parse(
+            &self,
+            cursor: ByteCursor<'code>,
+        ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
             Ok(('x', cursor))
         }
     }
@@ -126,22 +131,26 @@ mod tests {
     fn test_map_err_transforms_error_on_failure() {
         let data = b"test";
         let cursor = ByteCursor::new(data);
-        
+
         let parser = AlwaysFailParser.map_err(|_| CustomError::Simple("mapped error".to_string()));
         let result = parser.parse(cursor);
-        
+
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), CustomError::Simple("mapped error".to_string()));
+        assert_eq!(
+            result.unwrap_err(),
+            CustomError::Simple("mapped error".to_string())
+        );
     }
 
     #[test]
     fn test_map_err_preserves_success() {
         let data = b"test";
         let cursor = ByteCursor::new(data);
-        
-        let parser = AlwaysSucceedParser.map_err(|_| CustomError::Simple("should not be called".to_string()));
+
+        let parser = AlwaysSucceedParser
+            .map_err(|_| CustomError::Simple("should not be called".to_string()));
         let result = parser.parse(cursor);
-        
+
         assert!(result.is_ok());
         let (output, _) = result.unwrap();
         assert_eq!(output, 'x');
@@ -151,10 +160,10 @@ mod tests {
     fn test_map_err_with_different_error_types() {
         let data = b"test";
         let cursor = ByteCursor::new(data);
-        
+
         let parser = AlwaysFailParser.map_err(|_| CustomError::WithCode(404));
         let result = parser.parse(cursor);
-        
+
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), CustomError::WithCode(404));
     }
@@ -163,11 +172,11 @@ mod tests {
     fn test_map_err_chain() {
         let data = b"test";
         let cursor = ByteCursor::new(data);
-        
+
         let parser = AlwaysFailParser
             .map_err(|_| CustomError::Simple("first".to_string()))
             .map_err(|_| CustomError::WithCode(500));
-        
+
         let result = parser.parse(cursor);
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), CustomError::WithCode(500));
@@ -177,11 +186,10 @@ mod tests {
     fn test_map_err_with_closure_accessing_original_error() {
         let data = b"test";
         let cursor = ByteCursor::new(data);
-        
-        let parser = AlwaysFailParser.map_err(|original_err| {
-            CustomError::Simple(format!("Wrapped: {}", original_err))
-        });
-        
+
+        let parser = AlwaysFailParser
+            .map_err(|original_err| CustomError::Simple(format!("Wrapped: {}", original_err)));
+
         let result = parser.parse(cursor);
         assert!(result.is_err());
         let error_msg = match result.unwrap_err() {
@@ -196,24 +204,27 @@ mod tests {
     fn test_map_err_ext_trait() {
         let data = b"test";
         let cursor = ByteCursor::new(data);
-        
+
         // Test that the extension trait works
         let parser = AlwaysFailParser.map_err(|_| CustomError::Simple("string error".to_string()));
         let result = parser.parse(cursor);
-        
+
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), CustomError::Simple("string error".to_string()));
+        assert_eq!(
+            result.unwrap_err(),
+            CustomError::Simple("string error".to_string())
+        );
     }
 
     #[test]
     fn test_map_err_convenience_function() {
         let data = b"test";
         let cursor = ByteCursor::new(data);
-        
+
         // Test the standalone function
         let parser = map_err(AlwaysFailParser, |_| CustomError::WithCode(42));
         let result = parser.parse(cursor);
-        
+
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), CustomError::WithCode(42));
     }

@@ -1,6 +1,6 @@
+use crate::ParsicombError;
 use crate::byte::between_bytes;
 use crate::parser::Parser;
-use crate::ParsicombError;
 
 /// Parser that matches a single ASCII digit (0-9)
 pub fn digit<'code>() -> impl Parser<'code, Output = u8, Error = ParsicombError<'code>> {

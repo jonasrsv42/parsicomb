@@ -13,20 +13,25 @@ impl<E1: fmt::Display, E2: fmt::Display> fmt::Display for OrError<E1, E2> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             OrError::BothFailed { first, second } => {
-                write!(f, "Both parsers failed - First: {}, Second: {}", first, second)
+                write!(
+                    f,
+                    "Both parsers failed - First: {}, Second: {}",
+                    first, second
+                )
             }
         }
     }
 }
 
-impl<E1, E2> std::error::Error for OrError<E1, E2> 
+impl<E1, E2> std::error::Error for OrError<E1, E2>
 where
     E1: std::error::Error,
     E2: std::error::Error,
-{}
+{
+}
 
-impl<E> OrError<E, E> 
-where 
+impl<E> OrError<E, E>
+where
     E: crate::error::ErrorPosition,
 {
     /// Returns the error that progressed furthest in the input when both errors are the same type
@@ -43,14 +48,14 @@ where
     }
 }
 
-impl<E1, E2> OrError<E1, E2> 
-where 
+impl<E1, E2> OrError<E1, E2>
+where
     E1: crate::error::ErrorPosition,
     E2: crate::error::ErrorPosition,
 {
     /// Select the furthest error and convert it using the provided functions
     /// This enables handling nested OrError types and different error types
-    pub fn select_furthest<F1, F2, T>(self, convert_first: F1, convert_second: F2) -> T 
+    pub fn select_furthest<F1, F2, T>(self, convert_first: F1, convert_second: F2) -> T
     where
         F1: FnOnce(E1) -> T,
         F2: FnOnce(E2) -> T,
@@ -93,15 +98,13 @@ where
     ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
         match self.parser1.parse(cursor) {
             Ok(result) => Ok(result),
-            Err(first_error) => {
-                match self.parser2.parse(cursor) {
-                    Ok(result) => Ok(result),
-                    Err(second_error) => Err(OrError::BothFailed { 
-                        first: first_error, 
-                        second: second_error 
-                    }),
-                }
-            }
+            Err(first_error) => match self.parser2.parse(cursor) {
+                Ok(result) => Ok(result),
+                Err(second_error) => Err(OrError::BothFailed {
+                    first: first_error,
+                    second: second_error,
+                }),
+            },
         }
     }
 }

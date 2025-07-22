@@ -104,7 +104,7 @@ impl<'code> Parser<'code> for BetweenBytesParser {
                 );
                 Err(ParsicombError::SyntaxError {
                     message: message.into(),
-                    loc: CodeLoc::new(data, position)
+                    loc: CodeLoc::new(data, position),
                 })
             }
             Err(e) => Err(e),
