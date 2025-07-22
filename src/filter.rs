@@ -26,17 +26,17 @@ impl<'code, E: fmt::Display> fmt::Display for FilterError<'code, E> {
 
 impl<'code, E: std::error::Error> std::error::Error for FilterError<'code, E> {}
 
-// Implement OrBranch for FilterError to enable furthest-error selection in nested structures
-impl<'code, E> crate::or::OrBranch for FilterError<'code, E>
+// Implement ErrorBranch for FilterError to enable furthest-error selection in nested structures
+impl<'code, E> crate::error::ErrorBranch for FilterError<'code, E>
 where
-    E: crate::or::OrBranch<Base = crate::ParsicombError<'code>>,
+    E: crate::error::ErrorBranch<Base = crate::ParsicombError<'code>>,
 {
     type Base = crate::ParsicombError<'code>;
 
-    fn furthest(self) -> Self::Base {
+    fn actual(self) -> Self::Base {
         match self {
-            FilterError::ParserError(e) => e.furthest(),
-            FilterError::FilterFailed(parsicomb_error) => parsicomb_error.furthest(),
+            FilterError::ParserError(e) => e.actual(),
+            FilterError::FilterFailed(parsicomb_error) => parsicomb_error.actual(),
         }
     }
 }

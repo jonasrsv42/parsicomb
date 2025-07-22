@@ -51,21 +51,21 @@ where
     }
 }
 
-// Implement OrBranch for AndError to enable furthest-error selection in nested structures
-impl<E1, E2> crate::or::OrBranch for AndError<E1, E2>
+// Implement ErrorBranch for AndError to enable furthest-error selection in nested structures
+impl<E1, E2> crate::error::ErrorBranch for AndError<E1, E2>
 where
-    E1: crate::or::OrBranch,
-    E2: crate::or::OrBranch<Base = E1::Base>,
+    E1: crate::error::ErrorBranch,
+    E2: crate::error::ErrorBranch<Base = E1::Base>,
 {
     type Base = E1::Base;
 
-    fn furthest(self) -> Self::Base {
+    fn actual(self) -> Self::Base {
         match self {
             // First parser failed - return its error
-            AndError::FirstParser(e1) => e1.furthest(),
+            AndError::FirstParser(e1) => e1.actual(),
             // Second parser failed - this means first parser succeeded and advanced the cursor,
             // so the second parser's error is further in the input
-            AndError::SecondParser(e2) => e2.furthest(),
+            AndError::SecondParser(e2) => e2.actual(),
         }
     }
 }

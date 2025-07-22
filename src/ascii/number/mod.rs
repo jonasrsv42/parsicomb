@@ -1,7 +1,8 @@
 use crate::ParsicombError;
+use crate::error::ErrorBranch;
 use crate::map::MapExt;
 use crate::map_err::MapErrExt;
-use crate::or::{OrBranch, OrExt};
+use crate::or::OrExt;
 use crate::parser::Parser;
 
 pub mod digit;
@@ -25,7 +26,7 @@ pub fn number<'code>() -> impl Parser<'code, Output = Number, Error = ParsicombE
     f64()
         .map(Number::F64)
         .or(i64().map(Number::I64))
-        .map_err(|or_err| or_err.furthest())
+        .map_err(|or_err| or_err.actual())
 }
 
 #[cfg(test)]

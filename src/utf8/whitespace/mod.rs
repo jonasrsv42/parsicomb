@@ -2,6 +2,8 @@ pub mod between;
 pub mod separated_list;
 pub mod separated_pair;
 
+use crate::ParsicombError;
+use crate::error::ErrorBranch;
 use crate::filter::FilterExt;
 use crate::parser::Parser;
 use crate::utf8::char::char;
@@ -11,7 +13,8 @@ pub use separated_list::separated_list;
 pub use separated_pair::separated_pair;
 
 /// Convenience function to create a Unicode whitespace parser
-pub fn unicode_whitespace() -> impl for<'a> Parser<'a, Output = char> {
+pub fn unicode_whitespace<'a>()
+-> impl Parser<'a, Output = char, Error: ErrorBranch<Base = ParsicombError<'a>>> {
     char().filter(|c| c.is_whitespace(), "expected Unicode whitespace")
 }
 

@@ -9,6 +9,45 @@ pub trait ErrorPosition {
     fn byte_position(&self) -> usize;
 }
 
+/// Generic trait for error types that can be flattened to find the furthest error
+///
+/// This trait enables automatic furthest-error selection across all combinator types
+/// (Or, And, Filter, etc.) by providing a way to flatten nested error structures
+/// and find the error that made it furthest into the input.
+///
+/// # Example for downstream crates
+///
+/// ```rust
+/// use parsicomb::error::{ErrorPosition, ErrorBranch};
+///
+/// // Your custom error type
+/// #[derive(Debug)]
+/// struct MyError {
+///     position: usize,
+///     message: String,
+/// }
+///
+/// // Implement ErrorPosition
+/// impl ErrorPosition for MyError {
+///     fn byte_position(&self) -> usize {
+///         self.position
+///     }
+/// }
+///
+/// // Implement ErrorBranch (converts to itself since it's already a terminal type)
+/// impl ErrorBranch for MyError {
+///     type Base = Self;
+///     fn actual(self) -> Self::Base {
+///         self
+///     }
+/// }
+/// ```
+pub trait ErrorBranch {
+    type Base: ErrorPosition;
+    /// Flatten nested error structures and return the actual error that made it furthest
+    fn actual(self) -> Self::Base;
+}
+
 #[derive(Debug)]
 pub struct ReadablePosition {
     pub line: usize,
@@ -182,5 +221,14 @@ impl<'code> ParsicombError<'code> {
 impl<'code> ErrorPosition for ParsicombError<'code> {
     fn byte_position(&self) -> usize {
         self.byte_offset()
+    }
+}
+
+// ParsicombError implements ErrorBranch (converts to itself since it's a terminal type)
+impl<'code> ErrorBranch for ParsicombError<'code> {
+    type Base = Self;
+
+    fn actual(self) -> Self::Base {
+        self // Already the base type
     }
 }

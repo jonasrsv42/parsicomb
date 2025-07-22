@@ -1,8 +1,68 @@
 use super::unicode_whitespace;
-use crate::and::AndExt;
+use crate::ParsicombError;
+use crate::error::ErrorBranch;
 use crate::many::many;
-use crate::map::MapExt;
 use crate::parser::Parser;
+use std::fmt;
+
+/// Error type for Between parser that can wrap errors from all constituent parsers
+#[derive(Debug)]
+pub enum BetweenError<E1, E2, E3, WS> {
+    /// Error from the opening delimiter parser
+    OpenDelimiter(E1),
+    /// Error from whitespace after open delimiter
+    OpenWhitespace(WS),
+    /// Error from the content parser
+    Content(E2),
+    /// Error from whitespace before close delimiter
+    CloseWhitespace(WS),
+    /// Error from the closing delimiter parser
+    CloseDelimiter(E3),
+}
+
+impl<E1: fmt::Display, E2: fmt::Display, E3: fmt::Display, WS: fmt::Display> fmt::Display
+    for BetweenError<E1, E2, E3, WS>
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BetweenError::OpenDelimiter(e) => write!(f, "Open delimiter failed: {}", e),
+            BetweenError::OpenWhitespace(e) => write!(f, "Open whitespace failed: {}", e),
+            BetweenError::Content(e) => write!(f, "Content failed: {}", e),
+            BetweenError::CloseWhitespace(e) => write!(f, "Close whitespace failed: {}", e),
+            BetweenError::CloseDelimiter(e) => write!(f, "Close delimiter failed: {}", e),
+        }
+    }
+}
+
+impl<E1, E2, E3, WS> std::error::Error for BetweenError<E1, E2, E3, WS>
+where
+    E1: std::error::Error,
+    E2: std::error::Error,
+    E3: std::error::Error,
+    WS: std::error::Error,
+{
+}
+
+// Implement ErrorBranch for BetweenError to enable furthest-error selection
+impl<E1, E2, E3, WS> ErrorBranch for BetweenError<E1, E2, E3, WS>
+where
+    E1: ErrorBranch,
+    E2: ErrorBranch<Base = E1::Base>,
+    E3: ErrorBranch<Base = E1::Base>,
+    WS: ErrorBranch<Base = E1::Base>,
+{
+    type Base = E1::Base;
+
+    fn actual(self) -> Self::Base {
+        match self {
+            BetweenError::OpenDelimiter(e1) => e1.actual(),
+            BetweenError::OpenWhitespace(e) => e.actual(),
+            BetweenError::Content(e2) => e2.actual(),
+            BetweenError::CloseWhitespace(e) => e.actual(),
+            BetweenError::CloseDelimiter(e3) => e3.actual(),
+        }
+    }
+}
 
 /// Parser that matches content between opening and closing delimiters with automatic whitespace handling
 ///
@@ -17,21 +77,68 @@ use crate::parser::Parser;
 /// - `"[ 1.0 ]"` → `1.0`  
 /// - `"(hello)"` → `"hello"`
 /// - `"{ content }"` → `"content"`
-pub fn between<'a, P1, P2, P3>(
+/// Custom Between parser implementation
+pub struct Between<P1, P2, P3> {
     open: P1,
     content: P2,
     close: P3,
-) -> impl Parser<'a, Output = P2::Output>
+}
+
+impl<'a, P1, P2, P3, E> Parser<'a> for Between<P1, P2, P3>
 where
     P1: Parser<'a>,
     P2: Parser<'a>,
     P3: Parser<'a>,
+    P1::Error: ErrorBranch<Base = E>,
+    P2::Error: ErrorBranch<Base = E>,
+    P3::Error: ErrorBranch<Base = E>,
+    ParsicombError<'a>: Into<E>,
+    E: crate::error::ErrorPosition + std::error::Error,
 {
-    open.and(many(unicode_whitespace()))
-        .and(content)
-        .and(many(unicode_whitespace()))
-        .and(close)
-        .map(|((((_, _), content_val), _), _)| content_val)
+    type Output = P2::Output;
+    type Error = BetweenError<P1::Error, P2::Error, P3::Error, E>;
+
+    fn parse(
+        &self,
+        cursor: crate::byte_cursor::ByteCursor<'a>,
+    ) -> Result<(Self::Output, crate::byte_cursor::ByteCursor<'a>), Self::Error> {
+        // Parse: open + whitespace + content + whitespace + close
+        let (_, cursor) = self
+            .open
+            .parse(cursor)
+            .map_err(BetweenError::OpenDelimiter)?;
+        let (_, cursor) = many(unicode_whitespace())
+            .parse(cursor)
+            .map_err(|e| BetweenError::OpenWhitespace(e.actual().into()))?;
+        let (content_val, cursor) = self.content.parse(cursor).map_err(BetweenError::Content)?;
+        let (_, cursor) = many(unicode_whitespace())
+            .parse(cursor)
+            .map_err(|e| BetweenError::CloseWhitespace(e.actual().into()))?;
+        let (_, cursor) = self
+            .close
+            .parse(cursor)
+            .map_err(BetweenError::CloseDelimiter)?;
+
+        Ok((content_val, cursor))
+    }
+}
+
+pub fn between<'a, P1, P2, P3, E>(open: P1, content: P2, close: P3) -> Between<P1, P2, P3>
+where
+    P1: Parser<'a>,
+    P2: Parser<'a>,
+    P3: Parser<'a>,
+    P1::Error: ErrorBranch<Base = E>,
+    P2::Error: ErrorBranch<Base = E>,
+    P3::Error: ErrorBranch<Base = E>,
+    ParsicombError<'a>: Into<E>,
+    E: crate::error::ErrorPosition + std::error::Error,
+{
+    Between {
+        open,
+        content,
+        close,
+    }
 }
 
 #[cfg(test)]
@@ -154,5 +261,116 @@ mod tests {
         let (value, cursor) = parser.parse(cursor).unwrap();
         assert!((value - 42.0).abs() < f64::EPSILON);
         assert_eq!(cursor.value().unwrap(), b' ');
+    }
+
+    #[test]
+    fn test_between_with_or_combinator_and_actual_error_flattening() {
+        use crate::and::AndExt;
+        use crate::or::OrExt;
+        use crate::utf8::string::is_string;
+
+        let data = b"[hello,xyz]";
+        let cursor = ByteCursor::new(data);
+
+        // Create a complex nested parser that will create deep error structures:
+        // between('[', (("hello" | "hi").and(",").and(("world" | "universe"))), ']')
+        // This will fail at "xyz" after successfully parsing "hello,"
+        let inner_content = is_string("hello")
+            .or(is_string("hi"))
+            .and(is_byte(b','))
+            .and(is_string("world").or(is_string("universe"))); // Will fail on "xyz"
+
+        let parser = between(is_byte(b'['), inner_content, is_byte(b']'));
+
+        let result = parser.parse(cursor);
+        assert!(result.is_err());
+
+        // The error structure should be deeply nested through BetweenError -> AndError chains -> OrError
+        let complex_error = result.unwrap_err();
+
+        // Just verify that the error occurred and has some meaningful information
+        let error_message = complex_error.to_string();
+        assert!(
+            error_message.len() > 0,
+            "Should have a meaningful error message"
+        );
+
+        // The error should indicate content parsing failed since the inner parser failed
+        assert!(
+            error_message.contains("Content failed"),
+            "Should indicate that content parsing failed due to nested and/or failure"
+        );
+    }
+
+    #[test]
+    fn test_complex_nested_combinators_with_actual_error_flattening() {
+        use crate::and::AndExt;
+        use crate::error::ErrorPosition;
+        use crate::or::OrExt;
+        use crate::utf8::string::is_string;
+        use crate::utf8::whitespace::separated_pair;
+
+        let data = b"{start: [hello, badvalue], end: finish}";
+        let cursor = ByteCursor::new(data);
+
+        // Create a deeply nested parser structure:
+        // between('{', separated_pair(
+        //     separated_pair("start", ":", between('[', separated_pair(("hello"|"hi"), ",", ("world"|"universe")), ']')),
+        //     ",",
+        //     separated_pair("end", ":", ("finish"|"done"))
+        // ), '}')
+        //
+        // This creates a structure like:
+        // BetweenError<_, SeparatedPairError<SeparatedPairError<_, BetweenError<_, SeparatedPairError<OrError<...>, OrError<...>, _, _>, _>, _, SeparatedPairError<_, OrError<...>, _, _>>, _>, _>
+
+        let inner_list = separated_pair(
+            is_string("hello").or(is_string("hi")), // succeeds
+            ",",
+            is_string("world").or(is_string("universe")), // fails on "badvalue"
+        );
+
+        let bracketed_list = between(is_byte(b'['), inner_list, is_byte(b']'));
+
+        let start_pair = separated_pair(is_string("start"), ":", bracketed_list);
+
+        let end_pair = separated_pair(
+            is_string("end"),
+            ":",
+            is_string("finish").or(is_string("done")),
+        );
+
+        let main_content = separated_pair(start_pair, ",", end_pair);
+
+        let parser = between(is_byte(b'{'), main_content, is_byte(b'}'));
+
+        let result = parser.parse(cursor);
+        assert!(result.is_err());
+
+        // The error structure is extremely deeply nested:
+        // BetweenError -> SeparatedPairError -> SeparatedPairError -> BetweenError -> SeparatedPairError -> OrError -> ParsicombError
+        let complex_error = result.unwrap_err();
+
+        // This demonstrates the full power of our ErrorBranch recursion system
+        let actual_error = complex_error.actual();
+
+        // The actual error should be at the position where "badvalue" starts (after "hello, ")
+        // Position should be around 15-16 where "badvalue" begins
+        let error_pos = actual_error.byte_position();
+        assert!(
+            error_pos >= 15,
+            "actual() should find the error that made it furthest into the input (at 'badvalue'), got position {}",
+            error_pos
+        );
+
+        // Verify the error message makes sense
+        let error_message = actual_error.to_string();
+        assert!(
+            error_message.len() > 0,
+            "Should have a meaningful error message"
+        );
+
+        println!("Successfully flattened deeply nested error structure!");
+        println!("Furthest error position: {}", error_pos);
+        println!("Error message: {}", error_message);
     }
 }
