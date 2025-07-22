@@ -1,5 +1,6 @@
 use super::byte_cursor::ByteCursor;
 use super::parser::Parser;
+use crate::error::ErrorNode;
 use std::fmt;
 
 /// Parser combinator that transforms the error of a parser using a mapping function
@@ -30,7 +31,7 @@ impl<'code, P, F, E1, E2> Parser<'code> for MapErr<P, F>
 where
     P: Parser<'code, Error = E1>,
     F: Fn(E1) -> E2,
-    E2: std::error::Error,
+    E2: std::error::Error + ErrorNode<'code>,
 {
     type Output = P::Output;
     type Error = E2;
@@ -70,7 +71,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ParsicombError;
+    use crate::{ErrorLeaf, ParsicombError};
     use crate::byte_cursor::ByteCursor;
 
     use std::fmt;
@@ -92,6 +93,15 @@ mod tests {
     }
 
     impl std::error::Error for CustomError {}
+    
+    impl<'code> ErrorNode<'code> for CustomError {
+        fn likely_error(self) -> Box<dyn ErrorLeaf + 'code> {
+            Box::new(crate::ParsicombError::SyntaxError {
+                message: self.to_string().into(),
+                loc: crate::CodeLoc::new(b"", 0),
+            })
+        }
+    }
 
     // Simple test parser that always fails with ParsicombError
     struct AlwaysFailParser;

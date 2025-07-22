@@ -1,10 +1,11 @@
 use super::byte_cursor::ByteCursor;
+use crate::error::ErrorNode;
 use std::error::Error;
 
 /// Core parser trait for parser combinators
 pub trait Parser<'code>: Sized {
     type Output;
-    type Error: Error;
+    type Error: Error + ErrorNode<'code>;
 
     /// Attempt to parse from the given cursor position
     ///
