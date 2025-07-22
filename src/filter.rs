@@ -26,6 +26,21 @@ impl<'code, E: fmt::Display> fmt::Display for FilterError<'code, E> {
 
 impl<'code, E: std::error::Error> std::error::Error for FilterError<'code, E> {}
 
+// Implement OrBranch for FilterError to enable furthest-error selection in nested structures
+impl<'code, E> crate::or::OrBranch for FilterError<'code, E>
+where
+    E: crate::or::OrBranch<Base = crate::ParsicombError<'code>>,
+{
+    type Base = crate::ParsicombError<'code>;
+
+    fn furthest(self) -> Self::Base {
+        match self {
+            FilterError::ParserError(e) => e.furthest(),
+            FilterError::FilterFailed(parsicomb_error) => parsicomb_error.furthest(),
+        }
+    }
+}
+
 /// Parser that applies a predicate function to filter the output of another parser
 pub struct FilterParser<P, F> {
     parser: P,
