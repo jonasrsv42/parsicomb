@@ -1,4 +1,3 @@
-use crate::ParsiCombError;
 use crate::byte_cursor::ByteCursor;
 use crate::parser::Parser;
 
@@ -20,11 +19,12 @@ where
     F: Fn(&T) -> bool,
 {
     type Output = Vec<T>;
+    type Error = P::Error;
 
     fn parse(
         &self,
         cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
+    ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
         let mut result = Vec::new();
         let mut current_cursor = cursor;
 

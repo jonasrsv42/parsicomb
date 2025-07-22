@@ -1,16 +1,16 @@
 use crate::byte_cursor::ByteCursor;
 use crate::parser::Parser;
 use crate::utf8::char::char;
-use crate::{CodeLoc, ParsiCombError};
+use crate::{CodeLoc, ParsicombError};
 use std::borrow::Cow;
 
 // Helper function to reduce error creation boilerplate
 fn create_string_error<'code>(
     cursor: &ByteCursor<'code>,
     message: String,
-) -> ParsiCombError<'code> {
+) -> ParsicombError<'code> {
     let (data, position) = cursor.inner();
-    ParsiCombError::SyntaxError {
+    ParsicombError::SyntaxError {
         message: message.into(),
         loc: CodeLoc::new(data, position),
     }
@@ -31,11 +31,12 @@ impl IsStringParser {
 
 impl<'code> Parser<'code> for IsStringParser {
     type Output = Cow<'static, str>;
+    type Error = ParsicombError<'code>;
 
     fn parse(
         &self,
         cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
+    ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
         let mut current_cursor = cursor;
 
         for expected_char in self.expected.chars() {

@@ -2,6 +2,13 @@ use std::borrow::Cow;
 use std::error::Error;
 use std::fmt;
 
+/// Trait for errors that can report their byte position in the input
+/// This enables selecting the error that progressed furthest when multiple parsers fail
+pub trait ErrorPosition {
+    /// Returns the byte position where this error occurred
+    fn byte_position(&self) -> usize;
+}
+
 #[derive(Debug)]
 pub struct ReadablePosition {
     pub line: usize,
@@ -106,17 +113,17 @@ impl<'code> CodeLoc<'code> {
 }
 
 #[derive(Debug)]
-pub enum ParsiCombError<'code> {
+pub enum ParsicombError<'code> {
     UnexpectedEndOfFile(CodeLoc<'code>),
     AlreadyAtEndOfFile,
     CannotReadValueAtEof,
     SyntaxError { message: Cow<'static, str>, loc: CodeLoc<'code> },
 }
 
-impl<'code> fmt::Display for ParsiCombError<'code> {
+impl<'code> fmt::Display for ParsicombError<'code> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ParsiCombError::UnexpectedEndOfFile(code_loc) => {
+            ParsicombError::UnexpectedEndOfFile(code_loc) => {
                 let pos = code_loc.readable_position();
                 writeln!(f, "Unexpected end of file at line {}, byte offset {} (absolute position: {})", 
                          pos.line, pos.byte_offset, code_loc.loc)?;
@@ -126,13 +133,13 @@ impl<'code> fmt::Display for ParsiCombError<'code> {
                 }
                 Ok(())
             }
-            ParsiCombError::AlreadyAtEndOfFile => {
+            ParsicombError::AlreadyAtEndOfFile => {
                 write!(f, "Already at end of file")
             }
-            ParsiCombError::CannotReadValueAtEof => {
+            ParsicombError::CannotReadValueAtEof => {
                 write!(f, "Cannot read value at EOF")
             }
-            ParsiCombError::SyntaxError { message, loc } => {
+            ParsicombError::SyntaxError { message, loc } => {
                 let pos = loc.readable_position();
                 writeln!(f, "Syntax error at line {}, byte offset {}: {}", 
                          pos.line, pos.byte_offset, message)?;
@@ -146,4 +153,22 @@ impl<'code> fmt::Display for ParsiCombError<'code> {
     }
 }
 
-impl<'code> Error for ParsiCombError<'code> {}
+impl<'code> Error for ParsicombError<'code> {}
+
+impl<'code> ParsicombError<'code> {
+    /// Returns the byte offset where this error occurred
+    pub fn byte_offset(&self) -> usize {
+        match self {
+            ParsicombError::UnexpectedEndOfFile(code_loc) => code_loc.loc,
+            ParsicombError::AlreadyAtEndOfFile => 0, // Assume EOF is at end
+            ParsicombError::CannotReadValueAtEof => 0, // Assume EOF is at end  
+            ParsicombError::SyntaxError { loc, .. } => loc.loc,
+        }
+    }
+}
+
+impl<'code> ErrorPosition for ParsicombError<'code> {
+    fn byte_position(&self) -> usize {
+        self.byte_offset()
+    }
+}

@@ -1,6 +1,5 @@
 use super::byte_cursor::ByteCursor;
 use super::parser::Parser;
-use crate::ParsiCombError;
 
 /// Parser combinator that matches zero or more occurrences of the given parser
 pub struct Many<P> {
@@ -18,11 +17,12 @@ where
     P: Parser<'code>,
 {
     type Output = Vec<P::Output>;
+    type Error = P::Error;
 
     fn parse(
         &self,
         mut cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
+    ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
         let mut results = Vec::new();
 
         loop {

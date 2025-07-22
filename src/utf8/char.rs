@@ -1,7 +1,7 @@
 use crate::byte::ByteParser;
 use crate::byte_cursor::ByteCursor;
 use crate::parser::Parser;
-use crate::{CodeLoc, ParsiCombError};
+use crate::{CodeLoc, ParsicombError};
 use std::borrow::Cow;
 
 /// Parser that consumes and returns a single UTF-8 character
@@ -11,9 +11,9 @@ pub struct CharParser;
 fn create_error<'code>(
     cursor: &ByteCursor<'code>,
     message: Cow<'static, str>,
-) -> ParsiCombError<'code> {
+) -> ParsicombError<'code> {
     let (data, position) = cursor.inner();
-    ParsiCombError::SyntaxError {
+    ParsicombError::SyntaxError {
         message,
         loc: CodeLoc::new(data, position),
     }
@@ -21,11 +21,12 @@ fn create_error<'code>(
 
 impl<'code> Parser<'code> for CharParser {
     type Output = char;
+    type Error = ParsicombError<'code>;
 
     fn parse(
         &self,
         cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
+    ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
         let byte_parser = ByteParser::new();
 
         // 1. Read the first byte
@@ -143,11 +144,12 @@ pub struct IsChar(char);
 
 impl<'code> Parser<'code> for IsChar {
     type Output = char;
+    type Error = ParsicombError<'code>;
 
     fn parse(
         &self,
         cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
+    ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
         let (ch, next_cursor) = char().parse(cursor)?;
         if ch == self.0 {
             Ok((ch, next_cursor))

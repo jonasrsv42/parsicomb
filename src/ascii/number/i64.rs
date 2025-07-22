@@ -1,10 +1,10 @@
 use super::u64::u64;
 use crate::byte_cursor::ByteCursor;
 use crate::parser::Parser;
-use crate::{CodeLoc, ParsiCombError};
+use crate::{CodeLoc, ParsicombError};
 
 /// Parser that matches ASCII integer numbers (positive or negative)
-pub fn i64<'code>() -> impl Parser<'code, Output = i64> {
+pub fn i64<'code>() -> impl Parser<'code, Output = i64, Error = ParsicombError<'code>> {
     IntParser
 }
 
@@ -12,11 +12,12 @@ struct IntParser;
 
 impl<'code> Parser<'code> for IntParser {
     type Output = i64;
+    type Error = ParsicombError<'code>;
 
     fn parse(
         &self,
         cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
+    ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
         let mut cursor = cursor;
         let mut is_negative = false;
 
@@ -41,7 +42,7 @@ impl<'code> Parser<'code> for IntParser {
             // Check for overflow when negating
             if value > i64::MAX as u64 + 1 {
                 let (data, position) = cursor.inner();
-                return Err(ParsiCombError::SyntaxError {
+                return Err(ParsicombError::SyntaxError {
                     message: format!("negative number too large: -{}", value).into(),
                     loc: CodeLoc::new(data, position),
                 });
@@ -51,7 +52,7 @@ impl<'code> Parser<'code> for IntParser {
             // Check for positive overflow
             if value > i64::MAX as u64 {
                 let (data, position) = cursor.inner();
-                return Err(ParsiCombError::SyntaxError {
+                return Err(ParsicombError::SyntaxError {
                     message: format!("positive number too large: {}", value).into(),
                     loc: CodeLoc::new(data, position),
                 });

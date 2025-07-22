@@ -1,6 +1,54 @@
 use super::byte_cursor::ByteCursor;
 use super::parser::Parser;
-use crate::ParsiCombError;
+use std::fmt;
+
+/// Error type for And parser that can wrap errors from either the first or second parser
+#[derive(Debug)]
+pub enum AndError<E1, E2> {
+    /// Error from the first parser
+    FirstParser(E1),
+    /// Error from the second parser
+    SecondParser(E2),
+}
+
+impl<E> AndError<E, E> {
+    /// Extract the inner error when both error types are the same
+    pub fn into_inner(self) -> E {
+        match self {
+            AndError::FirstParser(e) => e,
+            AndError::SecondParser(e) => e,
+        }
+    }
+}
+
+impl<E1: fmt::Display, E2: fmt::Display> fmt::Display for AndError<E1, E2> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AndError::FirstParser(e) => write!(f, "First parser failed: {}", e),
+            AndError::SecondParser(e) => write!(f, "Second parser failed: {}", e),
+        }
+    }
+}
+
+impl<E1, E2> std::error::Error for AndError<E1, E2> 
+where
+    E1: std::error::Error,
+    E2: std::error::Error,
+{}
+
+// Implement From<AndError<E1, E2>> for ParsicombError where both E1 and E2 can convert to ParsicombError
+impl<'code, E1, E2> From<AndError<E1, E2>> for crate::ParsicombError<'code>
+where
+    E1: Into<crate::ParsicombError<'code>>,
+    E2: Into<crate::ParsicombError<'code>>,
+{
+    fn from(err: AndError<E1, E2>) -> crate::ParsicombError<'code> {
+        match err {
+            AndError::FirstParser(e1) => e1.into(),
+            AndError::SecondParser(e2) => e2.into(),
+        }
+    }
+}
 
 /// Parser combinator that sequences two parsers and returns both results as a tuple
 ///
@@ -44,13 +92,16 @@ where
     P2: Parser<'code>,
 {
     type Output = (P1::Output, P2::Output);
+    type Error = AndError<P1::Error, P2::Error>;
 
     fn parse(
         &self,
         cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
-        let (result1, cursor) = self.parser1.parse(cursor)?;
-        let (result2, cursor) = self.parser2.parse(cursor)?;
+    ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
+        let (result1, cursor) = self.parser1.parse(cursor)
+            .map_err(AndError::FirstParser)?;
+        let (result2, cursor) = self.parser2.parse(cursor)
+            .map_err(AndError::SecondParser)?;
         Ok(((result1, result2), cursor))
     }
 }

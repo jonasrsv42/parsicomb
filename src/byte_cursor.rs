@@ -1,4 +1,4 @@
-use crate::{CodeLoc, ParsiCombError};
+use crate::{CodeLoc, ParsicombError};
 
 #[derive(Debug, Copy, Clone)]
 pub enum ByteCursor<'a> {
@@ -38,26 +38,26 @@ impl<'a> ByteCursor<'a> {
     }
 
     /// Advances the cursor to the next byte, returning an error if at EOF
-    pub fn try_next(self) -> Result<Self, ParsiCombError<'a>> {
+    pub fn try_next(self) -> Result<Self, ParsicombError<'a>> {
         match self {
             ByteCursor::Valid { .. } => {
                 let next = self.next();
                 match next {
                     ByteCursor::Valid { .. } => Ok(next),
-                    ByteCursor::EndOfFile { data } => Err(ParsiCombError::UnexpectedEndOfFile(
+                    ByteCursor::EndOfFile { data } => Err(ParsicombError::UnexpectedEndOfFile(
                         CodeLoc::new(data, data.len()),
                     )),
                 }
             }
-            ByteCursor::EndOfFile { .. } => Err(ParsiCombError::AlreadyAtEndOfFile),
+            ByteCursor::EndOfFile { .. } => Err(ParsicombError::AlreadyAtEndOfFile),
         }
     }
 
     /// Get the byte value at the current cursor position
-    pub fn value(&self) -> Result<u8, ParsiCombError<'a>> {
+    pub fn value(&self) -> Result<u8, ParsicombError<'a>> {
         match self {
             ByteCursor::Valid { data, position } => Ok(data[*position]),
-            ByteCursor::EndOfFile { .. } => Err(ParsiCombError::CannotReadValueAtEof),
+            ByteCursor::EndOfFile { .. } => Err(ParsicombError::CannotReadValueAtEof),
         }
     }
 

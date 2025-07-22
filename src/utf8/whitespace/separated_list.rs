@@ -1,4 +1,3 @@
-use crate::ParsiCombError;
 use crate::and::AndExt;
 use crate::byte_cursor::ByteCursor;
 use crate::many::many;
@@ -24,11 +23,12 @@ where
     P: Parser<'code>,
 {
     type Output = Vec<P::Output>;
+    type Error = P::Error;
 
     fn parse(
         &self,
         cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
+    ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
         let mut results = Vec::new();
 
         // Parse the first element (required)

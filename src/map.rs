@@ -1,6 +1,5 @@
 use super::byte_cursor::ByteCursor;
 use super::parser::Parser;
-use crate::ParsiCombError;
 
 /// Parser combinator that transforms the output of a parser using a mapping function
 pub struct Map<P, F> {
@@ -20,11 +19,12 @@ where
     F: Fn(T) -> U,
 {
     type Output = U;
+    type Error = P::Error;
 
     fn parse(
         &self,
         cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
+    ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
         let (value, cursor) = self.parser.parse(cursor)?;
         let mapped_value = (self.mapper)(value);
         Ok((mapped_value, cursor))

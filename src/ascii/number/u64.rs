@@ -1,11 +1,11 @@
 use crate::parser::Parser;
 use crate::byte_cursor::ByteCursor;
 use crate::some::some;
-use crate::{ParsiCombError, CodeLoc};
+use crate::{ParsicombError, CodeLoc};
 use super::digit::digit;
 
 /// Parser that matches one or more ASCII digits and returns them as a u64
-pub fn u64<'code>() -> impl Parser<'code, Output = u64> {
+pub fn u64<'code>() -> impl Parser<'code, Output = u64, Error = ParsicombError<'code>> {
     UIntParser
 }
 
@@ -13,8 +13,9 @@ struct UIntParser;
 
 impl<'code> Parser<'code> for UIntParser {
     type Output = u64;
+    type Error = ParsicombError<'code>;
     
-    fn parse(&self, cursor: ByteCursor<'code>) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
+    fn parse(&self, cursor: ByteCursor<'code>) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
         let (digit_bytes, cursor) = some(digit()).parse(cursor)?;
         
         // Convert digits to string
@@ -22,7 +23,7 @@ impl<'code> Parser<'code> for UIntParser {
             Ok(s) => s,
             Err(_) => {
                 let (data, position) = cursor.inner();
-                return Err(ParsiCombError::SyntaxError {
+                return Err(ParsicombError::SyntaxError {
                     message: "invalid UTF-8 in digits".into(),
                     loc: CodeLoc::new(data, position)
                 });
@@ -34,7 +35,7 @@ impl<'code> Parser<'code> for UIntParser {
             Ok(v) => v,
             Err(_) => {
                 let (data, position) = cursor.inner();
-                return Err(ParsiCombError::SyntaxError {
+                return Err(ParsicombError::SyntaxError {
                     message: format!("number too large: {}", num_str).into(),
                     loc: CodeLoc::new(data, position)
                 });

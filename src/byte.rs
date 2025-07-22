@@ -1,6 +1,6 @@
 use super::byte_cursor::ByteCursor;
 use super::parser::Parser;
-use crate::{CodeLoc, ParsiCombError};
+use crate::{CodeLoc, ParsicombError};
 
 /// Parser that consumes and returns a single byte
 pub struct ByteParser;
@@ -18,11 +18,12 @@ pub fn byte() -> ByteParser {
 
 impl<'code> Parser<'code> for ByteParser {
     type Output = u8;
+    type Error = ParsicombError<'code>;
 
     fn parse(
         &self,
         cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
+    ) -> Result<(Self::Output, ByteCursor<'code>), ParsicombError<'code>> {
         let byte = cursor.value()?;
         Ok((byte, cursor.next()))
     }
@@ -41,11 +42,12 @@ impl IsByteParser {
 
 impl<'code> Parser<'code> for IsByteParser {
     type Output = u8;
+    type Error = ParsicombError<'code>;
 
     fn parse(
         &self,
         cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
+    ) -> Result<(Self::Output, ByteCursor<'code>), ParsicombError<'code>> {
         match cursor.value() {
             Ok(byte) if byte == self.expected => Ok((byte, cursor.next())),
             Ok(byte) => {
@@ -57,7 +59,7 @@ impl<'code> Parser<'code> for IsByteParser {
                     byte,
                     std::str::from_utf8(&[byte]).unwrap_or("<non-utf8>")
                 );
-                Err(ParsiCombError::SyntaxError {
+                Err(ParsicombError::SyntaxError {
                     message: message.into(),
                     loc: CodeLoc::new(data, position),
                 })
@@ -81,11 +83,12 @@ impl BetweenBytesParser {
 
 impl<'code> Parser<'code> for BetweenBytesParser {
     type Output = u8;
+    type Error = ParsicombError<'code>;
 
     fn parse(
         &self,
         cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
+    ) -> Result<(Self::Output, ByteCursor<'code>), ParsicombError<'code>> {
         match cursor.value() {
             Ok(byte) if byte >= self.start && byte <= self.end => Ok((byte, cursor.next())),
             Ok(byte) => {
@@ -99,7 +102,7 @@ impl<'code> Parser<'code> for BetweenBytesParser {
                     byte,
                     std::str::from_utf8(&[byte]).unwrap_or("<non-utf8>")
                 );
-                Err(ParsiCombError::SyntaxError {
+                Err(ParsicombError::SyntaxError {
                     message: message.into(),
                     loc: CodeLoc::new(data, position)
                 })

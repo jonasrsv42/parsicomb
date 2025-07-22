@@ -20,10 +20,11 @@ pub mod ascii;
 pub mod utf8;
 pub mod or;
 pub mod map;
+pub mod map_err;
 pub mod and;
 pub mod filter;
 pub mod take_until;
 pub mod default;
 
-pub use error::{CodeLoc, ParsiCombError};
+pub use error::{CodeLoc, ParsicombError};
 pub use parser::Parser;

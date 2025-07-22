@@ -4,12 +4,12 @@ use crate::and::AndExt;
 use crate::byte::is_byte;
 use crate::byte_cursor::ByteCursor;
 use crate::parser::Parser;
-use crate::{CodeLoc, ParsiCombError};
+use crate::{CodeLoc, ParsicombError};
 
 const MAX_FRACTIONAL_DIGITS: usize = 15;
 
 /// Parser for int.uint format (e.g., 123.456, -42.789)
-fn int_dot_uint<'code>() -> impl Parser<'code, Output = f64> {
+fn int_dot_uint<'code>() -> impl Parser<'code, Output = f64, Error = ParsicombError<'code>> {
     IntDotUintParser
 }
 
@@ -17,20 +17,22 @@ struct IntDotUintParser;
 
 impl<'code> Parser<'code> for IntDotUintParser {
     type Output = f64;
+    type Error = ParsicombError<'code>;
 
     fn parse(
         &self,
         cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
+    ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
         let (((int_part, _), frac_part), cursor) =
-            i64().and(is_byte(b'.')).and(u64()).parse(cursor)?;
+            i64().and(is_byte(b'.')).and(u64()).parse(cursor)
+            .map_err(|e| ParsicombError::from(e))?;
 
         let frac_digits = frac_part.to_string().len();
 
         // Check for too many fractional digits
         if frac_digits > MAX_FRACTIONAL_DIGITS {
             let (data, position) = cursor.inner();
-            return Err(ParsiCombError::SyntaxError {
+            return Err(ParsicombError::SyntaxError {
                 message: format!(
                     "too many fractional digits: {} (max {})",
                     frac_digits, MAX_FRACTIONAL_DIGITS
@@ -47,7 +49,7 @@ impl<'code> Parser<'code> for IntDotUintParser {
         let int_as_f64 = int_part as f64;
         if int_as_f64 as i64 != int_part {
             let (data, position) = cursor.inner();
-            return Err(ParsiCombError::SyntaxError {
+            return Err(ParsicombError::SyntaxError {
                 message: format!("integer part too large for f64 precision: {}", int_part).into(),
                 loc: CodeLoc::new(data, position),
             });
@@ -62,7 +64,7 @@ impl<'code> Parser<'code> for IntDotUintParser {
         // Check for overflow/infinity
         if !result.is_finite() {
             let (data, position) = cursor.inner();
-            return Err(ParsiCombError::SyntaxError {
+            return Err(ParsicombError::SyntaxError {
                 message: "floating point overflow".into(),
                 loc: CodeLoc::new(data, position),
             });
@@ -73,7 +75,7 @@ impl<'code> Parser<'code> for IntDotUintParser {
 }
 
 /// Parser that matches ASCII floating point numbers
-pub fn f64<'code>() -> impl Parser<'code, Output = f64> {
+pub fn f64<'code>() -> impl Parser<'code, Output = f64, Error = ParsicombError<'code>> {
     int_dot_uint()
 }
 

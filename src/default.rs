@@ -1,6 +1,6 @@
 use super::byte_cursor::ByteCursor;
 use super::parser::Parser;
-use crate::ParsiCombError;
+use crate::ParsicombError;
 
 /// Parser that always succeeds without consuming input and returns the default value of T
 pub struct DefaultParser<T> {
@@ -20,11 +20,12 @@ where
     T: Default,
 {
     type Output = T;
+    type Error = ParsicombError<'code>;
 
     fn parse(
         &self,
         cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), ParsiCombError<'code>> {
+    ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
         Ok((T::default(), cursor))
     }
 }
