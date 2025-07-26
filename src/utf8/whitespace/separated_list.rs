@@ -1,26 +1,25 @@
-use crate::and::AndExt;
 use crate::byte_cursor::ByteCursor;
 use crate::many::many;
 use crate::parser::Parser;
-use crate::utf8::string::is_string;
 use crate::utf8::unicode_whitespace;
 
-/// Parser combinator that matches a list of items separated by a string separator,
+/// Parser combinator that matches a list of items separated by a parser,
 /// with optional whitespace around the separator
-pub struct SeparatedList<P> {
+pub struct SeparatedList<P, PS> {
     parser: P,
-    separator: &'static str,
+    separator: PS,
 }
 
-impl<P> SeparatedList<P> {
-    pub fn new(parser: P, separator: &'static str) -> Self {
+impl<P, PS> SeparatedList<P, PS> {
+    pub fn new(parser: P, separator: PS) -> Self {
         SeparatedList { parser, separator }
     }
 }
 
-impl<'code, P> Parser<'code> for SeparatedList<P>
+impl<'code, P, PS> Parser<'code> for SeparatedList<P, PS>
 where
     P: Parser<'code>,
+    PS: Parser<'code>,
 {
     type Output = Vec<P::Output>;
     type Error = P::Error;
@@ -35,39 +34,43 @@ where
         let (first_value, mut cursor) = self.parser.parse(cursor)?;
         results.push(first_value);
 
-        // Create separator parser once: whitespace* separator whitespace*
-        let separator_parser = many(unicode_whitespace())
-            .and(is_string(self.separator))
-            .and(many(unicode_whitespace()));
-
         // Parse remaining elements preceded by separator
         loop {
-            match separator_parser.parse(cursor) {
-                Ok((_, next_cursor)) => {
-                    // Parse the next element (required after separator)
-                    let (value, next_cursor) = self.parser.parse(next_cursor)?;
-                    results.push(value);
-                    cursor = next_cursor;
-                }
-                Err(_) => {
-                    // No separator found, we're done
-                    break;
-                }
-            }
+            // Try to parse: whitespace* separator whitespace*
+            let (_, temp_cursor) = match many(unicode_whitespace()).parse(cursor) {
+                Ok(result) => result,
+                Err(_) => break,
+            };
+            
+            let (_, temp_cursor) = match self.separator.parse(temp_cursor) {
+                Ok(result) => result,
+                Err(_) => break,
+            };
+            
+            let (_, temp_cursor) = match many(unicode_whitespace()).parse(temp_cursor) {
+                Ok(result) => result,
+                Err(_) => break,
+            };
+            
+            // Parse the next element (required after separator)
+            let (value, next_cursor) = self.parser.parse(temp_cursor)?;
+            results.push(value);
+            cursor = next_cursor;
         }
 
         Ok((results, cursor))
     }
 }
 
-/// Creates a parser that matches a list of items separated by the given string,
+/// Creates a parser that matches a list of items separated by the given parser,
 /// with optional whitespace around the separator
-pub fn separated_list<'code, P>(
+pub fn separated_list<'code, P, PS>(
     parser: P,
-    separator: &'static str,
-) -> impl Parser<'code, Output = Vec<P::Output>>
+    separator: PS,
+) -> SeparatedList<P, PS>
 where
     P: Parser<'code>,
+    PS: Parser<'code>,
 {
     SeparatedList::new(parser, separator)
 }
@@ -89,7 +92,7 @@ mod tests {
         let cursor = ByteCursor::new(data);
         let parser = separated_list(
             some(unicode_alphanumeric()).map(|chrs| chrs.iter().collect::<String>()),
-            ",",
+            is_string(","),
         );
 
         // Should fail on empty input
@@ -102,7 +105,7 @@ mod tests {
         let cursor = ByteCursor::new(data);
         let parser = separated_list(
             some(unicode_alphanumeric()).map(|chrs| chrs.iter().collect::<String>()),
-            ",",
+            is_string(","),
         );
 
         let (results, _) = parser.parse(cursor).unwrap();
@@ -115,7 +118,7 @@ mod tests {
         let cursor = ByteCursor::new(data);
         let parser = separated_list(
             some(unicode_alphanumeric()).map(|chrs| chrs.iter().collect::<String>()),
-            ",",
+            is_string(","),
         );
 
         let (results, _) = parser.parse(cursor).unwrap();
@@ -128,7 +131,7 @@ mod tests {
         let cursor = ByteCursor::new(data);
         let parser = separated_list(
             some(unicode_alphanumeric()).map(|chrs| chrs.iter().collect::<String>()),
-            ",",
+            is_string(","),
         );
 
         let (results, _) = parser.parse(cursor).unwrap();
@@ -141,7 +144,7 @@ mod tests {
         let cursor = ByteCursor::new(data);
         let parser = separated_list(
             some(unicode_alphanumeric()).map(|chrs| chrs.iter().collect::<String>()),
-            ",",
+            is_string(","),
         );
 
         let (results, _) = parser.parse(cursor).unwrap();
@@ -154,7 +157,7 @@ mod tests {
         let cursor = ByteCursor::new(data);
         let parser = separated_list(
             some(unicode_alphanumeric()).map(|chrs| chrs.iter().collect::<String>()),
-            ",",
+            is_string(","),
         );
 
         // With strict parsing, trailing comma should cause an error
@@ -167,7 +170,7 @@ mod tests {
         let cursor = ByteCursor::new(data);
         let parser = separated_list(
             some(unicode_alphanumeric()).map(|chrs| chrs.iter().collect::<String>()),
-            ",",
+            is_string(","),
         );
 
         let (results, cursor) = parser.parse(cursor).unwrap();
@@ -180,7 +183,7 @@ mod tests {
     fn test_missing_element_after_separator_fails() {
         let data = b"a, b, "; // Space after last comma but no element
         let cursor = ByteCursor::new(data);
-        let parser = separated_list(some(unicode_alphanumeric()), ",");
+        let parser = separated_list(some(unicode_alphanumeric()), is_string(","));
 
         // Should fail because there's no identifier after the last comma
         assert!(parser.parse(cursor).is_err());
@@ -190,7 +193,7 @@ mod tests {
     fn test_invalid_element_after_separator_fails() {
         let data = b"a, b, |"; // Pipe instead of alphanumeric
         let cursor = ByteCursor::new(data);
-        let parser = separated_list(some(unicode_alphanumeric()), ",");
+        let parser = separated_list(some(unicode_alphanumeric()), is_string(","));
 
         // Should fail because 123 is not a valid identifier
         assert!(parser.parse(cursor).is_err());
@@ -202,7 +205,7 @@ mod tests {
         let cursor = ByteCursor::new(data);
         let parser = separated_list(
             some(unicode_alphanumeric()).map(|chrs| chrs.iter().collect::<String>()),
-            ",",
+            is_string(","),
         );
 
         let (results, cursor) = parser.parse(cursor).unwrap();
@@ -224,7 +227,7 @@ mod tests {
             .or(is_string("world"))
             .or(is_string("universe"));
 
-        let parser = separated_list(element_parser, ",");
+        let parser = separated_list(element_parser, is_string(","));
 
         let result = parser.parse(cursor);
         assert!(result.is_err());
@@ -273,7 +276,7 @@ mod tests {
             .map(|(num, _)| num)
             .or(f64()); // Fallback to plain float
 
-        let parser = separated_list(element_parser, ",");
+        let parser = separated_list(element_parser, is_string(","));
 
         let result = parser.parse(cursor);
         assert!(result.is_err());
@@ -315,7 +318,7 @@ mod tests {
             .or(is_string("large"))
             .or(category_or_word);
 
-        let parser = separated_list(size_or_category, ",");
+        let parser = separated_list(size_or_category, is_string(","));
 
         let result = parser.parse(cursor);
         assert!(result.is_err());
@@ -335,5 +338,20 @@ mod tests {
         println!("Deeply nested Or combinators work with likely_error()!");
         println!("Error position: {}", error_pos);
         println!("Error: {}", likely_error.to_string());
+    }
+
+    #[test]
+    fn test_byte_separator() {
+        use crate::byte::is_byte;
+        
+        let data = b"a,b,c";
+        let cursor = ByteCursor::new(data);
+        let parser = separated_list(
+            some(unicode_alphanumeric()).map(|chrs| chrs.iter().collect::<String>()),
+            is_byte(b','),
+        );
+
+        let (results, _) = parser.parse(cursor).unwrap();
+        assert_eq!(results, vec!["a", "b", "c"]);
     }
 }

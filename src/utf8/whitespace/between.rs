@@ -188,7 +188,7 @@ mod tests {
         let cursor = ByteCursor::new(data);
         let parser = between(
             is_byte(b'['),
-            separated_pair(f64(), ",", f64()),
+            separated_pair(f64(), is_string(","), f64()),
             is_byte(b']'),
         );
 
@@ -203,7 +203,7 @@ mod tests {
         let cursor = ByteCursor::new(data);
         let parser = between(
             is_byte(b'['),
-            separated_pair(f64(), ",", f64()),
+            separated_pair(f64(), is_string(","), f64()),
             is_byte(b']'),
         );
 
@@ -305,21 +305,21 @@ mod tests {
 
         let inner_list = separated_pair(
             is_string("hello").or(is_string("hi")), // succeeds
-            ",",
+            is_string(","),
             is_string("world").or(is_string("universe")), // fails on "badvalue"
         );
 
         let bracketed_list = between(is_byte(b'['), inner_list, is_byte(b']'));
 
-        let start_pair = separated_pair(is_string("start"), ":", bracketed_list);
+        let start_pair = separated_pair(is_string("start"), is_string(":"), bracketed_list);
 
         let end_pair = separated_pair(
             is_string("end"),
-            ":",
+            is_string(":"),
             is_string("finish").or(is_string("done")),
         );
 
-        let main_content = separated_pair(start_pair, ",", end_pair);
+        let main_content = separated_pair(start_pair, is_string(","), end_pair);
 
         let parser = between(is_byte(b'{'), main_content, is_byte(b'}'));
 
