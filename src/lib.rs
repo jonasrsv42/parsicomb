@@ -24,6 +24,7 @@ pub mod or;
 pub mod parser;
 pub mod some;
 pub mod take_until;
+pub mod then_optionally;
 pub mod utf8;
 
 pub use error::{CodeLoc, ErrorLeaf, ErrorNode, ParsicombError};
