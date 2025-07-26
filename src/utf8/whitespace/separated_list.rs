@@ -41,17 +41,17 @@ where
                 Ok(result) => result,
                 Err(_) => break,
             };
-            
+
             let (_, temp_cursor) = match self.separator.parse(temp_cursor) {
                 Ok(result) => result,
                 Err(_) => break,
             };
-            
+
             let (_, temp_cursor) = match many(unicode_whitespace()).parse(temp_cursor) {
                 Ok(result) => result,
                 Err(_) => break,
             };
-            
+
             // Parse the next element (required after separator)
             let (value, next_cursor) = self.parser.parse(temp_cursor)?;
             results.push(value);
@@ -64,10 +64,7 @@ where
 
 /// Creates a parser that matches a list of items separated by the given parser,
 /// with optional whitespace around the separator
-pub fn separated_list<'code, P, PS>(
-    parser: P,
-    separator: PS,
-) -> SeparatedList<P, PS>
+pub fn separated_list<'code, P, PS>(parser: P, separator: PS) -> SeparatedList<P, PS>
 where
     P: Parser<'code>,
     PS: Parser<'code>,
@@ -343,7 +340,7 @@ mod tests {
     #[test]
     fn test_byte_separator() {
         use crate::byte::is_byte;
-        
+
         let data = b"a,b,c";
         let cursor = ByteCursor::new(data);
         let parser = separated_list(

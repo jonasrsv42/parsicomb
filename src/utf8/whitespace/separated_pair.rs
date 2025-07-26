@@ -22,7 +22,9 @@ pub enum SeparatedPairError<'code, E1, ES, E2> {
     RightParser(E2),
 }
 
-impl<E1: fmt::Display, ES: fmt::Display, E2: fmt::Display> fmt::Display for SeparatedPairError<'_, E1, ES, E2> {
+impl<E1: fmt::Display, ES: fmt::Display, E2: fmt::Display> fmt::Display
+    for SeparatedPairError<'_, E1, ES, E2>
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             SeparatedPairError::LeftParser(e) => write!(f, "Left parser failed: {}", e),
@@ -116,7 +118,11 @@ where
     }
 }
 
-pub fn separated_pair<'code, P1, PS, P2>(left: P1, separator: PS, right: P2) -> SeparatedPair<P1, PS, P2>
+pub fn separated_pair<'code, P1, PS, P2>(
+    left: P1,
+    separator: PS,
+    right: P2,
+) -> SeparatedPair<P1, PS, P2>
 where
     P1: Parser<'code>,
     PS: Parser<'code>,
@@ -238,7 +244,7 @@ mod tests {
     #[test]
     fn test_byte_separator() {
         use crate::byte::is_byte;
-        
+
         let data = b"1.5,2.7";
         let cursor = ByteCursor::new(data);
         let parser = separated_pair(f64(), is_byte(b','), f64());

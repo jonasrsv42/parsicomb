@@ -19,11 +19,7 @@ impl<E: fmt::Display> fmt::Display for ThenOptionallyError<E> {
     }
 }
 
-impl<E> std::error::Error for ThenOptionallyError<E>
-where
-    E: std::error::Error,
-{
-}
+impl<E> std::error::Error for ThenOptionallyError<E> where E: std::error::Error {}
 
 // Implement From<ThenOptionallyError<E>> for ParsicombError where E can convert to ParsicombError
 impl<'code, E> From<ThenOptionallyError<E>> for crate::ParsicombError<'code>
@@ -51,8 +47,8 @@ where
 }
 
 /// Parser combinator that sequences two parsers where the second is optional
-/// 
-/// Returns a tuple with the first parser's result and an Option containing the second 
+///
+/// Returns a tuple with the first parser's result and an Option containing the second
 /// parser's result (Some if it succeeded, None if it failed).
 ///
 /// Example:
@@ -70,7 +66,7 @@ where
 ///     .parse(cursor).unwrap();
 /// assert_eq!(result.0, 123);
 /// assert_eq!(result.1, Some(b'.'));
-/// 
+///
 /// let data = b"123xyz";
 /// let cursor = ByteCursor::new(data);
 /// let (result, cursor) = i64()
@@ -102,8 +98,11 @@ where
         &self,
         cursor: ByteCursor<'code>,
     ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
-        let (result1, cursor) = self.parser1.parse(cursor).map_err(ThenOptionallyError::FirstParser)?;
-        
+        let (result1, cursor) = self
+            .parser1
+            .parse(cursor)
+            .map_err(ThenOptionallyError::FirstParser)?;
+
         // Try the second parser, but don't fail if it doesn't succeed
         match self.parser2.parse(cursor) {
             Ok((result2, cursor)) => Ok(((result1, Some(result2)), cursor)),
