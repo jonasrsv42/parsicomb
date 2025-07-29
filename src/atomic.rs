@@ -9,8 +9,8 @@ pub trait Atomic: Copy + Clone + PartialEq + Debug + Display {
     /// The newline character/element for this atomic type
     const NEWLINE: Self;
 
-    /// Convert a slice of elements to a displayable string for error reporting
-    fn slice_to_string(slice: &[Self]) -> String;
+    /// Format a slice of elements for display in error messages
+    fn format_slice(slice: &[Self]) -> String;
 }
 
 /// A parser that reads one atomic element from the cursor and advances it
@@ -52,7 +52,7 @@ pub fn atomic<C>() -> AtomicParser<C> {
 impl Atomic for u8 {
     const NEWLINE: Self = b'\n';
 
-    fn slice_to_string(slice: &[Self]) -> String {
+    fn format_slice(slice: &[Self]) -> String {
         String::from_utf8_lossy(slice).to_string()
     }
 }
@@ -69,7 +69,7 @@ mod tests {
     impl Atomic for u32 {
         const NEWLINE: Self = 10; // ASCII newline as u32
         
-        fn slice_to_string(slice: &[Self]) -> String {
+        fn format_slice(slice: &[Self]) -> String {
             slice.iter().map(|&x| format!("{}", x)).collect::<Vec<_>>().join(" ")
         }
     }

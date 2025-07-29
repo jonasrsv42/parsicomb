@@ -118,7 +118,7 @@ impl<'code, T: Atomic> CodeLoc<'code, T> {
         let mut line_start = 0;
 
         // Convert to string for easier line handling
-        let text = T::slice_to_string(&self.code);
+        let text = T::format_slice(&self.code);
 
         for (i, ch) in text.char_indices() {
             if ch == '\n' {
