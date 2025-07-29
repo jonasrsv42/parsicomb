@@ -1,3 +1,4 @@
+use crate::Cursor;
 use crate::byte_cursor::ByteCursor;
 use crate::parser::Parser;
 use crate::utf8::char::char;
@@ -30,13 +31,11 @@ impl IsStringParser {
 }
 
 impl<'code> Parser<'code> for IsStringParser {
+    type Cursor = ByteCursor<'code>;
     type Output = Cow<'static, str>;
     type Error = ParsicombError<'code>;
 
-    fn parse(
-        &self,
-        cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
+    fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let mut current_cursor = cursor;
 
         for expected_char in self.expected.chars() {

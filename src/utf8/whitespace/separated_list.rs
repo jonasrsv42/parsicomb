@@ -18,16 +18,14 @@ impl<P, PS> SeparatedList<P, PS> {
 
 impl<'code, P, PS> Parser<'code> for SeparatedList<P, PS>
 where
-    P: Parser<'code>,
-    PS: Parser<'code>,
+    P: Parser<'code, Cursor = ByteCursor<'code>>,
+    PS: Parser<'code, Cursor = ByteCursor<'code>>,
 {
+    type Cursor = ByteCursor<'code>;
     type Output = Vec<P::Output>;
     type Error = P::Error;
 
-    fn parse(
-        &self,
-        cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
+    fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let mut results = Vec::new();
 
         // Parse the first element (required)
@@ -75,6 +73,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Cursor;
     use crate::and::AndExt;
     use crate::error::ErrorNode;
     use crate::map::MapExt;

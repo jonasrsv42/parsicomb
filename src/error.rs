@@ -1,3 +1,4 @@
+use crate::atomic::Atomic;
 use std::borrow::Cow;
 use std::error::Error;
 use std::fmt;
@@ -63,36 +64,42 @@ pub struct ReadablePosition {
 }
 
 #[derive(Debug)]
-pub struct CodeLoc<'code> {
-    code: &'code [u8],
-    /// The byte position in `code` where the cursor encountered an error
+pub struct CodeLoc<'code, T: Atomic = u8> {
+    code: &'code [T],
+    /// The position in `code` where the cursor encountered an error
     loc: usize,
 }
 
-impl<'code> CodeLoc<'code> {
-    pub fn new(code: &'code [u8], loc: usize) -> Self {
+impl<'code, T: Atomic> CodeLoc<'code, T> {
+    pub fn new(code: &'code [T], loc: usize) -> Self {
         Self { code, loc }
     }
 
-    /// Calculate line number and byte offset within that line
+    pub fn position(&self) -> usize {
+        self.loc
+    }
+}
+
+impl<'code, T: Atomic> CodeLoc<'code, T> {
+    /// Calculate line number and element offset within that line
     ///
-    /// Note: We return byte offset instead of column number because column
+    /// Note: We return element offset instead of column number because column
     /// calculation is complex - it depends on:
     /// - Text encoding (UTF-8 can have multi-byte characters)
     /// - Rendering context (tabs can be 2, 4, 8 spaces)
     /// - Terminal width and line wrapping
     /// - Zero-width characters, combining characters, etc.
     ///
-    /// Byte offset within the line is unambiguous and useful for debugging.
+    /// Element offset within the line is unambiguous and useful for debugging.
     fn readable_position(&self) -> ReadablePosition {
         let mut line = 1;
         let mut line_start = 0;
 
-        for (i, &byte) in self.code.iter().enumerate() {
+        for (i, &element) in self.code.iter().enumerate() {
             if i >= self.loc {
                 break;
             }
-            if byte == b'\n' {
+            if element == T::NEWLINE {
                 line += 1;
                 line_start = i + 1;
             }
@@ -111,7 +118,7 @@ impl<'code> CodeLoc<'code> {
         let mut line_start = 0;
 
         // Convert to string for easier line handling
-        let text = String::from_utf8_lossy(&self.code);
+        let text = T::slice_to_string(&self.code);
 
         for (i, ch) in text.char_indices() {
             if ch == '\n' {
@@ -163,17 +170,17 @@ impl<'code> CodeLoc<'code> {
 }
 
 #[derive(Debug)]
-pub enum ParsicombError<'code> {
-    UnexpectedEndOfFile(CodeLoc<'code>),
+pub enum ParsicombError<'code, T: Atomic = u8> {
+    UnexpectedEndOfFile(CodeLoc<'code, T>),
     AlreadyAtEndOfFile,
     CannotReadValueAtEof,
     SyntaxError {
         message: Cow<'static, str>,
-        loc: CodeLoc<'code>,
+        loc: CodeLoc<'code, T>,
     },
 }
 
-impl<'code> fmt::Display for ParsicombError<'code> {
+impl<'code, T: Atomic> fmt::Display for ParsicombError<'code, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ParsicombError::UnexpectedEndOfFile(code_loc) => {
@@ -212,28 +219,31 @@ impl<'code> fmt::Display for ParsicombError<'code> {
     }
 }
 
-impl<'code> Error for ParsicombError<'code> {}
+impl<'code, T: Atomic> Error for ParsicombError<'code, T> {}
 
-impl<'code> ParsicombError<'code> {
-    /// Returns the byte offset where this error occurred
-    pub fn byte_offset(&self) -> usize {
+impl<'code, T: Atomic> ParsicombError<'code, T> {
+    /// Returns the position where this error occurred
+    pub fn position(&self) -> usize {
         match self {
-            ParsicombError::UnexpectedEndOfFile(code_loc) => code_loc.loc,
+            ParsicombError::UnexpectedEndOfFile(code_loc) => code_loc.position(),
             ParsicombError::AlreadyAtEndOfFile => 0, // Assume EOF is at end
             ParsicombError::CannotReadValueAtEof => 0, // Assume EOF is at end
-            ParsicombError::SyntaxError { loc, .. } => loc.loc,
+            ParsicombError::SyntaxError { loc, .. } => loc.position(),
         }
     }
 }
 
-impl<'code> ErrorLeaf for ParsicombError<'code> {
+impl<'code, T: Atomic> ErrorLeaf for ParsicombError<'code, T> {
     fn byte_position(&self) -> usize {
-        self.byte_offset()
+        self.position()
     }
 }
 
 // ParsicombError implements ErrorBranch (converts to itself since it's a terminal type)
-impl<'code> ErrorNode<'code> for ParsicombError<'code> {
+impl<'code, T: Atomic> ErrorNode<'code> for ParsicombError<'code, T>
+where
+    T: 'code,
+{
     fn likely_error(self) -> Box<dyn ErrorLeaf + 'code> {
         Box::new(self) // Already the base type
     }

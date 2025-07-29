@@ -1,4 +1,3 @@
-use super::byte_cursor::ByteCursor;
 use super::parser::Parser;
 
 /// Parser combinator that transforms the output of a parser using a mapping function
@@ -18,13 +17,11 @@ where
     P: Parser<'code, Output = T>,
     F: Fn(T) -> U,
 {
+    type Cursor = P::Cursor;
     type Output = U;
     type Error = P::Error;
 
-    fn parse(
-        &self,
-        cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
+    fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let (value, cursor) = self.parser.parse(cursor)?;
         let mapped_value = (self.mapper)(value);
         Ok((mapped_value, cursor))
@@ -56,6 +53,7 @@ impl<'code, P> MapExt<'code> for P where P: Parser<'code> {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ByteCursor;
     use crate::ascii::i64;
     use crate::byte::is_byte;
     use crate::or::OrExt;

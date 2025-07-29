@@ -1,4 +1,3 @@
-use super::byte_cursor::ByteCursor;
 use super::parser::Parser;
 use crate::error::{ErrorLeaf, ErrorNode};
 use std::fmt;
@@ -68,15 +67,13 @@ impl<P1, P2> Or<P1, P2> {
 impl<'code, P1, P2, O> Parser<'code> for Or<P1, P2>
 where
     P1: Parser<'code, Output = O>,
-    P2: Parser<'code, Output = O>,
+    P2: Parser<'code, Output = O, Cursor = P1::Cursor>,
 {
+    type Cursor = P1::Cursor;
     type Output = O;
     type Error = OrError<P1::Error, P2::Error>;
 
-    fn parse(
-        &self,
-        cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
+    fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         match self.parser1.parse(cursor) {
             Ok(result) => Ok(result),
             Err(first_error) => match self.parser2.parse(cursor) {
@@ -94,7 +91,7 @@ where
 pub trait OrExt<'code>: Parser<'code> + Sized {
     fn or<P>(self, other: P) -> Or<Self, P>
     where
-        P: Parser<'code, Output = Self::Output>,
+        P: Parser<'code, Output = Self::Output, Cursor = Self::Cursor>,
     {
         Or::new(self, other)
     }
@@ -107,7 +104,7 @@ impl<'code, P> OrExt<'code> for P where P: Parser<'code> {}
 pub fn or<'code, P1, P2, O>(parser1: P1, parser2: P2) -> Or<P1, P2>
 where
     P1: Parser<'code, Output = O>,
-    P2: Parser<'code, Output = O>,
+    P2: Parser<'code, Output = O, Cursor = P1::Cursor>,
 {
     Or::new(parser1, parser2)
 }
@@ -115,8 +112,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Cursor;
     use crate::and::AndExt;
     use crate::byte::is_byte;
+    use crate::byte_cursor::ByteCursor;
     use crate::error::{CodeLoc, ParsicombError};
     use crate::filter::FilterExt;
     use crate::map::MapExt;

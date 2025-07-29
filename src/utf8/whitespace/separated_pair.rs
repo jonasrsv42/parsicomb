@@ -83,17 +83,15 @@ pub struct SeparatedPair<P1, PS, P2> {
 
 impl<'code, P1, PS, P2> Parser<'code> for SeparatedPair<P1, PS, P2>
 where
-    P1: Parser<'code>,
-    PS: Parser<'code>,
-    P2: Parser<'code>,
+    P1: Parser<'code, Cursor = ByteCursor<'code>>,
+    PS: Parser<'code, Cursor = ByteCursor<'code>>,
+    P2: Parser<'code, Cursor = ByteCursor<'code>>,
 {
+    type Cursor = ByteCursor<'code>;
     type Output = (P1::Output, P2::Output);
     type Error = SeparatedPairError<'code, P1::Error, PS::Error, P2::Error>;
 
-    fn parse(
-        &self,
-        cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
+    fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         // Parse: left + whitespace + separator + whitespace + right
         let (left_val, cursor) = self
             .left
@@ -138,6 +136,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Cursor;
     use crate::ascii::number::f64;
     use crate::byte_cursor::ByteCursor;
     use crate::utf8::string::is_string;

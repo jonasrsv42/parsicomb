@@ -1,9 +1,11 @@
+use crate::byte_cursor::ByteCursor;
 use crate::filter::FilterExt;
 use crate::parser::Parser;
 use crate::utf8::char::char;
 
 /// Convenience function to create a Unicode alphanumeric parser
-pub fn unicode_alphanumeric() -> impl for<'code> Parser<'code, Output = char> {
+pub fn unicode_alphanumeric()
+-> impl for<'code> Parser<'code, Cursor = ByteCursor<'code>, Output = char> {
     char().filter(|c| c.is_alphanumeric(), "expected Unicode letter or digit")
 }
 

@@ -1,3 +1,4 @@
+use crate::Cursor;
 use crate::byte::ByteParser;
 use crate::byte_cursor::ByteCursor;
 use crate::parser::Parser;
@@ -20,13 +21,11 @@ fn create_error<'code>(
 }
 
 impl<'code> Parser<'code> for CharParser {
+    type Cursor = ByteCursor<'code>;
     type Output = char;
     type Error = ParsicombError<'code>;
 
-    fn parse(
-        &self,
-        cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
+    fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let byte_parser = ByteParser::new();
 
         // 1. Read the first byte
@@ -143,13 +142,11 @@ pub fn char() -> CharParser {
 pub struct IsChar(char);
 
 impl<'code> Parser<'code> for IsChar {
+    type Cursor = ByteCursor<'code>;
     type Output = char;
     type Error = ParsicombError<'code>;
 
-    fn parse(
-        &self,
-        cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
+    fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let (ch, next_cursor) = char().parse(cursor)?;
         if ch == self.0 {
             Ok((ch, next_cursor))

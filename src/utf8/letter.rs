@@ -1,16 +1,17 @@
+use crate::byte_cursor::ByteCursor;
 use crate::filter::FilterExt;
 use crate::parser::Parser;
 use crate::utf8::char::char;
 
 /// Convenience function to create a Unicode letter parser
-pub fn unicode_letter() -> impl for<'code> Parser<'code, Output = char> {
+pub fn unicode_letter() -> impl for<'code> Parser<'code, Cursor = ByteCursor<'code>, Output = char>
+{
     char().filter(|c| c.is_alphabetic(), "expected Unicode letter")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::byte_cursor::ByteCursor;
 
     #[test]
     fn test_ascii_letters() {

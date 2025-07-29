@@ -1,4 +1,3 @@
-use super::byte_cursor::ByteCursor;
 use super::parser::Parser;
 use crate::error::{ErrorLeaf, ErrorNode};
 use std::fmt;
@@ -108,15 +107,13 @@ impl<P1, P2> And<P1, P2> {
 impl<'code, P1, P2> Parser<'code> for And<P1, P2>
 where
     P1: Parser<'code>,
-    P2: Parser<'code>,
+    P2: Parser<'code, Cursor = P1::Cursor>,
 {
+    type Cursor = P1::Cursor;
     type Output = (P1::Output, P2::Output);
     type Error = AndError<P1::Error, P2::Error>;
 
-    fn parse(
-        &self,
-        cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
+    fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let (result1, cursor) = self.parser1.parse(cursor).map_err(AndError::FirstParser)?;
         let (result2, cursor) = self.parser2.parse(cursor).map_err(AndError::SecondParser)?;
         Ok(((result1, result2), cursor))
@@ -127,7 +124,7 @@ where
 pub fn and<'code, P1, P2>(parser1: P1, parser2: P2) -> And<P1, P2>
 where
     P1: Parser<'code>,
-    P2: Parser<'code>,
+    P2: Parser<'code, Cursor = P1::Cursor>,
 {
     And::new(parser1, parser2)
 }
@@ -136,7 +133,7 @@ where
 pub trait AndExt<'code>: Parser<'code> + Sized {
     fn and<P>(self, other: P) -> And<Self, P>
     where
-        P: Parser<'code>,
+        P: Parser<'code, Cursor = Self::Cursor>,
     {
         And::new(self, other)
     }
@@ -148,8 +145,10 @@ impl<'code, P> AndExt<'code> for P where P: Parser<'code> {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Cursor;
     use crate::ascii::i64;
     use crate::byte::is_byte;
+    use crate::byte_cursor::ByteCursor;
 
     #[test]
     fn test_and_both_succeed() {

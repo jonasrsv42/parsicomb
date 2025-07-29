@@ -84,17 +84,15 @@ pub struct Between<P1, P2, P3> {
 
 impl<'code, P1, P2, P3> Parser<'code> for Between<P1, P2, P3>
 where
-    P1: Parser<'code>,
-    P2: Parser<'code>,
-    P3: Parser<'code>,
+    P1: Parser<'code, Cursor = ByteCursor<'code>>,
+    P2: Parser<'code, Cursor = ByteCursor<'code>>,
+    P3: Parser<'code, Cursor = ByteCursor<'code>>,
 {
+    type Cursor = ByteCursor<'code>;
     type Output = P2::Output;
     type Error = BetweenError<'code, P1::Error, P2::Error, P3::Error>;
 
-    fn parse(
-        &self,
-        cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
+    fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         // Parse: open + whitespace + content + whitespace + close
         let (_, cursor) = self
             .open
@@ -118,9 +116,9 @@ where
 
 pub fn between<'code, P1, P2, P3>(open: P1, content: P2, close: P3) -> Between<P1, P2, P3>
 where
-    P1: Parser<'code>,
-    P2: Parser<'code>,
-    P3: Parser<'code>,
+    P1: Parser<'code, Cursor = ByteCursor<'code>>,
+    P2: Parser<'code, Cursor = ByteCursor<'code>>,
+    P3: Parser<'code, Cursor = ByteCursor<'code>>,
 {
     Between {
         open,
@@ -132,6 +130,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Cursor;
     use crate::and::AndExt;
     use crate::ascii::number::f64;
     use crate::byte::is_byte;

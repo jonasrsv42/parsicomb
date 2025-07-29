@@ -1,4 +1,3 @@
-use super::byte_cursor::ByteCursor;
 use super::parser::Parser;
 use crate::error::{ErrorLeaf, ErrorNode};
 use std::fmt;
@@ -89,15 +88,13 @@ impl<P1, P2> ThenOptionally<P1, P2> {
 impl<'code, P1, P2> Parser<'code> for ThenOptionally<P1, P2>
 where
     P1: Parser<'code>,
-    P2: Parser<'code>,
+    P2: Parser<'code, Cursor = P1::Cursor>,
 {
+    type Cursor = P1::Cursor;
     type Output = (P1::Output, Option<P2::Output>);
     type Error = ThenOptionallyError<P1::Error>;
 
-    fn parse(
-        &self,
-        cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
+    fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let (result1, cursor) = self
             .parser1
             .parse(cursor)
@@ -136,6 +133,9 @@ impl<'code, P> ThenOptionallyExt<'code> for P where P: Parser<'code> {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ByteCursor;
+    use crate::Cursor;
+    use crate::Parser;
     use crate::ascii::i64;
     use crate::byte::is_byte;
 

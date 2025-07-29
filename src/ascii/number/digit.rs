@@ -1,15 +1,18 @@
 use crate::ParsicombError;
 use crate::byte::between_bytes;
+use crate::byte_cursor::ByteCursor;
 use crate::parser::Parser;
 
 /// Parser that matches a single ASCII digit (0-9)
-pub fn digit<'code>() -> impl Parser<'code, Output = u8, Error = ParsicombError<'code>> {
+pub fn digit<'code>()
+-> impl Parser<'code, Cursor = ByteCursor<'code>, Output = u8, Error = ParsicombError<'code>> {
     between_bytes(b'0', b'9')
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Cursor;
     use crate::byte_cursor::ByteCursor;
 
     #[test]

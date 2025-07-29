@@ -1,4 +1,3 @@
-use super::byte_cursor::ByteCursor;
 use super::parser::Parser;
 
 /// Parser combinator that matches one or more occurrences of the given parser
@@ -16,13 +15,11 @@ impl<'code, P> Parser<'code> for Some<P>
 where
     P: Parser<'code>,
 {
+    type Cursor = P::Cursor;
     type Output = Vec<P::Output>;
     type Error = P::Error;
 
-    fn parse(
-        &self,
-        cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
+    fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let mut results = Vec::new();
 
         // First parse must succeed
@@ -58,7 +55,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Cursor;
     use crate::byte::{ByteParser, is_byte};
+    use crate::byte_cursor::ByteCursor;
 
     #[test]
     fn test_some_zero_matches_fails() {

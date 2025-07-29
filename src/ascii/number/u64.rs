@@ -1,24 +1,24 @@
 use super::digit::digit;
+use crate::Cursor;
 use crate::byte_cursor::ByteCursor;
 use crate::parser::Parser;
 use crate::some::some;
 use crate::{CodeLoc, ParsicombError};
 
 /// Parser that matches one or more ASCII digits and returns them as a u64
-pub fn u64<'code>() -> impl Parser<'code, Output = u64, Error = ParsicombError<'code>> {
+pub fn u64<'code>()
+-> impl Parser<'code, Cursor = ByteCursor<'code>, Output = u64, Error = ParsicombError<'code>> {
     UIntParser
 }
 
 struct UIntParser;
 
 impl<'code> Parser<'code> for UIntParser {
+    type Cursor = ByteCursor<'code>;
     type Output = u64;
     type Error = ParsicombError<'code>;
 
-    fn parse(
-        &self,
-        cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
+    fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let (digit_bytes, cursor) = some(digit()).parse(cursor)?;
 
         // Convert digits to string
@@ -52,6 +52,7 @@ impl<'code> Parser<'code> for UIntParser {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Cursor;
     use crate::byte_cursor::ByteCursor;
 
     #[test]

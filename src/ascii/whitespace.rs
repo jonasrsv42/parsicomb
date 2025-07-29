@@ -1,10 +1,12 @@
 use crate::byte::is_byte;
+use crate::byte_cursor::ByteCursor;
 use crate::or::{OrError, OrExt};
 use crate::parser::Parser;
 
 /// Parser that matches a single ASCII whitespace character (space, tab, newline, carriage return)  
 pub fn whitespace<'code>() -> impl Parser<
     'code,
+    Cursor = ByteCursor<'code>,
     Output = u8,
     Error = OrError<
         OrError<
@@ -23,6 +25,7 @@ pub fn whitespace<'code>() -> impl Parser<
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Cursor;
     use crate::byte_cursor::ByteCursor;
     use crate::many::many;
 

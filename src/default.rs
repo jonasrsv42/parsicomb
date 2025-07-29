@@ -19,13 +19,11 @@ impl<'code, T> Parser<'code> for DefaultParser<T>
 where
     T: Default,
 {
+    type Cursor = ByteCursor<'code>;
     type Output = T;
     type Error = ParsicombError<'code>;
 
-    fn parse(
-        &self,
-        cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
+    fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         Ok((T::default(), cursor))
     }
 }
@@ -41,6 +39,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Cursor;
 
     #[test]
     fn test_default_string() {

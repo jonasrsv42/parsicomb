@@ -1,4 +1,4 @@
-use crate::byte_cursor::ByteCursor;
+use crate::Cursor;
 use crate::parser::Parser;
 
 /// Parser that repeatedly applies another parser until a predicate is satisfied
@@ -16,25 +16,21 @@ impl<P, F> TakeUntilParser<P, F> {
 impl<'code, P, F, T> Parser<'code> for TakeUntilParser<P, F>
 where
     P: Parser<'code, Output = T>,
+    P::Cursor: Cursor<'code>,
     F: Fn(&T) -> bool,
 {
+    type Cursor = P::Cursor;
     type Output = Vec<T>;
     type Error = P::Error;
 
-    fn parse(
-        &self,
-        cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
+    fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let mut result = Vec::new();
         let mut current_cursor = cursor;
 
         loop {
             // Check if we've reached end of input
-            match current_cursor {
-                ByteCursor::EndOfFile { .. } => {
-                    return Ok((result, current_cursor));
-                }
-                _ => {}
+            if current_cursor.eos() {
+                return Ok((result, current_cursor));
             }
 
             // Try to parse the next item
@@ -67,6 +63,7 @@ pub fn take_until<P, F>(parser: P, predicate: F) -> TakeUntilParser<P, F> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ByteCursor;
     use crate::byte::byte;
     use crate::utf8::char::char;
 

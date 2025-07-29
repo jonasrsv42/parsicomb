@@ -1,21 +1,21 @@
-use crate::byte_cursor::ByteCursor;
+use crate::atomic::Atomic;
 use crate::error::{ErrorLeaf, ErrorNode};
 use crate::parser::Parser;
-use crate::{CodeLoc, ParsicombError};
+use crate::{CodeLoc, Cursor, ParsicombError};
 use std::borrow::Cow;
 use std::fmt;
 
 /// Error type for filter parser that can wrap either the child parser's error
 /// or a filter-specific error
 #[derive(Debug)]
-pub enum FilterError<'code, E> {
+pub enum FilterError<'code, E, T: Atomic = u8> {
     /// Error from the child parser
     ParserError(E),
     /// Filter predicate failed
-    FilterFailed(ParsicombError<'code>),
+    FilterFailed(ParsicombError<'code, T>),
 }
 
-impl<'code, E: fmt::Display> fmt::Display for FilterError<'code, E> {
+impl<'code, E: fmt::Display, T: Atomic> fmt::Display for FilterError<'code, E, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             FilterError::ParserError(e) => write!(f, "{}", e),
@@ -24,12 +24,13 @@ impl<'code, E: fmt::Display> fmt::Display for FilterError<'code, E> {
     }
 }
 
-impl<'code, E: std::error::Error> std::error::Error for FilterError<'code, E> {}
+impl<'code, E: std::error::Error, T: Atomic> std::error::Error for FilterError<'code, E, T> {}
 
 // Implement ErrorBranch for FilterError to enable furthest-error selection in nested structures
-impl<'code, E> ErrorNode<'code> for FilterError<'code, E>
+impl<'code, E, T: Atomic> ErrorNode<'code> for FilterError<'code, E, T>
 where
     E: ErrorNode<'code>,
+    T: 'code,
 {
     fn likely_error(self) -> Box<dyn ErrorLeaf + 'code> {
         match self {
@@ -59,15 +60,15 @@ impl<P, F> FilterParser<P, F> {
 impl<'code, P, F, T> Parser<'code> for FilterParser<P, F>
 where
     P: Parser<'code, Output = T>,
+    P::Cursor: Cursor<'code>,
+    <P::Cursor as Cursor<'code>>::Element: Atomic + 'code,
     F: Fn(&T) -> bool,
 {
+    type Cursor = P::Cursor;
     type Output = T;
-    type Error = FilterError<'code, P::Error>;
+    type Error = FilterError<'code, P::Error, <P::Cursor as Cursor<'code>>::Element>;
 
-    fn parse(
-        &self,
-        cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
+    fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let (value, new_cursor) = self
             .parser
             .parse(cursor)
@@ -118,6 +119,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ByteCursor;
     use crate::utf8::char::char;
 
     #[test]

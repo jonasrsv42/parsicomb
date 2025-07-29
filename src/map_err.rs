@@ -1,4 +1,3 @@
-use super::byte_cursor::ByteCursor;
 use super::parser::Parser;
 use crate::error::ErrorNode;
 use std::fmt;
@@ -33,13 +32,11 @@ where
     F: Fn(E1) -> E2,
     E2: std::error::Error + ErrorNode<'code>,
 {
+    type Cursor = P::Cursor;
     type Output = P::Output;
     type Error = E2;
 
-    fn parse(
-        &self,
-        cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
+    fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         self.parser.parse(cursor).map_err(&self.mapper)
     }
 }
@@ -71,7 +68,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::byte_cursor::ByteCursor;
+    use crate::{ByteCursor, Cursor};
     use crate::{ErrorLeaf, ParsicombError};
 
     use std::fmt;
@@ -107,13 +104,11 @@ mod tests {
     struct AlwaysFailParser;
 
     impl<'code> Parser<'code> for AlwaysFailParser {
+        type Cursor = ByteCursor<'code>;
         type Output = char;
         type Error = ParsicombError<'code>;
 
-        fn parse(
-            &self,
-            cursor: ByteCursor<'code>,
-        ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
+        fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
             let (data, position) = cursor.inner();
             Err(ParsicombError::SyntaxError {
                 message: "always fails".into(),
@@ -126,13 +121,11 @@ mod tests {
     struct AlwaysSucceedParser;
 
     impl<'code> Parser<'code> for AlwaysSucceedParser {
+        type Cursor = ByteCursor<'code>;
         type Output = char;
         type Error = ParsicombError<'code>;
 
-        fn parse(
-            &self,
-            cursor: ByteCursor<'code>,
-        ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
+        fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
             Ok(('x', cursor))
         }
     }

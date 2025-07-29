@@ -1,5 +1,6 @@
 use super::i64::i64;
 use super::u64::u64;
+use crate::Cursor;
 use crate::and::AndExt;
 use crate::byte::is_byte;
 use crate::byte_cursor::ByteCursor;
@@ -9,20 +10,19 @@ use crate::{CodeLoc, ParsicombError};
 const MAX_FRACTIONAL_DIGITS: usize = 15;
 
 /// Parser for int.uint format (e.g., 123.456, -42.789)
-fn int_dot_uint<'code>() -> impl Parser<'code, Output = f64, Error = ParsicombError<'code>> {
+fn int_dot_uint<'code>()
+-> impl Parser<'code, Cursor = ByteCursor<'code>, Output = f64, Error = ParsicombError<'code>> {
     IntDotUintParser
 }
 
 struct IntDotUintParser;
 
 impl<'code> Parser<'code> for IntDotUintParser {
+    type Cursor = ByteCursor<'code>;
     type Output = f64;
     type Error = ParsicombError<'code>;
 
-    fn parse(
-        &self,
-        cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
+    fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let (((int_part, _), frac_part), cursor) = i64()
             .and(is_byte(b'.'))
             .and(u64())
@@ -77,13 +77,15 @@ impl<'code> Parser<'code> for IntDotUintParser {
 }
 
 /// Parser that matches ASCII floating point numbers
-pub fn f64<'code>() -> impl Parser<'code, Output = f64, Error = ParsicombError<'code>> {
+pub fn f64<'code>()
+-> impl Parser<'code, Cursor = ByteCursor<'code>, Output = f64, Error = ParsicombError<'code>> {
     int_dot_uint()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Cursor;
 
     #[test]
     fn test_int_dot_uint() {

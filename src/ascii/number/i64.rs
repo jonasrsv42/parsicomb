@@ -1,23 +1,23 @@
 use super::u64::u64;
+use crate::Cursor;
 use crate::byte_cursor::ByteCursor;
 use crate::parser::Parser;
 use crate::{CodeLoc, ParsicombError};
 
 /// Parser that matches ASCII integer numbers (positive or negative)
-pub fn i64<'code>() -> impl Parser<'code, Output = i64, Error = ParsicombError<'code>> {
+pub fn i64<'code>()
+-> impl Parser<'code, Cursor = ByteCursor<'code>, Output = i64, Error = ParsicombError<'code>> {
     IntParser
 }
 
 struct IntParser;
 
 impl<'code> Parser<'code> for IntParser {
+    type Cursor = ByteCursor<'code>;
     type Output = i64;
     type Error = ParsicombError<'code>;
 
-    fn parse(
-        &self,
-        cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), Self::Error> {
+    fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let mut cursor = cursor;
         let mut is_negative = false;
 

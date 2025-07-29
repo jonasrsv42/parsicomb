@@ -12,8 +12,10 @@
 
 pub mod and;
 pub mod ascii;
+pub mod atomic;
 pub mod byte;
 pub mod byte_cursor;
+pub mod cursors;
 pub mod default;
 pub mod error;
 pub mod filter;
@@ -27,5 +29,8 @@ pub mod take_until;
 pub mod then_optionally;
 pub mod utf8;
 
+pub use atomic::Atomic;
+pub use byte_cursor::ByteCursor;
+pub use cursors::Cursor;
 pub use error::{CodeLoc, ErrorLeaf, ErrorNode, ParsicombError};
 pub use parser::Parser;

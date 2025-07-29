@@ -1,27 +1,39 @@
+use crate::cursors::Cursor;
 use crate::{CodeLoc, ParsicombError};
 
 #[derive(Debug, Copy, Clone)]
-pub enum ByteCursor<'a> {
+pub enum ByteCursor<'code> {
     /// Cursor pointing at a valid byte position
     Valid {
-        data: &'a [u8],
+        data: &'code [u8],
         /// Byte position in the data slice (0-based index)
         position: usize,
     },
     /// Cursor at end of file - no more bytes to read
-    EndOfFile { data: &'a [u8] },
+    EndOfFile { data: &'code [u8] },
 }
 
-impl<'a> ByteCursor<'a> {
-    pub fn new(data: &'a [u8]) -> Self {
+impl<'code> ByteCursor<'code> {
+    pub fn new(data: &'code [u8]) -> Self {
         if data.is_empty() {
             return ByteCursor::EndOfFile { data };
         }
         ByteCursor::Valid { data, position: 0 }
     }
+}
 
-    /// Advances the cursor to the next byte
-    pub fn next(self) -> Self {
+impl<'code> Cursor<'code> for ByteCursor<'code> {
+    type Element = u8;
+    type Error = ParsicombError<'code>;
+
+    fn value(&self) -> Result<Self::Element, Self::Error> {
+        match self {
+            ByteCursor::Valid { data, position } => Ok(data[*position]),
+            ByteCursor::EndOfFile { .. } => Err(ParsicombError::CannotReadValueAtEof),
+        }
+    }
+
+    fn next(self) -> Self {
         match self {
             ByteCursor::Valid { data, position } => {
                 if position + 1 >= data.len() {
@@ -37,8 +49,7 @@ impl<'a> ByteCursor<'a> {
         }
     }
 
-    /// Advances the cursor to the next byte, returning an error if at EOF
-    pub fn try_next(self) -> Result<Self, ParsicombError<'a>> {
+    fn try_next(self) -> Result<Self, Self::Error> {
         match self {
             ByteCursor::Valid { .. } => {
                 let next = self.next();
@@ -53,34 +64,21 @@ impl<'a> ByteCursor<'a> {
         }
     }
 
-    /// Get the byte value at the current cursor position
-    pub fn value(&self) -> Result<u8, ParsicombError<'a>> {
-        match self {
-            ByteCursor::Valid { data, position } => Ok(data[*position]),
-            ByteCursor::EndOfFile { .. } => Err(ParsicombError::CannotReadValueAtEof),
-        }
-    }
-
-    /// Get the current position without consuming the cursor
-    /// For EndOfFile, returns the length of the data
-    pub fn position(&self) -> usize {
+    fn position(&self) -> usize {
         match self {
             ByteCursor::Valid { position, .. } => *position,
             ByteCursor::EndOfFile { data } => data.len(),
         }
     }
 
-    /// Get the source data without consuming the cursor
-    pub fn source(&self) -> &'a [u8] {
+    fn source(&self) -> &'code [Self::Element] {
         match self {
             ByteCursor::Valid { data, .. } => data,
             ByteCursor::EndOfFile { data } => data,
         }
     }
 
-    /// Consume the cursor and return its inner data and position
-    /// For EndOfFile, position is the length of the data
-    pub fn inner(self) -> (&'a [u8], usize) {
+    fn inner(self) -> (&'code [Self::Element], usize) {
         match self {
             ByteCursor::Valid { data, position } => (data, position),
             ByteCursor::EndOfFile { data } => (data, data.len()),

@@ -1,5 +1,6 @@
 use super::byte_cursor::ByteCursor;
 use super::parser::Parser;
+use crate::Cursor;
 use crate::{CodeLoc, ParsicombError};
 
 /// Parser that consumes and returns a single byte
@@ -17,13 +18,11 @@ pub fn byte() -> ByteParser {
 }
 
 impl<'code> Parser<'code> for ByteParser {
+    type Cursor = ByteCursor<'code>;
     type Output = u8;
     type Error = ParsicombError<'code>;
 
-    fn parse(
-        &self,
-        cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), ParsicombError<'code>> {
+    fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let byte = cursor.value()?;
         Ok((byte, cursor.next()))
     }
@@ -41,13 +40,11 @@ impl IsByteParser {
 }
 
 impl<'code> Parser<'code> for IsByteParser {
+    type Cursor = ByteCursor<'code>;
     type Output = u8;
     type Error = ParsicombError<'code>;
 
-    fn parse(
-        &self,
-        cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), ParsicombError<'code>> {
+    fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         match cursor.value() {
             Ok(byte) if byte == self.expected => Ok((byte, cursor.next())),
             Ok(byte) => {
@@ -82,13 +79,11 @@ impl BetweenBytesParser {
 }
 
 impl<'code> Parser<'code> for BetweenBytesParser {
+    type Cursor = ByteCursor<'code>;
     type Output = u8;
     type Error = ParsicombError<'code>;
 
-    fn parse(
-        &self,
-        cursor: ByteCursor<'code>,
-    ) -> Result<(Self::Output, ByteCursor<'code>), ParsicombError<'code>> {
+    fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         match cursor.value() {
             Ok(byte) if byte >= self.start && byte <= self.end => Ok((byte, cursor.next())),
             Ok(byte) => {

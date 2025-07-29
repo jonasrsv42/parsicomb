@@ -1,3 +1,4 @@
+use crate::byte_cursor::ByteCursor;
 use crate::map::MapExt;
 use crate::or::OrExt;
 use crate::parser::Parser;
@@ -19,13 +20,14 @@ pub enum Number {
 }
 
 /// Parser that matches either an integer or a float and returns a Number enum
-pub fn number<'code>() -> impl Parser<'code, Output = Number> {
+pub fn number<'code>() -> impl Parser<'code, Cursor = ByteCursor<'code>, Output = Number> {
     f64().map(Number::F64).or(i64().map(Number::I64))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Cursor;
     use crate::byte_cursor::ByteCursor;
 
     #[test]
