@@ -63,14 +63,18 @@ mod tests {
     use crate::filter::FilterExt;
     use crate::many::many;
     use crate::then_optionally::ThenOptionallyExt;
-    use crate::{ByteCursor, Parser, ParsicombError, CodeLoc};
+    use crate::{ByteCursor, CodeLoc, Parser, ParsicombError};
 
     // Test implementation of Atomic for u32
     impl Atomic for u32 {
         const NEWLINE: Self = 10; // ASCII newline as u32
-        
+
         fn format_slice(slice: &[Self]) -> String {
-            slice.iter().map(|&x| format!("{}", x)).collect::<Vec<_>>().join(" ")
+            slice
+                .iter()
+                .map(|&x| format!("{}", x))
+                .collect::<Vec<_>>()
+                .join(" ")
         }
     }
 
@@ -111,7 +115,10 @@ mod tests {
                     if position + 1 >= data.len() {
                         U32Cursor::EndOfFile { data }
                     } else {
-                        U32Cursor::Valid { data, position: position + 1 }
+                        U32Cursor::Valid {
+                            data,
+                            position: position + 1,
+                        }
                     }
                 }
                 U32Cursor::EndOfFile { data } => U32Cursor::EndOfFile { data },
@@ -180,7 +187,7 @@ mod tests {
         let data = b"aaabbb";
         let cursor = ByteCursor::new(data);
         let parser: AtomicParser<ByteCursor> = atomic();
-        
+
         let many_parser = many(parser.filter(|&b| b == b'a', "expected 'a'"));
         let (results, _) = many_parser.parse(cursor).unwrap();
         assert_eq!(results, vec![b'a', b'a', b'a']);
@@ -191,7 +198,7 @@ mod tests {
         let data = [5u32, 5u32, 5u32, 7u32, 8u32];
         let cursor = U32Cursor::new(&data);
         let parser: AtomicParser<U32Cursor> = atomic();
-        
+
         let many_parser = many(parser.filter(|&x| x == 5, "expected 5"));
         let (results, _) = many_parser.parse(cursor).unwrap();
         assert_eq!(results, vec![5u32, 5u32, 5u32]);
@@ -202,7 +209,7 @@ mod tests {
         let data = b"A";
         let cursor = ByteCursor::new(data);
         let parser: AtomicParser<ByteCursor> = atomic();
-        
+
         let filtered = parser.filter(|&b| b.is_ascii_uppercase(), "expected uppercase");
         let (result, _) = filtered.parse(cursor).unwrap();
         assert_eq!(result, b'A');
@@ -213,7 +220,7 @@ mod tests {
         let data = [42u32];
         let cursor = U32Cursor::new(&data);
         let parser: AtomicParser<U32Cursor> = atomic();
-        
+
         let filtered = parser.filter(|&x| x > 40, "expected > 40");
         let (result, _) = filtered.parse(cursor).unwrap();
         assert_eq!(result, 42u32);
@@ -224,7 +231,7 @@ mod tests {
         let data = [30u32];
         let cursor = U32Cursor::new(&data);
         let parser: AtomicParser<U32Cursor> = atomic();
-        
+
         let filtered = parser.filter(|&x| x > 40, "expected > 40");
         let result = filtered.parse(cursor);
         assert!(result.is_err());
@@ -236,11 +243,11 @@ mod tests {
         let cursor = ByteCursor::new(data);
         let parser_a: AtomicParser<ByteCursor> = atomic();
         let parser_b: AtomicParser<ByteCursor> = atomic();
-        
+
         let combined = parser_a
             .filter(|&b| b == b'A', "expected A")
             .then_optionally(parser_b.filter(|&b| b == b'B', "expected B"));
-        
+
         let ((a, b_opt), _) = combined.parse(cursor).unwrap();
         assert_eq!(a, b'A');
         assert_eq!(b_opt, Some(b'B'));
@@ -252,11 +259,11 @@ mod tests {
         let cursor = U32Cursor::new(&data);
         let parser_10: AtomicParser<U32Cursor> = atomic();
         let parser_20: AtomicParser<U32Cursor> = atomic();
-        
+
         let combined = parser_10
             .filter(|&x| x == 10, "expected 10")
             .then_optionally(parser_20.filter(|&x| x == 20, "expected 20"));
-        
+
         let ((first, second_opt), _) = combined.parse(cursor).unwrap();
         assert_eq!(first, 10u32);
         assert_eq!(second_opt, Some(20u32));
@@ -268,11 +275,11 @@ mod tests {
         let cursor = U32Cursor::new(&data);
         let parser_10: AtomicParser<U32Cursor> = atomic();
         let parser_20: AtomicParser<U32Cursor> = atomic();
-        
+
         let combined = parser_10
             .filter(|&x| x == 10, "expected 10")
             .then_optionally(parser_20.filter(|&x| x == 20, "expected 20"));
-        
+
         let ((first, second_opt), _) = combined.parse(cursor).unwrap();
         assert_eq!(first, 10u32);
         assert_eq!(second_opt, None); // Second parser failed, but that's OK
@@ -283,13 +290,11 @@ mod tests {
         let data = b"aaabcd";
         let cursor = ByteCursor::new(data);
         let parser: AtomicParser<ByteCursor> = atomic();
-        
+
         // Parse many 'a's, then optionally a 'b', then filter for specific values
         let complex = many(parser.filter(|&b| b == b'a', "expected 'a'"))
-            .then_optionally(
-                atomic::<ByteCursor>().filter(|&b| b == b'b', "expected 'b'")
-            );
-        
+            .then_optionally(atomic::<ByteCursor>().filter(|&b| b == b'b', "expected 'b'"));
+
         let ((as_vec, b_opt), remaining) = complex.parse(cursor).unwrap();
         assert_eq!(as_vec, vec![b'a', b'a', b'a']);
         assert_eq!(b_opt, Some(b'b'));
@@ -301,13 +306,11 @@ mod tests {
         let data = [1u32, 1u32, 1u32, 2u32, 3u32, 4u32];
         let cursor = U32Cursor::new(&data);
         let parser: AtomicParser<U32Cursor> = atomic();
-        
+
         // Parse many 1's, then optionally a 2, then continue
         let complex = many(parser.filter(|&x| x == 1, "expected 1"))
-            .then_optionally(
-                atomic::<U32Cursor>().filter(|&x| x == 2, "expected 2")
-            );
-        
+            .then_optionally(atomic::<U32Cursor>().filter(|&x| x == 2, "expected 2"));
+
         let ((ones_vec, two_opt), remaining) = complex.parse(cursor).unwrap();
         assert_eq!(ones_vec, vec![1u32, 1u32, 1u32]);
         assert_eq!(two_opt, Some(2u32));
@@ -319,10 +322,10 @@ mod tests {
         let data = [99u32];
         let cursor = U32Cursor::new(&data);
         let parser: AtomicParser<U32Cursor> = atomic();
-        
+
         let filtered = parser.filter(|&x| x < 50, "expected value < 50");
         let result = filtered.parse(cursor);
-        
+
         assert!(result.is_err());
         let error = result.unwrap_err();
         // The error should contain information about u32 elements

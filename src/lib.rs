@@ -29,7 +29,7 @@ pub mod take_until;
 pub mod then_optionally;
 pub mod utf8;
 
-pub use atomic::{atomic, Atomic, AtomicParser};
+pub use atomic::{Atomic, AtomicParser, atomic};
 pub use byte_cursor::ByteCursor;
 pub use cursors::Cursor;
 pub use error::{CodeLoc, ErrorLeaf, ErrorNode, ParsicombError};
