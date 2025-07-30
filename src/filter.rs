@@ -32,7 +32,7 @@ where
     E: ErrorNode<'code>,
     T: 'code,
 {
-    fn likely_error(self) -> Box<dyn ErrorLeaf + 'code> {
+    fn likely_error(&self) -> &dyn ErrorLeaf {
         match self {
             FilterError::ParserError(e) => e.likely_error(),
             FilterError::FilterFailed(parsicomb_error) => parsicomb_error.likely_error(),

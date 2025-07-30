@@ -91,12 +91,15 @@ mod tests {
 
     impl std::error::Error for CustomError {}
 
+    impl ErrorLeaf for CustomError {
+        fn byte_position(&self) -> usize {
+            0 // Default position for test error
+        }
+    }
+
     impl<'code> ErrorNode<'code> for CustomError {
-        fn likely_error(self) -> Box<dyn ErrorLeaf + 'code> {
-            Box::new(crate::ParsicombError::SyntaxError {
-                message: self.to_string().into(),
-                loc: crate::CodeLoc::new(b"", 0),
-            })
+        fn likely_error(&self) -> &dyn ErrorLeaf {
+            self
         }
     }
 

@@ -51,7 +51,7 @@ where
     ES: ErrorNode<'code>,
     E2: ErrorNode<'code>,
 {
-    fn likely_error(self) -> Box<dyn ErrorLeaf + 'code> {
+    fn likely_error(&self) -> &dyn ErrorLeaf {
         match self {
             SeparatedPairError::LeftParser(e1) => e1.likely_error(),
             SeparatedPairError::LeftWhitespace(e) => e.likely_error(),

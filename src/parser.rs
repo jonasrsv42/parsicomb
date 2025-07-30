@@ -3,7 +3,7 @@ use crate::error::ErrorNode;
 use std::error::Error;
 
 /// Core parser trait for parser combinators
-pub trait Parser<'code>: Sized {
+pub trait Parser<'code> {
     /// The cursor type this parser operates on
     type Cursor: Cursor<'code>;
 

@@ -8,13 +8,7 @@ pub fn whitespace<'code>() -> impl Parser<
     'code,
     Cursor = ByteCursor<'code>,
     Output = u8,
-    Error = OrError<
-        OrError<
-            OrError<crate::ParsicombError<'code>, crate::ParsicombError<'code>>,
-            crate::ParsicombError<'code>,
-        >,
-        crate::ParsicombError<'code>,
-    >,
+    Error = OrError<'code>,
 > {
     is_byte(b' ')
         .or(is_byte(b'\t'))

@@ -47,14 +47,14 @@ pub trait ErrorLeaf: Error {
 ///
 /// // Implement ErrorNode (converts to itself since it's already a terminal type)
 /// impl<'a> ErrorNode<'a> for MyError {
-///     fn likely_error(self) -> Box<dyn ErrorLeaf + 'a> {
-///         Box::new(self)
+///     fn likely_error(&self) -> &dyn ErrorLeaf {
+///         self
 ///     }
 /// }
 /// ```
-pub trait ErrorNode<'code> {
+pub trait ErrorNode<'code>: std::fmt::Display + std::fmt::Debug {
     /// Flatten nested error structures and return the likely error that made it furthest
-    fn likely_error(self) -> Box<dyn ErrorLeaf + 'code>;
+    fn likely_error(&self) -> &dyn ErrorLeaf;
 }
 
 #[derive(Debug)]
@@ -244,7 +244,7 @@ impl<'code, T: Atomic> ErrorNode<'code> for ParsicombError<'code, T>
 where
     T: 'code,
 {
-    fn likely_error(self) -> Box<dyn ErrorLeaf + 'code> {
-        Box::new(self) // Already the base type
+    fn likely_error(&self) -> &dyn ErrorLeaf {
+        self // Already the base type
     }
 }

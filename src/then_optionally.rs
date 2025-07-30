@@ -37,7 +37,7 @@ impl<'code, E> ErrorNode<'code> for ThenOptionallyError<E>
 where
     E: ErrorNode<'code>,
 {
-    fn likely_error(self) -> Box<dyn ErrorLeaf + 'code> {
+    fn likely_error(&self) -> &dyn ErrorLeaf {
         match self {
             // First parser failed - return its error
             ThenOptionallyError::FirstParser(e) => e.likely_error(),

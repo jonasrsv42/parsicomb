@@ -51,7 +51,7 @@ where
     E2: ErrorNode<'code>,
     E3: ErrorNode<'code>,
 {
-    fn likely_error(self) -> Box<dyn ErrorLeaf + 'code> {
+    fn likely_error(&self) -> &dyn ErrorLeaf {
         match self {
             BetweenError::OpenDelimiter(e1) => e1.likely_error(),
             BetweenError::OpenWhitespace(e) => e.likely_error(),
