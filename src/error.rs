@@ -178,6 +178,10 @@ pub enum ParsicombError<'code, T: Atomic = u8> {
         message: Cow<'static, str>,
         loc: CodeLoc<'code, T>,
     },
+    /// Wrapped error from another parser combinator
+    WrappedError {
+        inner: Box<dyn ErrorNode<'code> + 'code>,
+    },
 }
 
 impl<'code, T: Atomic> fmt::Display for ParsicombError<'code, T> {
@@ -215,6 +219,11 @@ impl<'code, T: Atomic> fmt::Display for ParsicombError<'code, T> {
                 }
                 Ok(())
             }
+            ParsicombError::WrappedError { inner } => {
+                // Delegate to the inner error's likely_error for display
+                let likely = inner.likely_error();
+                write!(f, "{}", likely)
+            }
         }
     }
 }
@@ -222,6 +231,13 @@ impl<'code, T: Atomic> fmt::Display for ParsicombError<'code, T> {
 impl<'code, T: Atomic> Error for ParsicombError<'code, T> {}
 
 impl<'code, T: Atomic> ParsicombError<'code, T> {
+    /// Wrap an ErrorNode in a ParsicombError
+    pub fn wrap(error: impl ErrorNode<'code> + 'code) -> Self {
+        ParsicombError::WrappedError {
+            inner: Box::new(error),
+        }
+    }
+
     /// Returns the position where this error occurred
     pub fn position(&self) -> usize {
         match self {
@@ -229,6 +245,10 @@ impl<'code, T: Atomic> ParsicombError<'code, T> {
             ParsicombError::AlreadyAtEndOfFile => 0, // Assume EOF is at end
             ParsicombError::CannotReadValueAtEof => 0, // Assume EOF is at end
             ParsicombError::SyntaxError { loc, .. } => loc.position(),
+            ParsicombError::WrappedError { inner } => {
+                // Delegate to the wrapped error's likely_error
+                inner.likely_error().byte_position()
+            }
         }
     }
 }

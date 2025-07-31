@@ -27,7 +27,7 @@ impl<'code> Parser<'code> for IntDotUintParser {
             .and(is_byte(b'.'))
             .and(u64())
             .parse(cursor)
-            .map_err(|e| ParsicombError::from(e))?;
+            .map_err(ParsicombError::wrap)?;
 
         let frac_digits = frac_part.to_string().len();
 

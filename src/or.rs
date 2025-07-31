@@ -2,24 +2,62 @@ use super::parser::Parser;
 use crate::error::{ErrorLeaf, ErrorNode};
 use std::fmt;
 
+// # Or Combinator - Dynamic Dispatch for Compile Time Performance
+//
+// ## Why We Use `Box<dyn Parser>` and `Box<dyn ErrorNode>`
+//
+// This combinator uses dynamic dispatch (trait objects) to solve a critical compile-time
+// performance issue. Without boxing, chaining `.or()` calls creates exponentially complex types:
+//
+// ```ignore
+// // Without boxing, this creates nested types:
+// // Or<Or<Or<P1, P2>, P3>, P4>
+// // With error types: OrError<OrError<OrError<E1, E2>, E3>, E4>
+//
+// let parser = a.or(b).or(c).or(d).or(e); // Gets progressively worse
+// ```
+//
+// **The Problem**: Deep generic nesting causes:
+// - Exponential compile times (we've seen infinite compilation in downstream crates)
+// - Exponential memory usage during compilation
+// - Unreadable error messages
+// - Inability to express recursive grammars
+//
+// **The Solution**: Dynamic dispatch flattens all chains to:
+// ```ignore
+// // With boxing: Always just Or<'code, Cursor, Output, E1, E2>
+// // With error: Always just OrError<'code>
+// ```
+//
+// ## Performance Trade-offs
+//
+// **Cost**: One additional heap allocation per combinator + virtual dispatch
+// **Benefit**: Eliminates compile-time explosion, enables recursive parsers
+// **Result**: Faster development iteration, ability to parse complex grammars
+//
+// ## Error Handling Strategy
+//
+// Errors are stored as `Box<dyn ErrorNode>` and only converted to concrete types
+// when displaying errors (via `likely_error()`). This avoids cloning during
+// error propagation while preserving full error information.
+
 /// Error type for Or parser that can wrap errors from both parsers when both fail
 pub enum OrError<'code> {
     /// Both parsers failed
-    BothFailed { 
-        first: Box<dyn ErrorNode<'code> + 'code>, 
-        second: Box<dyn ErrorNode<'code> + 'code> 
+    BothFailed {
+        first: Box<dyn ErrorNode<'code> + 'code>,
+        second: Box<dyn ErrorNode<'code> + 'code>,
     },
 }
 
 impl<'code> std::fmt::Debug for OrError<'code> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            OrError::BothFailed { first, second } => {
-                f.debug_struct("BothFailed")
-                    .field("first", &format!("{}", &**first))
-                    .field("second", &format!("{}", &**second))
-                    .finish()
-            }
+            OrError::BothFailed { first, second } => f
+                .debug_struct("BothFailed")
+                .field("first", &format!("{}", &**first))
+                .field("second", &format!("{}", &**second))
+                .finish(),
         }
     }
 }
@@ -116,7 +154,10 @@ pub trait OrExt<'code>: Parser<'code> + Sized {
 impl<'code, P> OrExt<'code> for P where P: Parser<'code> {}
 
 /// Convenience function to create an Or parser
-pub fn or<'code, P1, P2>(parser1: P1, parser2: P2) -> Or<'code, P1::Cursor, P1::Output, P1::Error, P2::Error>
+pub fn or<'code, P1, P2>(
+    parser1: P1,
+    parser2: P2,
+) -> Or<'code, P1::Cursor, P1::Output, P1::Error, P2::Error>
 where
     P1: Parser<'code> + 'code,
     P2: Parser<'code, Output = P1::Output, Cursor = P1::Cursor> + 'code,
