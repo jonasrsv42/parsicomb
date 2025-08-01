@@ -11,7 +11,7 @@ pub trait Parser<'code> {
     type Output;
 
     /// The error type produced by failed parsing
-    type Error: Error + ErrorNode<'code>;
+    type Error: Error + ErrorNode<'code, Element = <Self::Cursor as Cursor<'code>>::Element>;
 
     /// Attempt to parse from the given cursor position
     ///

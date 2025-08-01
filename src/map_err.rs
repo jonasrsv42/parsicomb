@@ -1,4 +1,5 @@
 use super::parser::Parser;
+use crate::cursors::Cursor;
 use crate::error::ErrorNode;
 use std::fmt;
 
@@ -30,7 +31,7 @@ impl<'code, P, F, E1, E2> Parser<'code> for MapErr<P, F>
 where
     P: Parser<'code, Error = E1>,
     F: Fn(E1) -> E2,
-    E2: std::error::Error + ErrorNode<'code>,
+    E2: std::error::Error + ErrorNode<'code, Element = <P::Cursor as Cursor<'code>>::Element>,
 {
     type Cursor = P::Cursor;
     type Output = P::Output;

@@ -31,7 +31,7 @@ impl<'code, C> Parser<'code> for AtomicParser<C>
 where
     C: Cursor<'code>,
     C::Element: Atomic,
-    C::Error: ErrorNode<'code>,
+    C::Error: ErrorNode<'code, Element = C::Element>,
 {
     type Cursor = C;
     type Output = C::Element;
