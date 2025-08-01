@@ -1,4 +1,5 @@
 use super::parser::Parser;
+use crate::atomic::Atomic;
 use crate::error::{ErrorLeaf, ErrorNode};
 use std::fmt;
 
@@ -13,7 +14,9 @@ pub enum ThenOptionallyError<E> {
 impl<E: fmt::Display> fmt::Display for ThenOptionallyError<E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ThenOptionallyError::FirstParser(e) => write!(f, "Required parser failed: {}", e),
+            ThenOptionallyError::FirstParser(e) => {
+                write!(f, "[ThenOptionally] required parser failed: {}", e)
+            }
         }
     }
 }
@@ -21,11 +24,11 @@ impl<E: fmt::Display> fmt::Display for ThenOptionallyError<E> {
 impl<E> std::error::Error for ThenOptionallyError<E> where E: std::error::Error {}
 
 // Implement From<ThenOptionallyError<E>> for ParsicombError where E can convert to ParsicombError
-impl<'code, E> From<ThenOptionallyError<E>> for crate::ParsicombError<'code>
+impl<'code, E, T: Atomic> From<ThenOptionallyError<E>> for crate::ParsicombError<'code, T>
 where
-    E: Into<crate::ParsicombError<'code>>,
+    E: Into<crate::ParsicombError<'code, T>>,
 {
-    fn from(err: ThenOptionallyError<E>) -> crate::ParsicombError<'code> {
+    fn from(err: ThenOptionallyError<E>) -> crate::ParsicombError<'code, T> {
         match err {
             ThenOptionallyError::FirstParser(e) => e.into(),
         }
@@ -37,7 +40,9 @@ impl<'code, E> ErrorNode<'code> for ThenOptionallyError<E>
 where
     E: ErrorNode<'code>,
 {
-    fn likely_error(&self) -> &dyn ErrorLeaf {
+    type Element = E::Element;
+
+    fn likely_error(&self) -> &dyn ErrorLeaf<'code, Element = Self::Element> {
         match self {
             // First parser failed - return its error
             ThenOptionallyError::FirstParser(e) => e.likely_error(),

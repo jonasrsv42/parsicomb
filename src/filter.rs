@@ -27,12 +27,13 @@ impl<'code, E: fmt::Display, T: Atomic> fmt::Display for FilterError<'code, E, T
 impl<'code, E: std::error::Error, T: Atomic> std::error::Error for FilterError<'code, E, T> {}
 
 // Implement ErrorBranch for FilterError to enable furthest-error selection in nested structures
-impl<'code, E, T: Atomic> ErrorNode<'code> for FilterError<'code, E, T>
+impl<'code, E, T: Atomic + 'code> ErrorNode<'code> for FilterError<'code, E, T>
 where
-    E: ErrorNode<'code>,
-    T: 'code,
+    E: ErrorNode<'code, Element = T>,
 {
-    fn likely_error(&self) -> &dyn ErrorLeaf {
+    type Element = T;
+
+    fn likely_error(&self) -> &dyn ErrorLeaf<'code, Element = Self::Element> {
         match self {
             FilterError::ParserError(e) => e.likely_error(),
             FilterError::FilterFailed(parsicomb_error) => parsicomb_error.likely_error(),
@@ -62,6 +63,7 @@ where
     P: Parser<'code, Output = T>,
     P::Cursor: Cursor<'code>,
     <P::Cursor as Cursor<'code>>::Element: Atomic + 'code,
+    P::Error: ErrorNode<'code, Element = <P::Cursor as Cursor<'code>>::Element>,
     F: Fn(&T) -> bool,
 {
     type Cursor = P::Cursor;

@@ -1,4 +1,5 @@
 use super::parser::Parser;
+use crate::atomic::Atomic;
 use crate::error::{ErrorLeaf, ErrorNode};
 use std::fmt;
 
@@ -42,15 +43,15 @@ use std::fmt;
 // error propagation while preserving full error information.
 
 /// Error type for Or parser that can wrap errors from both parsers when both fail
-pub enum OrError<'code> {
+pub enum OrError<'code, T: Atomic> {
     /// Both parsers failed
     BothFailed {
-        first: Box<dyn ErrorNode<'code> + 'code>,
-        second: Box<dyn ErrorNode<'code> + 'code>,
+        first: Box<dyn ErrorNode<'code, Element = T> + 'code>,
+        second: Box<dyn ErrorNode<'code, Element = T> + 'code>,
     },
 }
 
-impl<'code> std::fmt::Debug for OrError<'code> {
+impl<'code, T: Atomic> std::fmt::Debug for OrError<'code, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             OrError::BothFailed { first, second } => f
@@ -62,7 +63,7 @@ impl<'code> std::fmt::Debug for OrError<'code> {
     }
 }
 
-impl<'code> fmt::Display for OrError<'code> {
+impl<'code, T: Atomic> fmt::Display for OrError<'code, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             OrError::BothFailed { first, second } => {
@@ -76,17 +77,19 @@ impl<'code> fmt::Display for OrError<'code> {
     }
 }
 
-impl<'code> std::error::Error for OrError<'code> {}
+impl<'code, T: Atomic> std::error::Error for OrError<'code, T> {}
 
 // OrError implements ErrorNode to enable furthest-error selection
-impl<'code> ErrorNode<'code> for OrError<'code> {
-    fn likely_error(&self) -> &dyn ErrorLeaf {
+impl<'code, T: Atomic + 'code> ErrorNode<'code> for OrError<'code, T> {
+    type Element = T;
+
+    fn likely_error(&self) -> &dyn ErrorLeaf<'code, Element = Self::Element> {
         match self {
             OrError::BothFailed { first, second } => {
                 let first_base = first.as_ref().likely_error();
                 let second_base = second.as_ref().likely_error();
 
-                if first_base.byte_position() >= second_base.byte_position() {
+                if first_base.loc().position() >= second_base.loc().position() {
                     first_base
                 } else {
                     second_base
@@ -118,12 +121,13 @@ impl<'code, C, O, E1, E2> Or<'code, C, O, E1, E2> {
 impl<'code, C, O, E1, E2> Parser<'code> for Or<'code, C, O, E1, E2>
 where
     C: crate::cursors::Cursor<'code>,
-    E1: std::error::Error + ErrorNode<'code> + 'code,
-    E2: std::error::Error + ErrorNode<'code> + 'code,
+    C::Element: Atomic + 'code,
+    E1: std::error::Error + ErrorNode<'code, Element = C::Element> + 'code,
+    E2: std::error::Error + ErrorNode<'code, Element = C::Element> + 'code,
 {
     type Cursor = C;
     type Output = O;
-    type Error = OrError<'code>;
+    type Error = OrError<'code, C::Element>;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         match self.parser1.parse(cursor) {
@@ -268,7 +272,7 @@ mod tests {
         };
         let furthest = or_error.likely_error();
 
-        assert_eq!(furthest.byte_position(), 2);
+        assert_eq!(furthest.loc().position(), 2);
         assert!(furthest.to_string().contains("second error"));
     }
 
@@ -290,7 +294,7 @@ mod tests {
         };
         let furthest = or_error.likely_error();
 
-        assert_eq!(furthest.byte_position(), 3);
+        assert_eq!(furthest.loc().position(), 3);
         assert!(furthest.to_string().contains("first error"));
     }
 
@@ -325,7 +329,7 @@ mod tests {
         // Use the new ErrorBranch system - this automatically handles recursion!
         let furthest = outer_or.likely_error();
 
-        assert_eq!(furthest.byte_position(), 8);
+        assert_eq!(furthest.loc().position(), 8);
         assert!(furthest.to_string().contains("error at pos 8"));
     }
 
@@ -358,7 +362,7 @@ mod tests {
         let furthest_error = error.likely_error();
 
         assert_eq!(
-            furthest_error.byte_position(),
+            furthest_error.loc().position(),
             3,
             "furthest() should traverse nested Or<Or<Or<...>>> and And structures to find the deepest error"
         );
@@ -394,7 +398,7 @@ mod tests {
         let furthest_error = error.likely_error();
 
         assert_eq!(
-            furthest_error.byte_position(),
+            furthest_error.loc().position(),
             2,
             "furthest() should traverse complex Or<Filter<And<...>>> structures"
         );

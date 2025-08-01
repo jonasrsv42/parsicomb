@@ -5,7 +5,7 @@ use crate::parser::Parser;
 
 /// Parser that matches a single ASCII whitespace character (space, tab, newline, carriage return)  
 pub fn whitespace<'code>()
--> impl Parser<'code, Cursor = ByteCursor<'code>, Output = u8, Error = OrError<'code>> {
+-> impl Parser<'code, Cursor = ByteCursor<'code>, Output = u8, Error = OrError<'code, u8>> {
     is_byte(b' ')
         .or(is_byte(b'\t'))
         .or(is_byte(b'\n'))

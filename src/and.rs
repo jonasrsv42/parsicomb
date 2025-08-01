@@ -1,4 +1,5 @@
 use super::parser::Parser;
+use crate::atomic::Atomic;
 use crate::error::{ErrorLeaf, ErrorNode};
 use std::fmt;
 
@@ -43,14 +44,14 @@ use std::fmt;
 // unnecessary cloning during error propagation.
 
 /// Error type for And parser that can wrap errors from either the first or second parser
-pub enum AndError<'code> {
+pub enum AndError<'code, T: Atomic> {
     /// Error from the first parser
-    FirstParser(Box<dyn ErrorNode<'code> + 'code>),
+    FirstParser(Box<dyn ErrorNode<'code, Element = T> + 'code>),
     /// Error from the second parser
-    SecondParser(Box<dyn ErrorNode<'code> + 'code>),
+    SecondParser(Box<dyn ErrorNode<'code, Element = T> + 'code>),
 }
 
-impl<'code> std::fmt::Debug for AndError<'code> {
+impl<'code, T: Atomic> std::fmt::Debug for AndError<'code, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             AndError::FirstParser(e) => f
@@ -67,7 +68,7 @@ impl<'code> std::fmt::Debug for AndError<'code> {
 
 // Note: into_inner method removed since we now use boxed trait objects
 
-impl<'code> fmt::Display for AndError<'code> {
+impl<'code, T: Atomic> fmt::Display for AndError<'code, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             AndError::FirstParser(e) => write!(f, "First parser failed: {}", &**e),
@@ -76,13 +77,15 @@ impl<'code> fmt::Display for AndError<'code> {
     }
 }
 
-impl<'code> std::error::Error for AndError<'code> {}
+impl<'code, T: Atomic> std::error::Error for AndError<'code, T> {}
 
 // Note: From implementation removed to avoid calling likely_error() internally
 
 // Implement ErrorNode for AndError to enable furthest-error selection in nested structures
-impl<'code> ErrorNode<'code> for AndError<'code> {
-    fn likely_error(&self) -> &dyn ErrorLeaf {
+impl<'code, T: Atomic + 'code> ErrorNode<'code> for AndError<'code, T> {
+    type Element = T;
+
+    fn likely_error(&self) -> &dyn ErrorLeaf<'code, Element = Self::Element> {
         match self {
             // First parser failed - return its error
             AndError::FirstParser(e1) => e1.as_ref().likely_error(),
@@ -139,12 +142,13 @@ impl<'code, C, O1, O2, E1, E2> And<'code, C, O1, O2, E1, E2> {
 impl<'code, C, O1, O2, E1, E2> Parser<'code> for And<'code, C, O1, O2, E1, E2>
 where
     C: crate::cursors::Cursor<'code>,
-    E1: std::error::Error + ErrorNode<'code> + 'code,
-    E2: std::error::Error + ErrorNode<'code> + 'code,
+    C::Element: Atomic + 'code,
+    E1: std::error::Error + ErrorNode<'code, Element = C::Element> + 'code,
+    E2: std::error::Error + ErrorNode<'code, Element = C::Element> + 'code,
 {
     type Cursor = C;
     type Output = (O1, O2);
-    type Error = AndError<'code>;
+    type Error = AndError<'code, C::Element>;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let (result1, cursor) = self

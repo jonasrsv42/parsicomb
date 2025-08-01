@@ -29,7 +29,9 @@ impl<'code> Cursor<'code> for ByteCursor<'code> {
     fn value(&self) -> Result<Self::Element, Self::Error> {
         match self {
             ByteCursor::Valid { data, position } => Ok(data[*position]),
-            ByteCursor::EndOfFile { .. } => Err(ParsicombError::CannotReadValueAtEof),
+            ByteCursor::EndOfFile { data } => Err(ParsicombError::CannotReadValueAtEof(
+                CodeLoc::new(data, data.len()),
+            )),
         }
     }
 
@@ -60,7 +62,9 @@ impl<'code> Cursor<'code> for ByteCursor<'code> {
                     )),
                 }
             }
-            ByteCursor::EndOfFile { .. } => Err(ParsicombError::AlreadyAtEndOfFile),
+            ByteCursor::EndOfFile { data } => Err(ParsicombError::AlreadyAtEndOfFile(
+                CodeLoc::new(data, data.len()),
+            )),
         }
     }
 

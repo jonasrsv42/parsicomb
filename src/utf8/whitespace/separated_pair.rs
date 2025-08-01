@@ -1,5 +1,6 @@
 use super::unicode_whitespace;
 use crate::ParsicombError;
+use crate::atomic::Atomic;
 use crate::byte_cursor::ByteCursor;
 use crate::error::{ErrorLeaf, ErrorNode};
 use crate::filter::FilterError;
@@ -9,21 +10,21 @@ use std::fmt;
 
 /// Error type for SeparatedPair parser that can wrap errors from all constituent parsers
 #[derive(Debug)]
-pub enum SeparatedPairError<'code, E1, ES, E2> {
+pub enum SeparatedPairError<'code, E1, ES, E2, T: Atomic> {
     /// Error from the left parser
     LeftParser(E1),
     /// Error from whitespace after left parser
-    LeftWhitespace(FilterError<'code, ParsicombError<'code>>),
+    LeftWhitespace(FilterError<'code, ParsicombError<'code, T>, T>),
     /// Error from the separator parser
     Separator(ES),
     /// Error from whitespace after separator
-    RightWhitespace(FilterError<'code, ParsicombError<'code>>),
+    RightWhitespace(FilterError<'code, ParsicombError<'code, T>, T>),
     /// Error from the right parser
     RightParser(E2),
 }
 
-impl<E1: fmt::Display, ES: fmt::Display, E2: fmt::Display> fmt::Display
-    for SeparatedPairError<'_, E1, ES, E2>
+impl<E1: fmt::Display, ES: fmt::Display, E2: fmt::Display, T: Atomic> fmt::Display
+    for SeparatedPairError<'_, E1, ES, E2, T>
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -36,7 +37,7 @@ impl<E1: fmt::Display, ES: fmt::Display, E2: fmt::Display> fmt::Display
     }
 }
 
-impl<E1, ES, E2> std::error::Error for SeparatedPairError<'_, E1, ES, E2>
+impl<E1, ES, E2, T: Atomic> std::error::Error for SeparatedPairError<'_, E1, ES, E2, T>
 where
     E1: std::error::Error,
     ES: std::error::Error,
@@ -45,13 +46,16 @@ where
 }
 
 // Implement ErrorBranch for SeparatedPairError to enable furthest-error selection
-impl<'code, E1, ES, E2> ErrorNode<'code> for SeparatedPairError<'code, E1, ES, E2>
+impl<'code, E1, ES, E2, T: Atomic + 'code> ErrorNode<'code>
+    for SeparatedPairError<'code, E1, ES, E2, T>
 where
-    E1: ErrorNode<'code>,
-    ES: ErrorNode<'code>,
-    E2: ErrorNode<'code>,
+    E1: ErrorNode<'code, Element = T>,
+    ES: ErrorNode<'code, Element = T>,
+    E2: ErrorNode<'code, Element = T>,
 {
-    fn likely_error(&self) -> &dyn ErrorLeaf {
+    type Element = T;
+
+    fn likely_error(&self) -> &dyn ErrorLeaf<'code, Element = Self::Element> {
         match self {
             SeparatedPairError::LeftParser(e1) => e1.likely_error(),
             SeparatedPairError::LeftWhitespace(e) => e.likely_error(),
@@ -84,12 +88,15 @@ pub struct SeparatedPair<P1, PS, P2> {
 impl<'code, P1, PS, P2> Parser<'code> for SeparatedPair<P1, PS, P2>
 where
     P1: Parser<'code, Cursor = ByteCursor<'code>>,
+    P1::Error: ErrorNode<'code, Element = u8>,
     PS: Parser<'code, Cursor = ByteCursor<'code>>,
+    PS::Error: ErrorNode<'code, Element = u8>,
     P2: Parser<'code, Cursor = ByteCursor<'code>>,
+    P2::Error: ErrorNode<'code, Element = u8>,
 {
     type Cursor = ByteCursor<'code>;
     type Output = (P1::Output, P2::Output);
-    type Error = SeparatedPairError<'code, P1::Error, PS::Error, P2::Error>;
+    type Error = SeparatedPairError<'code, P1::Error, PS::Error, P2::Error, u8>;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         // Parse: left + whitespace + separator + whitespace + right

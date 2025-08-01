@@ -69,7 +69,7 @@ where
 mod tests {
     use super::*;
     use crate::{ByteCursor, Cursor};
-    use crate::{ErrorLeaf, ParsicombError};
+    use crate::{CodeLoc, ErrorLeaf, ParsicombError};
 
     use std::fmt;
 
@@ -91,14 +91,18 @@ mod tests {
 
     impl std::error::Error for CustomError {}
 
-    impl ErrorLeaf for CustomError {
-        fn byte_position(&self) -> usize {
-            0 // Default position for test error
+    impl<'code> ErrorLeaf<'code> for CustomError {
+        type Element = u8;
+
+        fn loc(&self) -> CodeLoc<'code, Self::Element> {
+            CodeLoc::new(&[], 0) // Default position for test error
         }
     }
 
     impl<'code> ErrorNode<'code> for CustomError {
-        fn likely_error(&self) -> &dyn ErrorLeaf {
+        type Element = u8;
+
+        fn likely_error(&self) -> &dyn ErrorLeaf<'code, Element = Self::Element> {
             self
         }
     }

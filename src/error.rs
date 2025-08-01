@@ -3,11 +3,14 @@ use std::borrow::Cow;
 use std::error::Error;
 use std::fmt;
 
-/// Trait for errors that can report their byte position in the input
+/// Trait for errors that can report their location in the input
 /// This enables selecting the error that progressed furthest when multiple parsers fail
-pub trait ErrorLeaf: Error {
-    /// Returns the byte position where this error occurred
-    fn byte_position(&self) -> usize;
+pub trait ErrorLeaf<'code>: Error {
+    /// The element type used in the source code (e.g., u8 for bytes)
+    type Element: Atomic;
+
+    /// Returns the location where this error occurred
+    fn loc(&self) -> CodeLoc<'code, Self::Element>;
 }
 
 /// Generic trait for error types that can be flattened to find the furthest error
@@ -19,42 +22,50 @@ pub trait ErrorLeaf: Error {
 /// # Example for downstream crates
 ///
 /// ```rust
-/// use parsicomb::error::{ErrorLeaf, ErrorNode};
+/// use parsicomb::error::{ErrorLeaf, ErrorNode, CodeLoc};
 /// use std::error::Error;
 /// use std::fmt;
 ///
 /// // Your custom error type
 /// #[derive(Debug)]
-/// struct MyError {
+/// struct MyError<'code> {
+///     code: &'code [u8],
 ///     position: usize,
 ///     message: String,
 /// }
 ///
-/// impl fmt::Display for MyError {
+/// impl<'code> fmt::Display for MyError<'code> {
 ///     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 ///         write!(f, "{}", self.message)
 ///     }
 /// }
 ///
-/// impl Error for MyError {}
+/// impl<'code> Error for MyError<'code> {}
 ///
 /// // Implement ErrorLeaf
-/// impl ErrorLeaf for MyError {
-///     fn byte_position(&self) -> usize {
-///         self.position
+/// impl<'code> ErrorLeaf<'code> for MyError<'code> {
+///     type Element = u8;
+///     
+///     fn loc(&self) -> CodeLoc<'code, Self::Element> {
+///         CodeLoc::new(self.code, self.position)
 ///     }
 /// }
 ///
 /// // Implement ErrorNode (converts to itself since it's already a terminal type)
-/// impl<'a> ErrorNode<'a> for MyError {
-///     fn likely_error(&self) -> &dyn ErrorLeaf {
+/// impl<'code> ErrorNode<'code> for MyError<'code> {
+///     type Element = u8;
+///     
+///     fn likely_error(&self) -> &dyn ErrorLeaf<'code, Element = Self::Element> {
 ///         self
 ///     }
 /// }
 /// ```
 pub trait ErrorNode<'code>: std::fmt::Display + std::fmt::Debug {
+    /// The element type used in the source code (e.g., u8 for bytes)
+    type Element: Atomic;
+
     /// Flatten nested error structures and return the likely error that made it furthest
-    fn likely_error(&self) -> &dyn ErrorLeaf;
+    fn likely_error(&self) -> &dyn ErrorLeaf<'code, Element = Self::Element>;
 }
 
 #[derive(Debug)]
@@ -63,7 +74,7 @@ pub struct ReadablePosition {
     pub byte_offset: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct CodeLoc<'code, T: Atomic = u8> {
     code: &'code [T],
     /// The position in `code` where the cursor encountered an error
@@ -172,15 +183,15 @@ impl<'code, T: Atomic> CodeLoc<'code, T> {
 #[derive(Debug)]
 pub enum ParsicombError<'code, T: Atomic = u8> {
     UnexpectedEndOfFile(CodeLoc<'code, T>),
-    AlreadyAtEndOfFile,
-    CannotReadValueAtEof,
+    AlreadyAtEndOfFile(CodeLoc<'code, T>),
+    CannotReadValueAtEof(CodeLoc<'code, T>),
     SyntaxError {
         message: Cow<'static, str>,
         loc: CodeLoc<'code, T>,
     },
     /// Wrapped error from another parser combinator
     WrappedError {
-        inner: Box<dyn ErrorNode<'code> + 'code>,
+        inner: Box<dyn ErrorNode<'code, Element = T> + 'code>,
     },
 }
 
@@ -200,11 +211,31 @@ impl<'code, T: Atomic> fmt::Display for ParsicombError<'code, T> {
                 }
                 Ok(())
             }
-            ParsicombError::AlreadyAtEndOfFile => {
-                write!(f, "Already at end of file")
+            ParsicombError::AlreadyAtEndOfFile(code_loc) => {
+                let pos = code_loc.readable_position();
+                writeln!(
+                    f,
+                    "Already at end of file at line {}, byte offset {} (absolute position: {})",
+                    pos.line, pos.byte_offset, code_loc.loc
+                )?;
+                writeln!(f)?;
+                for line in code_loc.context_lines() {
+                    writeln!(f, "{}", line)?;
+                }
+                Ok(())
             }
-            ParsicombError::CannotReadValueAtEof => {
-                write!(f, "Cannot read value at EOF")
+            ParsicombError::CannotReadValueAtEof(code_loc) => {
+                let pos = code_loc.readable_position();
+                writeln!(
+                    f,
+                    "Cannot read value at EOF at line {}, byte offset {} (absolute position: {})",
+                    pos.line, pos.byte_offset, code_loc.loc
+                )?;
+                writeln!(f)?;
+                for line in code_loc.context_lines() {
+                    writeln!(f, "{}", line)?;
+                }
+                Ok(())
             }
             ParsicombError::SyntaxError { message, loc } => {
                 let pos = loc.readable_position();
@@ -232,7 +263,7 @@ impl<'code, T: Atomic> Error for ParsicombError<'code, T> {}
 
 impl<'code, T: Atomic> ParsicombError<'code, T> {
     /// Wrap an ErrorNode in a ParsicombError
-    pub fn wrap(error: impl ErrorNode<'code> + 'code) -> Self {
+    pub fn wrap(error: impl ErrorNode<'code, Element = T> + 'code) -> Self {
         ParsicombError::WrappedError {
             inner: Box::new(error),
         }
@@ -242,29 +273,172 @@ impl<'code, T: Atomic> ParsicombError<'code, T> {
     pub fn position(&self) -> usize {
         match self {
             ParsicombError::UnexpectedEndOfFile(code_loc) => code_loc.position(),
-            ParsicombError::AlreadyAtEndOfFile => 0, // Assume EOF is at end
-            ParsicombError::CannotReadValueAtEof => 0, // Assume EOF is at end
+            ParsicombError::AlreadyAtEndOfFile(code_loc) => code_loc.position(),
+            ParsicombError::CannotReadValueAtEof(code_loc) => code_loc.position(),
             ParsicombError::SyntaxError { loc, .. } => loc.position(),
             ParsicombError::WrappedError { inner } => {
                 // Delegate to the wrapped error's likely_error
-                inner.likely_error().byte_position()
+                inner.likely_error().loc().position()
             }
         }
     }
 }
 
-impl<'code, T: Atomic> ErrorLeaf for ParsicombError<'code, T> {
-    fn byte_position(&self) -> usize {
-        self.position()
+impl<'code, T: Atomic> ErrorLeaf<'code> for ParsicombError<'code, T> {
+    type Element = T;
+
+    fn loc(&self) -> CodeLoc<'code, Self::Element> {
+        match self {
+            ParsicombError::UnexpectedEndOfFile(code_loc) => *code_loc,
+            ParsicombError::AlreadyAtEndOfFile(code_loc) => *code_loc,
+            ParsicombError::CannotReadValueAtEof(code_loc) => *code_loc,
+            ParsicombError::SyntaxError { loc, .. } => *loc,
+            ParsicombError::WrappedError { inner } => {
+                // Get the likely error and call loc on it
+                inner.likely_error().loc()
+            }
+        }
     }
 }
 
-// ParsicombError implements ErrorBranch (converts to itself since it's a terminal type)
+// ParsicombError implements ErrorNode (converts to itself since it's a terminal type)
 impl<'code, T: Atomic> ErrorNode<'code> for ParsicombError<'code, T>
 where
     T: 'code,
 {
-    fn likely_error(&self) -> &dyn ErrorLeaf {
+    type Element = T;
+
+    fn likely_error(&self) -> &dyn ErrorLeaf<'code, Element = Self::Element> {
         self // Already the base type
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_codeloc_eos_empty_data() {
+        let empty_data = b"";
+        let loc = CodeLoc::new(empty_data, 0);
+        let error = ParsicombError::AlreadyAtEndOfFile(loc);
+
+        // Should not panic when displaying
+        let display_str = format!("{}", error);
+        assert!(display_str.contains("Already at end of file"));
+
+        // Should handle position calculation correctly
+        assert_eq!(loc.position(), 0);
+    }
+
+    #[test]
+    fn test_codeloc_eos_single_byte() {
+        let data = b"a";
+        let loc = CodeLoc::new(data, 1); // Position 1 = past end
+        let error = ParsicombError::CannotReadValueAtEof(loc);
+
+        // Should not panic when displaying
+        let display_str = format!("{}", error);
+        assert!(display_str.contains("Cannot read value at EOF"));
+
+        // Should handle position calculation correctly
+        assert_eq!(loc.position(), 1);
+    }
+
+    #[test]
+    fn test_codeloc_eos_multiline() {
+        let data = b"hello\nworld";
+        let loc = CodeLoc::new(data, 11); // Position 11 = past end
+        let error = ParsicombError::UnexpectedEndOfFile(loc);
+
+        // Should not panic when displaying
+        let display_str = format!("{}", error);
+        assert!(display_str.contains("Unexpected end of file"));
+
+        // Should handle position calculation correctly
+        assert_eq!(loc.position(), 11);
+    }
+
+    #[test]
+    fn test_codeloc_eos_line_ending() {
+        let data = b"hello\n";
+        let loc = CodeLoc::new(data, 6); // Position 6 = past end (after newline)
+        let error = ParsicombError::SyntaxError {
+            message: "test error".into(),
+            loc,
+        };
+
+        // Should not panic when displaying
+        let display_str = format!("{}", error);
+        assert!(display_str.contains("test error"));
+
+        // Should handle position calculation correctly
+        assert_eq!(loc.position(), 6);
+    }
+
+    #[test]
+    fn test_codeloc_readable_position_eos() {
+        let data = b"line1\nline2";
+        let loc = CodeLoc::new(data, 11); // Position 11 = past end
+        let pos = loc.readable_position();
+
+        // Should be on line 2, with byte offset 5 (past "line2")
+        assert_eq!(pos.line, 2);
+        assert_eq!(pos.byte_offset, 5);
+    }
+
+    #[test]
+    fn test_codeloc_context_lines_eos() {
+        let data = b"line1\nline2";
+        let loc = CodeLoc::new(data, 11); // Position 11 = past end
+
+        // Should not panic when generating context lines
+        let context = loc.context_lines();
+        assert!(!context.is_empty());
+
+        // Should contain the line content
+        let context_str = context.join("\n");
+        assert!(context_str.contains("line2"));
+    }
+
+    #[test]
+    fn test_codeloc_context_lines_empty_eos() {
+        let data = b"";
+        let loc = CodeLoc::new(data, 0);
+
+        // Should not panic even with empty data
+        let _context = loc.context_lines();
+        // May be empty or contain minimal context, but shouldn't panic
+    }
+
+    #[test]
+    fn test_eos_display_output() {
+        // Test that EOS errors display correctly without bounds issues
+        let data = b"hello\nworld";
+        let loc = CodeLoc::new(data, 11); // Position 11 = past end
+        let error = ParsicombError::UnexpectedEndOfFile(loc);
+
+        let display_str = format!("{}", error);
+        println!("EOS Error Display:\n{}", display_str);
+
+        // Verify it contains expected parts
+        assert!(display_str.contains("Unexpected end of file"));
+        assert!(display_str.contains("line 2"));
+        assert!(display_str.contains("world"));
+    }
+
+    #[test]
+    fn test_eos_after_newline_display() {
+        // Test EOS position right after a newline
+        let data = b"hello\n";
+        let loc = CodeLoc::new(data, 6); // Position 6 = past end (after newline)
+        let error = ParsicombError::CannotReadValueAtEof(loc);
+
+        let display_str = format!("{}", error);
+        println!("EOS After Newline:\n{}", display_str);
+
+        // Should be on line 2 with offset 0
+        assert!(display_str.contains("line 2"));
+        assert!(display_str.contains("byte offset 0"));
     }
 }

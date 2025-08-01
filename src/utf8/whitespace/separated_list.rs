@@ -236,7 +236,7 @@ mod tests {
 
         // The likely error should be at the position where "badvalue" starts (after "hello, world, ")
         // Position should be around 14 where "badvalue" begins
-        let error_pos = likely_error.byte_position();
+        let error_pos = likely_error.loc().position();
         assert!(
             error_pos >= 14,
             "likely_error() should find the error that made it furthest into the input (at 'badvalue'), got position {}",
@@ -282,7 +282,7 @@ mod tests {
         let likely_error = complex_error.likely_error();
 
         // The error should be at "bad_number" position (around byte 10+)
-        let error_pos = likely_error.byte_position();
+        let error_pos = likely_error.loc().position();
         assert!(
             error_pos >= 10,
             "Error should be at 'bad_number' position, got {}",
@@ -324,7 +324,7 @@ mod tests {
         let likely_error = complex_error.likely_error();
 
         // Should point to "not_a_number" which starts around position 10
-        let error_pos = likely_error.byte_position();
+        let error_pos = likely_error.loc().position();
         assert!(
             error_pos >= 10,
             "Error should be at 'not_a_number', got position {}",

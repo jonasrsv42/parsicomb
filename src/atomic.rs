@@ -105,7 +105,9 @@ mod tests {
         fn value(&self) -> Result<Self::Element, Self::Error> {
             match self {
                 U32Cursor::Valid { data, position } => Ok(data[*position]),
-                U32Cursor::EndOfFile { .. } => Err(ParsicombError::CannotReadValueAtEof),
+                U32Cursor::EndOfFile { data } => Err(ParsicombError::CannotReadValueAtEof(
+                    CodeLoc::new(data, data.len()),
+                )),
             }
         }
 
@@ -136,7 +138,9 @@ mod tests {
                         )),
                     }
                 }
-                U32Cursor::EndOfFile { .. } => Err(ParsicombError::AlreadyAtEndOfFile),
+                U32Cursor::EndOfFile { data } => Err(ParsicombError::AlreadyAtEndOfFile(
+                    CodeLoc::new(data, data.len()),
+                )),
             }
         }
 

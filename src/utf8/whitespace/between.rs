@@ -1,5 +1,6 @@
 use super::unicode_whitespace;
 use crate::ParsicombError;
+use crate::atomic::Atomic;
 use crate::byte_cursor::ByteCursor;
 use crate::error::{ErrorLeaf, ErrorNode};
 use crate::filter::FilterError;
@@ -9,21 +10,21 @@ use std::fmt;
 
 /// Error type for Between parser that can wrap errors from all constituent parsers
 #[derive(Debug)]
-pub enum BetweenError<'code, E1, E2, E3> {
+pub enum BetweenError<'code, E1, E2, E3, T: Atomic> {
     /// Error from the opening delimiter parser
     OpenDelimiter(E1),
     /// Error from whitespace after open delimiter
-    OpenWhitespace(FilterError<'code, ParsicombError<'code>>),
+    OpenWhitespace(FilterError<'code, ParsicombError<'code, T>, T>),
     /// Error from the content parser
     Content(E2),
     /// Error from whitespace before close delimiter
-    CloseWhitespace(FilterError<'code, ParsicombError<'code>>),
+    CloseWhitespace(FilterError<'code, ParsicombError<'code, T>, T>),
     /// Error from the closing delimiter parser
     CloseDelimiter(E3),
 }
 
-impl<E1: fmt::Display, E2: fmt::Display, E3: fmt::Display> fmt::Display
-    for BetweenError<'_, E1, E2, E3>
+impl<E1: fmt::Display, E2: fmt::Display, E3: fmt::Display, T: Atomic> fmt::Display
+    for BetweenError<'_, E1, E2, E3, T>
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -36,7 +37,7 @@ impl<E1: fmt::Display, E2: fmt::Display, E3: fmt::Display> fmt::Display
     }
 }
 
-impl<E1, E2, E3> std::error::Error for BetweenError<'_, E1, E2, E3>
+impl<E1, E2, E3, T: Atomic> std::error::Error for BetweenError<'_, E1, E2, E3, T>
 where
     E1: std::error::Error,
     E2: std::error::Error,
@@ -45,13 +46,15 @@ where
 }
 
 // Implement ErrorBranch for BetweenError to enable furthest-error selection
-impl<'code, E1, E2, E3> ErrorNode<'code> for BetweenError<'code, E1, E2, E3>
+impl<'code, E1, E2, E3, T: Atomic + 'code> ErrorNode<'code> for BetweenError<'code, E1, E2, E3, T>
 where
-    E1: ErrorNode<'code>,
-    E2: ErrorNode<'code>,
-    E3: ErrorNode<'code>,
+    E1: ErrorNode<'code, Element = T>,
+    E2: ErrorNode<'code, Element = T>,
+    E3: ErrorNode<'code, Element = T>,
 {
-    fn likely_error(&self) -> &dyn ErrorLeaf {
+    type Element = T;
+
+    fn likely_error(&self) -> &dyn ErrorLeaf<'code, Element = Self::Element> {
         match self {
             BetweenError::OpenDelimiter(e1) => e1.likely_error(),
             BetweenError::OpenWhitespace(e) => e.likely_error(),
@@ -85,12 +88,15 @@ pub struct Between<P1, P2, P3> {
 impl<'code, P1, P2, P3> Parser<'code> for Between<P1, P2, P3>
 where
     P1: Parser<'code, Cursor = ByteCursor<'code>>,
+    P1::Error: ErrorNode<'code, Element = u8>,
     P2: Parser<'code, Cursor = ByteCursor<'code>>,
+    P2::Error: ErrorNode<'code, Element = u8>,
     P3: Parser<'code, Cursor = ByteCursor<'code>>,
+    P3::Error: ErrorNode<'code, Element = u8>,
 {
     type Cursor = ByteCursor<'code>;
     type Output = P2::Output;
-    type Error = BetweenError<'code, P1::Error, P2::Error, P3::Error>;
+    type Error = BetweenError<'code, P1::Error, P2::Error, P3::Error, u8>;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         // Parse: open + whitespace + content + whitespace + close
@@ -334,7 +340,7 @@ mod tests {
 
         // The actual error should be at the position where "badvalue" starts (after "hello, ")
         // Position should be around 15-16 where "badvalue" begins
-        let error_pos = actual_error.byte_position();
+        let error_pos = actual_error.loc().position();
         assert!(
             error_pos >= 15,
             "actual() should find the error that made it furthest into the input (at 'badvalue'), got position {}",
