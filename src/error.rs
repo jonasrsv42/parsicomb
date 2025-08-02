@@ -60,7 +60,7 @@ pub trait ErrorLeaf<'code>: Error {
 ///     }
 /// }
 /// ```
-pub trait ErrorNode<'code>: std::fmt::Display + std::fmt::Debug {
+pub trait ErrorNode<'code>: Error {
     /// The element type used in the source code (e.g., u8 for bytes)
     type Element: Atomic;
 

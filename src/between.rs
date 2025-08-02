@@ -84,23 +84,24 @@ where
 /// - `"[content]"` → `"content"`
 /// - `"(value)"` → `"value"`
 /// - `"{data}"` → `"data"`
-pub struct Between<'code, P1, P3, C, O>
+pub struct Between<'code, P1, P3, C, O, E2>
 where
     C: Cursor<'code>,
     P1: Parser<'code, Cursor = C>,
     P3: Parser<'code, Cursor = C>,
 {
     open: P1,
-    content: Box<dyn Parser<'code, Cursor = C, Output = O, Error = P1::Error> + 'code>,
+    content: Box<dyn Parser<'code, Cursor = C, Output = O, Error = E2> + 'code>,
     close: P3,
 }
 
-impl<'code, P1, P3, C, O> Parser<'code> for Between<'code, P1, P3, C, O>
+impl<'code, P1, P3, C, O, E2> Parser<'code> for Between<'code, P1, P3, C, O, E2>
 where
     P1: Parser<'code, Cursor = C> + 'code,
     P1::Error: ErrorNode<'code, Element = C::Element>,
     P3: Parser<'code, Cursor = C>,
     P3::Error: ErrorNode<'code, Element = C::Element>,
+    E2: ErrorNode<'code, Element = C::Element> + 'code,
     C: Cursor<'code>,
     C::Element: Atomic + 'code,
 {
@@ -126,7 +127,7 @@ where
     }
 }
 
-impl<'code, P1, P3, C, O> Between<'code, P1, P3, C, O>
+impl<'code, P1, P3, C, O, E2> Between<'code, P1, P3, C, O, E2>
 where
     C: Cursor<'code>,
     P1: Parser<'code, Cursor = C>,
@@ -135,8 +136,9 @@ where
     pub fn new<P2>(open: P1, content: P2, close: P3) -> Self
     where
         P1::Error: ErrorNode<'code, Element = C::Element> + 'code,
-        P2: Parser<'code, Cursor = C, Output = O, Error = P1::Error> + 'code,
-        P3: Parser<'code, Cursor = C, Error = P1::Error>,
+        P2: Parser<'code, Cursor = C, Output = O, Error = E2> + 'code,
+        P3::Error: ErrorNode<'code, Element = C::Element> + 'code,
+        E2: ErrorNode<'code, Element = C::Element> + 'code,
         C::Element: Atomic + 'code,
     {
         Between {
@@ -155,13 +157,15 @@ pub fn between<'code, P1, P2, P3>(
     open: P1,
     content: P2,
     close: P3,
-) -> Between<'code, P1, P3, P1::Cursor, P2::Output>
+) -> Between<'code, P1, P3, P1::Cursor, P2::Output, P2::Error>
 where
     P1: Parser<'code> + 'code,
     P1::Cursor: Cursor<'code>,
-    P2: Parser<'code, Cursor = P1::Cursor, Error = P1::Error> + 'code,
-    P3: Parser<'code, Cursor = P1::Cursor, Error = P1::Error> + 'code,
+    P2: Parser<'code, Cursor = P1::Cursor> + 'code,
+    P3: Parser<'code, Cursor = P1::Cursor> + 'code,
     P1::Error: ErrorNode<'code, Element = <P1::Cursor as Cursor<'code>>::Element> + 'code,
+    P2::Error: ErrorNode<'code, Element = <P1::Cursor as Cursor<'code>>::Element> + 'code,
+    P3::Error: ErrorNode<'code, Element = <P1::Cursor as Cursor<'code>>::Element> + 'code,
     <P1::Cursor as Cursor<'code>>::Element: Atomic + 'code,
 {
     Between::new(open, content, close)
