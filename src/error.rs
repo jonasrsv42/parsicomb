@@ -110,7 +110,7 @@ impl<'code, T: Atomic> CodeLoc<'code, T> {
             if i >= self.loc {
                 break;
             }
-            if element == T::NEWLINE {
+            if element.is_newline() {
                 line += 1;
                 line_start = i + 1;
             }

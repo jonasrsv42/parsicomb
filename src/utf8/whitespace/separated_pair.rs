@@ -1,7 +1,7 @@
 use super::unicode_whitespace;
+use crate::ByteCursor;
 use crate::ParsicombError;
 use crate::atomic::Atomic;
-use crate::byte_cursor::ByteCursor;
 use crate::error::{ErrorLeaf, ErrorNode};
 use crate::filter::FilterError;
 use crate::many::many;
@@ -143,9 +143,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ByteCursor;
     use crate::Cursor;
     use crate::ascii::number::f64;
-    use crate::byte_cursor::ByteCursor;
     use crate::utf8::string::is_string;
 
     #[test]

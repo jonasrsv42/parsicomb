@@ -1,31 +1,12 @@
-use super::byte_cursor::ByteCursor;
-use super::parser::Parser;
-use crate::Cursor;
-use crate::{CodeLoc, ParsicombError};
+use crate::cursor::Cursor;
+use crate::{AtomicParser, ByteCursor, CodeLoc, Parser, ParsicombError, atomic};
 
-/// Parser that consumes and returns a single byte
-pub struct ByteParser;
-
-impl ByteParser {
-    pub fn new() -> Self {
-        ByteParser
-    }
-}
+/// Type alias for a parser that consumes and returns a single byte
+pub type ByteParser<'code> = AtomicParser<ByteCursor<'code>>;
 
 /// Convenience function to create a ByteParser
-pub fn byte() -> ByteParser {
-    ByteParser::new()
-}
-
-impl<'code> Parser<'code> for ByteParser {
-    type Cursor = ByteCursor<'code>;
-    type Output = u8;
-    type Error = ParsicombError<'code>;
-
-    fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
-        let byte = cursor.value()?;
-        Ok((byte, cursor.next()))
-    }
+pub fn byte<'code>() -> ByteParser<'code> {
+    atomic()
 }
 
 /// Parser that matches a specific byte
@@ -120,12 +101,14 @@ pub fn between_bytes(start: u8, end: u8) -> BetweenBytesParser {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cursor::Cursor;
+    use crate::cursors::atomic::AtomicCursor;
 
     #[test]
     fn test_byte_parser_success() {
         let data = b"hello";
         let cursor = ByteCursor::new(data);
-        let parser = ByteParser::new();
+        let parser = byte();
 
         let result = parser.parse(cursor).unwrap();
         let (byte, next_cursor) = result;
@@ -138,12 +121,12 @@ mod tests {
     fn test_byte_parser_eof() {
         let data = b"x";
         let cursor = ByteCursor::new(data);
-        let parser = ByteParser::new();
+        let parser = byte();
 
         // First parse succeeds
         let (byte, cursor) = parser.parse(cursor).unwrap();
         assert_eq!(byte, b'x');
-        assert!(matches!(cursor, ByteCursor::EndOfFile { .. }));
+        assert!(matches!(cursor, AtomicCursor::EndOfFile { .. }));
 
         // Second parse fails with EOF
         let result = parser.parse(cursor);
@@ -154,7 +137,7 @@ mod tests {
     fn test_byte_parser_sequence() {
         let data = b"abc";
         let cursor = ByteCursor::new(data);
-        let parser = ByteParser::new();
+        let parser = byte();
 
         let (b1, cursor) = parser.parse(cursor).unwrap();
         assert_eq!(b1, b'a');
@@ -166,7 +149,7 @@ mod tests {
         assert_eq!(b3, b'c');
 
         // Next byte should be EOF
-        assert!(matches!(cursor, ByteCursor::EndOfFile { .. }));
+        assert!(matches!(cursor, AtomicCursor::EndOfFile { .. }));
     }
 
     #[test]

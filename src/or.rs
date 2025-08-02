@@ -1,5 +1,6 @@
 use super::parser::Parser;
 use crate::atomic::Atomic;
+use crate::cursor::Cursor;
 use crate::error::{ErrorLeaf, ErrorNode};
 use std::fmt;
 
@@ -120,7 +121,7 @@ impl<'code, C, O, E1, E2> Or<'code, C, O, E1, E2> {
 
 impl<'code, C, O, E1, E2> Parser<'code> for Or<'code, C, O, E1, E2>
 where
-    C: crate::cursors::Cursor<'code>,
+    C: Cursor<'code>,
     C::Element: Atomic + 'code,
     E1: std::error::Error + ErrorNode<'code, Element = C::Element> + 'code,
     E2: std::error::Error + ErrorNode<'code, Element = C::Element> + 'code,
@@ -172,10 +173,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ByteCursor;
     use crate::Cursor;
     use crate::and::AndExt;
     use crate::byte::is_byte;
-    use crate::byte_cursor::ByteCursor;
     use crate::error::{CodeLoc, ParsicombError};
     use crate::filter::FilterExt;
     use crate::map::MapExt;

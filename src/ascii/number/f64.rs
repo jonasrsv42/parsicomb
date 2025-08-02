@@ -1,9 +1,9 @@
 use super::i64::i64;
 use super::u64::u64;
+use crate::ByteCursor;
 use crate::Cursor;
 use crate::and::AndExt;
 use crate::byte::is_byte;
-use crate::byte_cursor::ByteCursor;
 use crate::parser::Parser;
 use crate::{CodeLoc, ParsicombError};
 

@@ -1,4 +1,4 @@
-use crate::byte_cursor::ByteCursor;
+use crate::ByteCursor;
 use crate::many::many;
 use crate::parser::Parser;
 use crate::utf8::unicode_whitespace;
@@ -211,7 +211,7 @@ mod tests {
 
     #[test]
     fn test_complex_nested_combinators_with_likely_error_flattening() {
-        use crate::byte_cursor::ByteCursor;
+        use crate::ByteCursor;
 
         let data = b"hello, world, badvalue";
         let cursor = ByteCursor::new(data);
@@ -257,9 +257,9 @@ mod tests {
 
     #[test]
     fn test_and_or_mixed_combinators_with_error_handling() {
+        use crate::ByteCursor;
         use crate::ascii::number::f64;
         use crate::byte::is_byte;
-        use crate::byte_cursor::ByteCursor;
 
         let data = b"1.5, 2.7, bad_number";
         let cursor = ByteCursor::new(data);
@@ -296,8 +296,8 @@ mod tests {
 
     #[test]
     fn test_deeply_nested_combinators_error_propagation() {
+        use crate::ByteCursor;
         use crate::ascii::number::i64;
-        use crate::byte_cursor::ByteCursor;
 
         let data = b"123, 456, not_a_number, 789";
         let cursor = ByteCursor::new(data);

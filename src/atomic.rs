@@ -1,4 +1,4 @@
-use crate::cursors::Cursor;
+use crate::cursor::Cursor;
 use crate::error::ErrorNode;
 use crate::parser::Parser;
 use std::fmt::{Debug, Display};
@@ -6,8 +6,8 @@ use std::fmt::{Debug, Display};
 /// Trait for atomic elements that can be used in parsing
 /// This enables generic error formatting and position calculation
 pub trait Atomic: Copy + Clone + PartialEq + Debug + Display {
-    /// The newline character/element for this atomic type
-    const NEWLINE: Self;
+    /// Check if this element represents a newline for this atomic type
+    fn is_newline(&self) -> bool;
 
     /// Format a slice of elements for display in error messages
     fn format_slice(slice: &[Self]) -> String;
@@ -50,7 +50,9 @@ pub fn atomic<C>() -> AtomicParser<C> {
 }
 
 impl Atomic for u8 {
-    const NEWLINE: Self = b'\n';
+    fn is_newline(&self) -> bool {
+        *self == b'\n'
+    }
 
     fn format_slice(slice: &[Self]) -> String {
         String::from_utf8_lossy(slice).to_string()
@@ -67,7 +69,9 @@ mod tests {
 
     // Test implementation of Atomic for u32
     impl Atomic for u32 {
-        const NEWLINE: Self = 10; // ASCII newline as u32
+        fn is_newline(&self) -> bool {
+            *self == 10 // ASCII newline as u32
+        }
 
         fn format_slice(slice: &[Self]) -> String {
             slice

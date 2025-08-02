@@ -59,7 +59,7 @@ where
 /// ```
 /// use parsicomb::ascii::i64;
 /// use parsicomb::byte::is_byte;
-/// use parsicomb::byte_cursor::ByteCursor;
+/// use parsicomb::ByteCursor;
 /// use parsicomb::then_optionally::ThenOptionallyExt;
 /// use parsicomb::parser::Parser;
 ///

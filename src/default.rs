@@ -1,5 +1,5 @@
-use super::byte_cursor::ByteCursor;
 use super::parser::Parser;
+use crate::ByteCursor;
 use crate::ParsicombError;
 
 /// Parser that always succeeds without consuming input and returns the default value of T

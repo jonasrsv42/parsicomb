@@ -1,4 +1,4 @@
-use crate::cursors::Cursor;
+use crate::cursor::Cursor;
 use crate::error::ErrorNode;
 use std::error::Error;
 

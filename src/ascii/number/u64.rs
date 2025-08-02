@@ -1,6 +1,6 @@
 use super::digit::digit;
+use crate::ByteCursor;
 use crate::Cursor;
-use crate::byte_cursor::ByteCursor;
 use crate::parser::Parser;
 use crate::some::some;
 use crate::{CodeLoc, ParsicombError};
@@ -52,8 +52,8 @@ impl<'code> Parser<'code> for UIntParser {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ByteCursor;
     use crate::Cursor;
-    use crate::byte_cursor::ByteCursor;
 
     #[test]
     fn test_uint_single_digit() {

@@ -1,5 +1,6 @@
 use super::parser::Parser;
 use crate::atomic::Atomic;
+use crate::cursor::Cursor;
 use crate::error::{ErrorLeaf, ErrorNode};
 use std::fmt;
 
@@ -108,7 +109,7 @@ impl<'code, T: Atomic + 'code> ErrorNode<'code> for AndError<'code, T> {
 /// ```
 /// use parsicomb::ascii::{i64, u64};
 /// use parsicomb::byte::is_byte;
-/// use parsicomb::byte_cursor::ByteCursor;
+/// use parsicomb::ByteCursor;
 /// use parsicomb::and::AndExt;
 /// use parsicomb::parser::Parser;
 ///
@@ -141,7 +142,7 @@ impl<'code, C, O1, O2, E1, E2> And<'code, C, O1, O2, E1, E2> {
 
 impl<'code, C, O1, O2, E1, E2> Parser<'code> for And<'code, C, O1, O2, E1, E2>
 where
-    C: crate::cursors::Cursor<'code>,
+    C: Cursor<'code>,
     C::Element: Atomic + 'code,
     E1: std::error::Error + ErrorNode<'code, Element = C::Element> + 'code,
     E2: std::error::Error + ErrorNode<'code, Element = C::Element> + 'code,
@@ -195,10 +196,10 @@ impl<'code, P> AndExt<'code> for P where P: Parser<'code> {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ByteCursor;
     use crate::Cursor;
     use crate::ascii::i64;
     use crate::byte::is_byte;
-    use crate::byte_cursor::ByteCursor;
 
     #[test]
     fn test_and_both_succeed() {

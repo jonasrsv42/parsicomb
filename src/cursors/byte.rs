@@ -1,98 +1,13 @@
-use crate::cursors::Cursor;
-use crate::{CodeLoc, ParsicombError};
+use crate::AtomicCursor;
 
-#[derive(Debug, Copy, Clone)]
-pub enum ByteCursor<'code> {
-    /// Cursor pointing at a valid byte position
-    Valid {
-        data: &'code [u8],
-        /// Byte position in the data slice (0-based index)
-        position: usize,
-    },
-    /// Cursor at end of file - no more bytes to read
-    EndOfFile { data: &'code [u8] },
-}
-
-impl<'code> ByteCursor<'code> {
-    pub fn new(data: &'code [u8]) -> Self {
-        if data.is_empty() {
-            return ByteCursor::EndOfFile { data };
-        }
-        ByteCursor::Valid { data, position: 0 }
-    }
-}
-
-impl<'code> Cursor<'code> for ByteCursor<'code> {
-    type Element = u8;
-    type Error = ParsicombError<'code>;
-
-    fn value(&self) -> Result<Self::Element, Self::Error> {
-        match self {
-            ByteCursor::Valid { data, position } => Ok(data[*position]),
-            ByteCursor::EndOfFile { data } => Err(ParsicombError::CannotReadValueAtEof(
-                CodeLoc::new(data, data.len()),
-            )),
-        }
-    }
-
-    fn next(self) -> Self {
-        match self {
-            ByteCursor::Valid { data, position } => {
-                if position + 1 >= data.len() {
-                    ByteCursor::EndOfFile { data }
-                } else {
-                    ByteCursor::Valid {
-                        data,
-                        position: position + 1,
-                    }
-                }
-            }
-            ByteCursor::EndOfFile { data } => ByteCursor::EndOfFile { data },
-        }
-    }
-
-    fn try_next(self) -> Result<Self, Self::Error> {
-        match self {
-            ByteCursor::Valid { .. } => {
-                let next = self.next();
-                match next {
-                    ByteCursor::Valid { .. } => Ok(next),
-                    ByteCursor::EndOfFile { data } => Err(ParsicombError::UnexpectedEndOfFile(
-                        CodeLoc::new(data, data.len()),
-                    )),
-                }
-            }
-            ByteCursor::EndOfFile { data } => Err(ParsicombError::AlreadyAtEndOfFile(
-                CodeLoc::new(data, data.len()),
-            )),
-        }
-    }
-
-    fn position(&self) -> usize {
-        match self {
-            ByteCursor::Valid { position, .. } => *position,
-            ByteCursor::EndOfFile { data } => data.len(),
-        }
-    }
-
-    fn source(&self) -> &'code [Self::Element] {
-        match self {
-            ByteCursor::Valid { data, .. } => data,
-            ByteCursor::EndOfFile { data } => data,
-        }
-    }
-
-    fn inner(self) -> (&'code [Self::Element], usize) {
-        match self {
-            ByteCursor::Valid { data, position } => (data, position),
-            ByteCursor::EndOfFile { data } => (data, data.len()),
-        }
-    }
-}
+/// A specialized cursor for byte data (u8)
+/// This is now just a type alias for AtomicCursor<u8>
+pub type ByteCursor<'code> = AtomicCursor<'code, u8>;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cursor::Cursor;
 
     #[test]
     fn test_basic_operations() {

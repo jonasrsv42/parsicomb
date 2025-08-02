@@ -1,6 +1,6 @@
+use crate::ByteCursor;
 use crate::Cursor;
 use crate::byte::ByteParser;
-use crate::byte_cursor::ByteCursor;
 use crate::parser::Parser;
 use crate::{CodeLoc, ParsicombError};
 use std::borrow::Cow;

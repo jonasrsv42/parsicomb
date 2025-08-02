@@ -1,5 +1,5 @@
+use crate::ByteCursor;
 use crate::Cursor;
-use crate::byte_cursor::ByteCursor;
 use crate::parser::Parser;
 use crate::utf8::char::char;
 use crate::{CodeLoc, ParsicombError};

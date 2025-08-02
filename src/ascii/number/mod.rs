@@ -1,4 +1,4 @@
-use crate::byte_cursor::ByteCursor;
+use crate::ByteCursor;
 use crate::map::MapExt;
 use crate::or::OrExt;
 use crate::parser::Parser;
@@ -27,8 +27,8 @@ pub fn number<'code>() -> impl Parser<'code, Cursor = ByteCursor<'code>, Output 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ByteCursor;
     use crate::Cursor;
-    use crate::byte_cursor::ByteCursor;
 
     #[test]
     fn test_number_float() {

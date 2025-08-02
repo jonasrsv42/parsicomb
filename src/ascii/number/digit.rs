@@ -1,6 +1,6 @@
+use crate::ByteCursor;
 use crate::ParsicombError;
 use crate::byte::between_bytes;
-use crate::byte_cursor::ByteCursor;
 use crate::parser::Parser;
 
 /// Parser that matches a single ASCII digit (0-9)
@@ -12,8 +12,8 @@ pub fn digit<'code>()
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ByteCursor;
     use crate::Cursor;
-    use crate::byte_cursor::ByteCursor;
 
     #[test]
     fn test_digit_zero() {

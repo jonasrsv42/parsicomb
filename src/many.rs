@@ -50,9 +50,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ByteCursor;
     use crate::Cursor;
     use crate::byte::{ByteParser, is_byte};
-    use crate::byte_cursor::ByteCursor;
 
     #[test]
     fn test_many_zero_matches() {

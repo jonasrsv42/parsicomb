@@ -1,5 +1,5 @@
+use crate::ByteCursor;
 use crate::byte::is_byte;
-use crate::byte_cursor::ByteCursor;
 use crate::or::{OrError, OrExt};
 use crate::parser::Parser;
 
@@ -15,8 +15,8 @@ pub fn whitespace<'code>()
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ByteCursor;
     use crate::Cursor;
-    use crate::byte_cursor::ByteCursor;
     use crate::many::many;
 
     #[test]

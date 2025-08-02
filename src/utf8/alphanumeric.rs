@@ -1,4 +1,4 @@
-use crate::byte_cursor::ByteCursor;
+use crate::ByteCursor;
 use crate::filter::FilterExt;
 use crate::parser::Parser;
 use crate::utf8::char::char;
@@ -12,7 +12,7 @@ pub fn unicode_alphanumeric()
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::byte_cursor::ByteCursor;
+    use crate::ByteCursor;
 
     #[test]
     fn test_ascii_alphanumeric() {

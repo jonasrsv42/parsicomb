@@ -1,5 +1,5 @@
 use super::parser::Parser;
-use crate::cursors::Cursor;
+use crate::cursor::Cursor;
 use crate::error::ErrorNode;
 use std::fmt;
 

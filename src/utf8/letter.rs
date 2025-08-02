@@ -1,4 +1,4 @@
-use crate::byte_cursor::ByteCursor;
+use crate::ByteCursor;
 use crate::filter::FilterExt;
 use crate::parser::Parser;
 use crate::utf8::char::char;
