@@ -64,7 +64,6 @@ mod tests {
     use super::*;
     use crate::filter::FilterExt;
     use crate::many::many;
-    use crate::then_optionally::ThenOptionallyExt;
     use crate::{ByteCursor, CodeLoc, Parser, ParsicombError};
 
     // Test implementation of Atomic for u32
@@ -243,86 +242,6 @@ mod tests {
         let filtered = parser.filter(|&x| x > 40, "expected > 40");
         let result = filtered.parse(cursor);
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_then_optionally_with_byte_cursor() {
-        let data = b"AB";
-        let cursor = ByteCursor::new(data);
-        let parser_a: AtomicParser<ByteCursor> = atomic();
-        let parser_b: AtomicParser<ByteCursor> = atomic();
-
-        let combined = parser_a
-            .filter(|&b| b == b'A', "expected A")
-            .then_optionally(parser_b.filter(|&b| b == b'B', "expected B"));
-
-        let ((a, b_opt), _) = combined.parse(cursor).unwrap();
-        assert_eq!(a, b'A');
-        assert_eq!(b_opt, Some(b'B'));
-    }
-
-    #[test]
-    fn test_then_optionally_with_u32_cursor() {
-        let data = [10u32, 20u32];
-        let cursor = U32Cursor::new(&data);
-        let parser_10: AtomicParser<U32Cursor> = atomic();
-        let parser_20: AtomicParser<U32Cursor> = atomic();
-
-        let combined = parser_10
-            .filter(|&x| x == 10, "expected 10")
-            .then_optionally(parser_20.filter(|&x| x == 20, "expected 20"));
-
-        let ((first, second_opt), _) = combined.parse(cursor).unwrap();
-        assert_eq!(first, 10u32);
-        assert_eq!(second_opt, Some(20u32));
-    }
-
-    #[test]
-    fn test_then_optionally_partial_with_u32_cursor() {
-        let data = [10u32, 99u32]; // Second element doesn't match
-        let cursor = U32Cursor::new(&data);
-        let parser_10: AtomicParser<U32Cursor> = atomic();
-        let parser_20: AtomicParser<U32Cursor> = atomic();
-
-        let combined = parser_10
-            .filter(|&x| x == 10, "expected 10")
-            .then_optionally(parser_20.filter(|&x| x == 20, "expected 20"));
-
-        let ((first, second_opt), _) = combined.parse(cursor).unwrap();
-        assert_eq!(first, 10u32);
-        assert_eq!(second_opt, None); // Second parser failed, but that's OK
-    }
-
-    #[test]
-    fn test_complex_combinator_chain_byte_cursor() {
-        let data = b"aaabcd";
-        let cursor = ByteCursor::new(data);
-        let parser: AtomicParser<ByteCursor> = atomic();
-
-        // Parse many 'a's, then optionally a 'b', then filter for specific values
-        let complex = many(parser.filter(|&b| b == b'a', "expected 'a'"))
-            .then_optionally(atomic::<ByteCursor>().filter(|&b| b == b'b', "expected 'b'"));
-
-        let ((as_vec, b_opt), remaining) = complex.parse(cursor).unwrap();
-        assert_eq!(as_vec, vec![b'a', b'a', b'a']);
-        assert_eq!(b_opt, Some(b'b'));
-        assert_eq!(remaining.value().unwrap(), b'c'); // Should be at 'c'
-    }
-
-    #[test]
-    fn test_complex_combinator_chain_u32_cursor() {
-        let data = [1u32, 1u32, 1u32, 2u32, 3u32, 4u32];
-        let cursor = U32Cursor::new(&data);
-        let parser: AtomicParser<U32Cursor> = atomic();
-
-        // Parse many 1's, then optionally a 2, then continue
-        let complex = many(parser.filter(|&x| x == 1, "expected 1"))
-            .then_optionally(atomic::<U32Cursor>().filter(|&x| x == 2, "expected 2"));
-
-        let ((ones_vec, two_opt), remaining) = complex.parse(cursor).unwrap();
-        assert_eq!(ones_vec, vec![1u32, 1u32, 1u32]);
-        assert_eq!(two_opt, Some(2u32));
-        assert_eq!(remaining.value().unwrap(), 3u32); // Should be at 3
     }
 
     #[test]

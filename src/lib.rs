@@ -30,7 +30,6 @@ pub mod separated_list;
 pub mod separated_pair;
 pub mod some;
 pub mod take_until;
-pub mod then_optionally;
 pub mod utf8;
 
 pub use atomic::{Atomic, AtomicParser, atomic};
