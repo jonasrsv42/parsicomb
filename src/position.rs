@@ -1,19 +1,23 @@
+use crate::atomic::Atomic;
 use crate::cursor::Cursor;
 use crate::parser::Parser;
 
 /// Represents a span in the source code with start and end positions
+/// and a reference to the source code
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Span {
+pub struct Span<'code, T: Atomic = u8> {
+    /// Reference to the source code
+    pub code: &'code [T],
     /// Start position (inclusive)
     pub start: usize,
     /// End position (exclusive)
     pub end: usize,
 }
 
-impl Span {
+impl<'code, T: Atomic> Span<'code, T> {
     /// Create a new span
-    pub fn new(start: usize, end: usize) -> Self {
-        Span { start, end }
+    pub fn new(code: &'code [T], start: usize, end: usize) -> Self {
+        Span { code, start, end }
     }
 
     /// Get the length of the span
@@ -24,6 +28,16 @@ impl Span {
     /// Check if the span is empty
     pub fn is_empty(&self) -> bool {
         self.start == self.end
+    }
+
+    /// Get the slice of code that this span represents
+    pub fn slice(&self) -> &'code [T] {
+        &self.code[self.start..self.end]
+    }
+
+    /// Format the spanned content as a string
+    pub fn as_string(&self) -> String {
+        T::format_slice(self.slice())
     }
 }
 
@@ -41,17 +55,23 @@ impl<P> Position<P> {
 impl<'code, P> Parser<'code> for Position<P>
 where
     P: Parser<'code>,
+    P::Cursor: Cursor<'code>,
+    <P::Cursor as Cursor<'code>>::Element: Atomic + 'code,
 {
     type Cursor = P::Cursor;
-    type Output = (P::Output, Span);
+    type Output = (
+        P::Output,
+        Span<'code, <P::Cursor as Cursor<'code>>::Element>,
+    );
     type Error = P::Error;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let start_pos = cursor.position();
+        let source = cursor.source();
         let (output, new_cursor) = self.parser.parse(cursor)?;
         let end_pos = new_cursor.position();
 
-        let span = Span::new(start_pos, end_pos);
+        let span = Span::new(source, start_pos, end_pos);
         Ok(((output, span), new_cursor))
     }
 }
@@ -78,18 +98,32 @@ mod tests {
 
     #[test]
     fn test_span_basic() {
-        let span = Span::new(0, 5);
+        let data = b"hello";
+        let span = Span::new(data, 0, 5);
         assert_eq!(span.start, 0);
         assert_eq!(span.end, 5);
         assert_eq!(span.len(), 5);
         assert!(!span.is_empty());
+        assert_eq!(span.slice(), b"hello");
+        assert_eq!(span.as_string(), "hello");
     }
 
     #[test]
     fn test_span_empty() {
-        let span = Span::new(3, 3);
+        let data = b"hello";
+        let span = Span::new(data, 3, 3);
         assert_eq!(span.len(), 0);
         assert!(span.is_empty());
+        assert_eq!(span.slice(), b"");
+        assert_eq!(span.as_string(), "");
+    }
+
+    #[test]
+    fn test_span_slice() {
+        let data = b"hello world";
+        let span = Span::new(data, 6, 11);
+        assert_eq!(span.slice(), b"world");
+        assert_eq!(span.as_string(), "world");
     }
 
     #[test]
@@ -100,7 +134,9 @@ mod tests {
 
         let ((byte, span), cursor) = parser.parse(cursor).unwrap();
         assert_eq!(byte, b'h');
-        assert_eq!(span, Span::new(0, 1));
+        assert_eq!(span, Span::new(data, 0, 1));
+        assert_eq!(span.slice(), b"h");
+        assert_eq!(span.as_string(), "h");
         assert_eq!(cursor.position(), 1);
     }
 
@@ -112,7 +148,8 @@ mod tests {
 
         let ((byte, span), _) = parser.parse(cursor).unwrap();
         assert_eq!(byte, b'w');
-        assert_eq!(span, Span::new(0, 1));
+        assert_eq!(span, Span::new(data, 0, 1));
+        assert_eq!(span.slice(), b"w");
     }
 
     #[test]
@@ -124,19 +161,22 @@ mod tests {
         let parser = is_byte(b'a').with_position();
         let ((byte, span), cursor) = parser.parse(cursor).unwrap();
         assert_eq!(byte, b'a');
-        assert_eq!(span, Span::new(0, 1));
+        assert_eq!(span, Span::new(data, 0, 1));
+        assert_eq!(span.slice(), b"a");
 
         // Parse second byte with position
         let parser = is_byte(b'b').with_position();
         let ((byte, span), cursor) = parser.parse(cursor).unwrap();
         assert_eq!(byte, b'b');
-        assert_eq!(span, Span::new(1, 2));
+        assert_eq!(span, Span::new(data, 1, 2));
+        assert_eq!(span.slice(), b"b");
 
         // Parse third byte with position
         let parser = is_byte(b'c').with_position();
         let ((byte, span), _) = parser.parse(cursor).unwrap();
         assert_eq!(byte, b'c');
-        assert_eq!(span, Span::new(2, 3));
+        assert_eq!(span, Span::new(data, 2, 3));
+        assert_eq!(span.slice(), b"c");
     }
 
     #[test]
@@ -149,7 +189,9 @@ mod tests {
 
         let ((matched, span), _) = parser.parse(cursor).unwrap();
         assert_eq!(matched, "hello");
-        assert_eq!(span, Span::new(0, 5));
+        assert_eq!(span, Span::new(data, 0, 5));
+        assert_eq!(span.slice(), b"hello");
+        assert_eq!(span.as_string(), "hello");
     }
 
     #[test]
