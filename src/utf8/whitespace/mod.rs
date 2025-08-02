@@ -1,16 +1,65 @@
-pub mod between;
-pub mod separated_list;
-pub mod separated_pair;
+//! # Unicode Whitespace Support
+//!
+//! This module provides basic Unicode whitespace parsing functionality.
+//!
+//! ## Why No Generic Whitespace Combinators?
+//!
+//! You might expect to find generic whitespace-aware combinators here like
+//! `whitespace_between()`, `whitespace_separated_list()`, etc. We intentionally
+//! don't provide these because they create two significant problems:
+//!
+//! ### 1. Poor Error Location Reporting
+//!
+//! Generic whitespace combinators report errors at the wrong location:
+//!
+//! ```text
+//! Input: "type hello    world"
+//!                      ^ Error points here after consuming whitespace
+//! ```
+//!
+//! But users expect errors to point to meaningful locations:
+//!
+//! ```text
+//! Input: "type hello    world"  
+//!                  ^ Error should point here (after "hello")
+//! ```
+//!
+//! ### 2. Generic Error Messages
+//!
+//! Generic combinators can only provide generic error messages:
+//! - ❌ "Expected content after whitespace"
+//! - ❌ "Parser failed"
+//!
+//! But good parsers provide semantic, contextual error messages:
+//! - ✅ "Expected semicolon after statement"
+//! - ✅ "Missing closing bracket"
+//! - ✅ "Expected type annotation"
+//!
+//! ## Recommended Approach
+//!
+//! Instead of generic whitespace combinators, create semantic combinators
+//! that understand the parsing context:
+//!
+//! ```text
+//! ❌ Don't do this:
+//! whitespace_separated_pair(type_parser(), is_string(","), value_parser())
+//!
+//! ✅ Do this instead:
+//! fn parameter_declaration() -> impl Parser<...> {
+//!     // Handle whitespace and provide semantic errors
+//! }
+//! ```
+//!
+//! This approach gives you:
+//! - Precise error locations (before whitespace consumption)
+//! - Meaningful error messages ("Expected parameter name", not "Parser failed")
+//! - Full control over whitespace handling for your specific syntax
 
 use crate::ByteCursor;
 use crate::ParsicombError;
 use crate::filter::{FilterError, FilterExt};
 use crate::parser::Parser;
 use crate::utf8::char::char;
-
-pub use between::between;
-pub use separated_list::separated_list;
-pub use separated_pair::separated_pair;
 
 /// Convenience function to create a Unicode whitespace parser
 pub fn unicode_whitespace<'a>()
