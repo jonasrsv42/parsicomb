@@ -7,7 +7,7 @@ use crate::parser::Parser;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Span<'code, T: Atomic = u8> {
     /// Reference to the source code
-    pub code: &'code [T],
+    pub source: &'code [T],
     /// Start position (inclusive)
     pub start: usize,
     /// End position (exclusive)
@@ -16,8 +16,8 @@ pub struct Span<'code, T: Atomic = u8> {
 
 impl<'code, T: Atomic> Span<'code, T> {
     /// Create a new span
-    pub fn new(code: &'code [T], start: usize, end: usize) -> Self {
-        Span { code, start, end }
+    pub fn new(source: &'code [T], start: usize, end: usize) -> Self {
+        Span { source, start, end }
     }
 
     /// Get the length of the span
@@ -32,7 +32,7 @@ impl<'code, T: Atomic> Span<'code, T> {
 
     /// Get the slice of code that this span represents
     pub fn slice(&self) -> &'code [T] {
-        &self.code[self.start..self.end]
+        &self.source[self.start..self.end]
     }
 
     /// Format the spanned content as a string
