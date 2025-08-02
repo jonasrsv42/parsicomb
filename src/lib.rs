@@ -13,6 +13,7 @@
 pub mod and;
 pub mod ascii;
 pub mod atomic;
+pub mod between;
 pub mod byte;
 pub mod cursor;
 pub mod cursors;
@@ -31,6 +32,7 @@ pub mod then_optionally;
 pub mod utf8;
 
 pub use atomic::{Atomic, AtomicParser, atomic};
+pub use between::between;
 pub use cursor::Cursor;
 pub use cursors::{AtomicCursor, ByteCursor};
 pub use error::{CodeLoc, ErrorLeaf, ErrorNode, ParsicombError};
