@@ -10,6 +10,7 @@
 //! - **Composability**: Small parsers combine into larger ones using combinators
 //! - **Performance**: Efficient byte-level parsing with minimal allocations
 
+pub mod all;
 pub mod and;
 pub mod ascii;
 pub mod atomic;
@@ -33,6 +34,7 @@ pub mod some;
 pub mod take_until;
 pub mod utf8;
 
+pub use all::all;
 pub use atomic::{Atomic, AtomicParser, atomic};
 pub use between::between;
 pub use cursor::Cursor;
