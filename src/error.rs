@@ -71,6 +71,7 @@ pub trait ErrorNode<'code>: Error {
 #[derive(Debug)]
 pub struct ReadablePosition {
     pub line: usize,
+    /// Character offset within the line using display widths
     pub byte_offset: usize,
 }
 
@@ -92,19 +93,14 @@ impl<'code, T: Atomic> CodeLoc<'code, T> {
 }
 
 impl<'code, T: Atomic> CodeLoc<'code, T> {
-    /// Calculate line number and element offset within that line
+    /// Calculate line number and character offset within that line
     ///
-    /// Note: We return element offset instead of column number because column
-    /// calculation is complex - it depends on:
-    /// - Text encoding (UTF-8 can have multi-byte characters)
-    /// - Rendering context (tabs can be 2, 4, 8 spaces)
-    /// - Terminal width and line wrapping
-    /// - Zero-width characters, combining characters, etc.
-    ///
-    /// Element offset within the line is unambiguous and useful for debugging.
+    /// Uses display_width() from the Atomic trait to calculate character position
+    /// based on how characters would appear when rendered, accounting for things
+    /// like tab width, unicode character width, etc.
     fn readable_position(&self) -> ReadablePosition {
         let mut line = 1;
-        let mut line_start = 0;
+        let mut line_start_element = 0;
 
         for (i, &element) in self.code.iter().enumerate() {
             if i >= self.loc {
@@ -112,12 +108,17 @@ impl<'code, T: Atomic> CodeLoc<'code, T> {
             }
             if element.is_newline() {
                 line += 1;
-                line_start = i + 1;
+                line_start_element = i + 1;
             }
         }
 
-        let byte_offset = self.loc - line_start;
-        ReadablePosition { line, byte_offset }
+        // Calculate character offset by summing display widths (no spaces between tokens)
+        let char_offset = self.code[line_start_element..self.loc]
+            .iter()
+            .map(|element| element.display_width())
+            .sum::<usize>();
+
+        ReadablePosition { line, byte_offset: char_offset }
     }
 
     /// Get lines of context around the error position
