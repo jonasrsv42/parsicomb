@@ -11,6 +11,12 @@ pub trait Atomic: Copy + Clone + PartialEq + Debug + Display {
 
     /// Format a slice of elements for display in error messages
     fn format_slice(slice: &[Self]) -> String;
+
+    /// Returns the display width (number of columns) this character takes when rendered
+    /// Default implementation returns 1 for most characters
+    fn display_width(&self) -> usize {
+        1
+    }
 }
 
 /// A parser that reads one atomic element from the cursor and advances it
