@@ -12,6 +12,7 @@
 
 pub mod all;
 pub mod and;
+pub mod argument_list;
 pub mod ascii;
 pub mod atomic;
 pub mod between;
@@ -36,6 +37,7 @@ pub mod take_until;
 pub mod utf8;
 
 pub use all::all;
+pub use argument_list::argument_list;
 pub use atomic::{Atomic, AtomicParser, atomic};
 pub use between::between;
 pub use cursor::Cursor;
