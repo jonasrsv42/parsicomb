@@ -118,7 +118,10 @@ impl<'code, T: Atomic> CodeLoc<'code, T> {
             .map(|element| element.display_width())
             .sum::<usize>();
 
-        ReadablePosition { line, byte_offset: char_offset }
+        ReadablePosition {
+            line,
+            byte_offset: char_offset,
+        }
     }
 
     /// Get lines of context around the error position

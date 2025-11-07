@@ -28,8 +28,12 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ArgumentListError::OpenDelimiter(e) => write!(f, "Failed to parse opening delimiter: {}", e),
-            ArgumentListError::FirstArgument(e) => write!(f, "Failed to parse first argument: {}", e),
+            ArgumentListError::OpenDelimiter(e) => {
+                write!(f, "Failed to parse opening delimiter: {}", e)
+            }
+            ArgumentListError::FirstArgument(e) => {
+                write!(f, "Failed to parse first argument: {}", e)
+            }
             ArgumentListError::ArgumentAfterSeparator(e) => {
                 write!(f, "Failed to parse argument after separator: {}", e)
             }
@@ -189,9 +193,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ByteCursor;
     use crate::ascii::number::i64;
     use crate::byte::is_byte;
-    use crate::ByteCursor;
 
     #[test]
     fn test_empty_list() {
