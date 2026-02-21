@@ -25,6 +25,7 @@ pub mod filter;
 pub mod lazy;
 pub mod many;
 pub mod map;
+pub mod optional;
 pub mod map_err;
 pub mod not;
 pub mod ntimes;
