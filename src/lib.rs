@@ -47,6 +47,7 @@ pub use cursors::{AtomicCursor, ByteCursor};
 pub use error::{CodeLoc, ErrorLeaf, ErrorNode, ParsicombError};
 pub use lazy::{Lazy, lazy};
 pub use ntimes::ntimes;
+pub use optional::optional;
 pub use parser::Parser;
 pub use position::{Position, PositionExt, Span, position};
 pub use separated_list::separated_list;
