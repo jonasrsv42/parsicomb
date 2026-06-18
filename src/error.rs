@@ -68,12 +68,10 @@ pub trait ErrorNode<'code>: Error {
     fn likely_error(&self) -> &dyn ErrorLeaf<'code, Element = Self::Element>;
 }
 
-#[derive(Debug)]
-pub struct ReadablePosition {
-    pub line: usize,
-    /// Character offset within the line using display widths
-    pub byte_offset: usize,
-}
+// Re-exported for backwards compatibility; the position/context computation now
+// lives in `error_fmt` so the (fiddly, bounded) windowing logic can be unit
+// tested in isolation.
+pub use crate::error_fmt::ReadablePosition;
 
 #[derive(Debug, Copy, Clone)]
 pub struct CodeLoc<'code, T: Atomic = u8> {
@@ -93,94 +91,20 @@ impl<'code, T: Atomic> CodeLoc<'code, T> {
 }
 
 impl<'code, T: Atomic> CodeLoc<'code, T> {
-    /// Calculate line number and character offset within that line
+    /// Calculate line number and character offset within that line.
     ///
-    /// Uses display_width() from the Atomic trait to calculate character position
-    /// based on how characters would appear when rendered, accounting for things
-    /// like tab width, unicode character width, etc.
+    /// Delegates to [`crate::error_fmt`]; see there for details.
     fn readable_position(&self) -> ReadablePosition {
-        let mut line = 1;
-        let mut line_start_element = 0;
-
-        for (i, &element) in self.code.iter().enumerate() {
-            if i >= self.loc {
-                break;
-            }
-            if element.is_newline() {
-                line += 1;
-                line_start_element = i + 1;
-            }
-        }
-
-        // Calculate character offset by summing display widths (no spaces between tokens)
-        let char_offset = self.code[line_start_element..self.loc]
-            .iter()
-            .map(|element| element.display_width())
-            .sum::<usize>();
-
-        ReadablePosition {
-            line,
-            byte_offset: char_offset,
-        }
+        crate::error_fmt::readable_position(self.code, self.loc)
     }
 
-    /// Get lines of context around the error position
-    /// Returns up to 2 lines before and after the error line
+    /// Get lines of context around the error position.
+    ///
+    /// Returns up to 2 lines before and after the error line. Only a bounded
+    /// window around the error is materialized, so this stays cheap even when
+    /// `code` is a large binary buffer. See [`crate::error_fmt`].
     fn context_lines(&self) -> Vec<String> {
-        let pos = self.readable_position();
-        let mut lines = Vec::new();
-        let mut current_line = 1;
-        let mut line_start = 0;
-
-        // Convert to string for easier line handling
-        let text = T::format_slice(&self.code);
-
-        for (i, ch) in text.char_indices() {
-            if ch == '\n' {
-                // Check if this line is within our context window
-                if current_line >= pos.line.saturating_sub(2) && current_line <= pos.line + 2 {
-                    let line_content = &text[line_start..i];
-                    let prefix = if current_line == pos.line {
-                        format!("  > {} | ", current_line)
-                    } else {
-                        format!("    {} | ", current_line)
-                    };
-                    lines.push(format!("{}{}", prefix, line_content));
-
-                    // Add error pointer for the error line
-                    if current_line == pos.line {
-                        let pointer_offset = prefix.len() + pos.byte_offset;
-                        let pointer = format!("{}^--- here", " ".repeat(pointer_offset));
-                        lines.push(pointer);
-                    }
-                }
-
-                current_line += 1;
-                line_start = i + 1;
-            }
-        }
-
-        // Handle last line if no trailing newline
-        if line_start < text.len()
-            && current_line >= pos.line.saturating_sub(2)
-            && current_line <= pos.line + 2
-        {
-            let line_content = &text[line_start..];
-            let prefix = if current_line == pos.line {
-                format!("  > {} | ", current_line)
-            } else {
-                format!("    {} | ", current_line)
-            };
-            lines.push(format!("{}{}", prefix, line_content));
-
-            if current_line == pos.line {
-                let pointer_offset = prefix.len() + pos.byte_offset;
-                let pointer = format!("{}^--- here", " ".repeat(pointer_offset));
-                lines.push(pointer);
-            }
-        }
-
-        lines
+        crate::error_fmt::context_lines(self.code, self.loc)
     }
 }
 
