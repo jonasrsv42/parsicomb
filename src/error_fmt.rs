@@ -20,6 +20,20 @@ use crate::atomic::Atomic;
 /// error position when building the context snippet.
 pub(crate) const CONTEXT_RADIUS: usize = 512;
 
+/// Maximum distance (in elements, from the start of input) we will scan to
+/// resolve a human-readable line/column.
+///
+/// Resolving line/column is inherently O(loc) — it must count newlines before
+/// the error. Past this distance we don't try: an input this large is far
+/// bigger than any normal source file (most likely a binary blob), line/column
+/// would be meaningless, and the absolute byte offset is the useful location.
+/// Error rendering is best-effort, so degrading to "byte offset only" here keeps
+/// it O(1) without losing anything that matters.
+///
+/// Note this gates on the error *position*, not total input size: an error
+/// early in a huge buffer is still cheap to resolve and gets full line/column.
+pub(crate) const MAX_POSITION_SCAN: usize = 1 << 20; // 1 MiB
+
 /// A human-readable position: 1-based line and a column expressed in display
 /// widths (see [`Atomic::display_width`]) from the start of that line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,35 +43,32 @@ pub struct ReadablePosition {
     pub byte_offset: usize,
 }
 
-/// Calculate the line number and display-width column of `loc` within `code`.
+/// Calculate the line number and display-width column of `loc` within `code`,
+/// or `None` if `loc` is beyond [`MAX_POSITION_SCAN`] (too far in to scan).
 ///
-/// This counts newlines from the start of the input, so it is O(loc) — but it
-/// is allocation-free (plain element iteration) and only runs when an error is
-/// actually rendered.
-pub(crate) fn readable_position<T: Atomic>(code: &[T], loc: usize) -> ReadablePosition {
+/// When it does run it counts newlines from the start of the input (O(loc)), but
+/// allocation-free and in a *single* pass: the column is accumulated in the same
+/// loop that counts newlines (reset at each line break), rather than a second
+/// scan over the error line. Only runs when an error is rendered.
+pub(crate) fn readable_position<T: Atomic>(code: &[T], loc: usize) -> Option<ReadablePosition> {
     let loc = loc.min(code.len());
-    let mut line = 1;
-    let mut line_start_element = 0;
+    if loc > MAX_POSITION_SCAN {
+        return None;
+    }
 
-    for (i, element) in code.iter().enumerate() {
-        if i >= loc {
-            break;
-        }
+    let mut line = 1;
+    let mut byte_offset = 0;
+
+    for element in &code[..loc] {
         if element.is_newline() {
             line += 1;
-            line_start_element = i + 1;
+            byte_offset = 0;
+        } else {
+            byte_offset += element.display_width();
         }
     }
 
-    let char_offset = code[line_start_element..loc]
-        .iter()
-        .map(|element| element.display_width())
-        .sum::<usize>();
-
-    ReadablePosition {
-        line,
-        byte_offset: char_offset,
-    }
+    Some(ReadablePosition { line, byte_offset })
 }
 
 /// Compute the byte window of `code` to materialize for the context snippet,
@@ -114,7 +125,12 @@ fn context_window<T: Atomic>(code: &[T], loc: usize, err_line: usize) -> (usize,
 pub(crate) fn context_lines<T: Atomic>(code: &[T], loc: usize) -> Vec<String> {
     let len = code.len();
     let loc = loc.min(len);
-    let pos = readable_position(code, loc);
+    // Past the scan threshold we don't resolve line structure, so there is no
+    // snippet to render — the byte offset alone is the location.
+    let pos = match readable_position(code, loc) {
+        Some(pos) => pos,
+        None => return Vec::new(),
+    };
     let (win_start, win_end, first_line) = context_window(code, loc, pos.line);
 
     // Materialize only the bounded window, not the whole input.
@@ -177,7 +193,7 @@ mod tests {
     /// the windowed implementation produces identical output whenever the whole
     /// input fits inside the context window (i.e. normal source-sized inputs).
     fn context_lines_reference(code: &[u8], loc: usize) -> Vec<String> {
-        let pos = readable_position(code, loc);
+        let pos = readable_position(code, loc).expect("reference used only on small inputs");
         let mut lines = Vec::new();
         let mut current_line = 1;
         let mut line_start = 0;
@@ -219,14 +235,14 @@ mod tests {
     fn readable_position_basic() {
         let code = b"abc\ndef\nghi";
         // position of 'e' (index 5) is line 2, column 1
-        let p = readable_position(code, 5);
+        let p = readable_position(code, 5).unwrap();
         assert_eq!(p.line, 2);
         assert_eq!(p.byte_offset, 1);
     }
 
     #[test]
     fn readable_position_start() {
-        let p = readable_position(b"hello", 0);
+        let p = readable_position(b"hello", 0).unwrap();
         assert_eq!(p.line, 1);
         assert_eq!(p.byte_offset, 0);
     }
@@ -284,7 +300,7 @@ mod tests {
         // Error on line 4 of 6; context should start at line 2 ("    2 | ...").
         let code = b"l1\nl2\nl3\nl4\nl5\nl6";
         let loc = 9; // somewhere in "l4"
-        assert_eq!(readable_position(code, loc).line, 4);
+        assert_eq!(readable_position(code, loc).unwrap().line, 4);
         let out = context_lines(code, loc);
         assert!(out[0].starts_with("    2 | "), "got {:?}", out[0]);
         // error line is line 4, rendered with the `>` marker
@@ -292,22 +308,46 @@ mod tests {
     }
 
     #[test]
-    fn large_binary_is_bounded() {
-        // 4 MiB, no newlines: the whole thing is "line 1". Rendering must only
-        // touch a window around the error, so the output stays tiny.
-        let code = vec![0xABu8; 4 << 20];
+    fn large_binary_below_threshold_is_windowed() {
+        // No newlines, but within the scan threshold: the whole thing is
+        // "line 1" and rendering must only touch a bounded window around the
+        // error, so the output stays tiny relative to the input.
+        let size = 64 * CONTEXT_RADIUS; // well under MAX_POSITION_SCAN
+        assert!(size <= MAX_POSITION_SCAN);
+        let code = vec![0xABu8; size];
         let loc = code.len() - 1;
         let out = context_lines(&code, loc);
 
         let total: usize = out.iter().map(|l| l.len()).sum();
-        // Bounded by ~2*RADIUS of content plus a pointer line, nowhere near 4 MiB.
+        // Bounded by ~2*RADIUS of content plus a pointer line, not the input size.
         assert!(
             total <= 8 * CONTEXT_RADIUS,
             "context output not bounded: {total} bytes"
         );
-        // The error line is line 1 and a pointer is emitted.
         assert!(out.iter().any(|l| l.starts_with("  > 1 | ")), "got {out:?}");
         assert!(out.iter().any(|l| l.contains("^--- here")), "got {out:?}");
+    }
+
+    #[test]
+    fn past_scan_threshold_skips_line_resolution() {
+        // An error far into a large buffer: we don't scan for line structure.
+        // readable_position is None and no context snippet is produced — the
+        // byte offset alone is the location.
+        let code = vec![0xABu8; MAX_POSITION_SCAN + 16];
+        let loc = code.len() - 1;
+        assert!(readable_position(&code, loc).is_none());
+        assert!(context_lines(&code, loc).is_empty());
+    }
+
+    #[test]
+    fn early_error_in_huge_buffer_still_resolves() {
+        // Gating is on the error position, not buffer size: an error near the
+        // start of a huge buffer is cheap and still gets full line/column.
+        let mut code = vec![b'x'; MAX_POSITION_SCAN * 4];
+        code[3] = b'\n';
+        let p = readable_position(&code, 10).expect("early error should resolve");
+        assert_eq!(p.line, 2);
+        assert!(!context_lines(&code, 10).is_empty());
     }
 
     #[test]
@@ -328,7 +368,7 @@ mod tests {
         let code = b"abc";
         // Should not panic even if loc is out of range.
         let _ = context_lines(code, 999);
-        let p = readable_position(code, 999);
+        let p = readable_position(code, 999).unwrap();
         assert_eq!(p.line, 1);
     }
 }

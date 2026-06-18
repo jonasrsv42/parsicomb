@@ -91,10 +91,11 @@ impl<'code, T: Atomic> CodeLoc<'code, T> {
 }
 
 impl<'code, T: Atomic> CodeLoc<'code, T> {
-    /// Calculate line number and character offset within that line.
+    /// Calculate line number and character offset within that line, or `None`
+    /// if the error position is too far into the input to scan cheaply.
     ///
     /// Delegates to [`crate::error_fmt`]; see there for details.
-    fn readable_position(&self) -> ReadablePosition {
+    fn readable_position(&self) -> Option<ReadablePosition> {
         crate::error_fmt::readable_position(self.code, self.loc)
     }
 
@@ -127,12 +128,14 @@ impl<'code, T: Atomic> fmt::Display for ParsicombError<'code, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ParsicombError::UnexpectedEndOfFile(code_loc) => {
-                let pos = code_loc.readable_position();
-                writeln!(
-                    f,
-                    "Unexpected end of file at line {}, byte offset {} (absolute position: {})",
-                    pos.line, pos.byte_offset, code_loc.loc
-                )?;
+                match code_loc.readable_position() {
+                    Some(pos) => writeln!(
+                        f,
+                        "Unexpected end of file at line {}, byte offset {} (absolute position: {})",
+                        pos.line, pos.byte_offset, code_loc.loc
+                    )?,
+                    None => writeln!(f, "Unexpected end of file at byte offset {}", code_loc.loc)?,
+                }
                 writeln!(f)?;
                 for line in code_loc.context_lines() {
                     writeln!(f, "{}", line)?;
@@ -140,12 +143,14 @@ impl<'code, T: Atomic> fmt::Display for ParsicombError<'code, T> {
                 Ok(())
             }
             ParsicombError::AlreadyAtEndOfFile(code_loc) => {
-                let pos = code_loc.readable_position();
-                writeln!(
-                    f,
-                    "Already at end of file at line {}, byte offset {} (absolute position: {})",
-                    pos.line, pos.byte_offset, code_loc.loc
-                )?;
+                match code_loc.readable_position() {
+                    Some(pos) => writeln!(
+                        f,
+                        "Already at end of file at line {}, byte offset {} (absolute position: {})",
+                        pos.line, pos.byte_offset, code_loc.loc
+                    )?,
+                    None => writeln!(f, "Already at end of file at byte offset {}", code_loc.loc)?,
+                }
                 writeln!(f)?;
                 for line in code_loc.context_lines() {
                     writeln!(f, "{}", line)?;
@@ -153,12 +158,18 @@ impl<'code, T: Atomic> fmt::Display for ParsicombError<'code, T> {
                 Ok(())
             }
             ParsicombError::CannotReadValueAtEof(code_loc) => {
-                let pos = code_loc.readable_position();
-                writeln!(
-                    f,
-                    "Cannot read value at EOF at line {}, byte offset {} (absolute position: {})",
-                    pos.line, pos.byte_offset, code_loc.loc
-                )?;
+                match code_loc.readable_position() {
+                    Some(pos) => writeln!(
+                        f,
+                        "Cannot read value at EOF at line {}, byte offset {} (absolute position: {})",
+                        pos.line, pos.byte_offset, code_loc.loc
+                    )?,
+                    None => writeln!(
+                        f,
+                        "Cannot read value at EOF at byte offset {}",
+                        code_loc.loc
+                    )?,
+                }
                 writeln!(f)?;
                 for line in code_loc.context_lines() {
                     writeln!(f, "{}", line)?;
@@ -166,12 +177,14 @@ impl<'code, T: Atomic> fmt::Display for ParsicombError<'code, T> {
                 Ok(())
             }
             ParsicombError::SyntaxError { message, loc } => {
-                let pos = loc.readable_position();
-                writeln!(
-                    f,
-                    "Syntax error at line {}, byte offset {}: {}",
-                    pos.line, pos.byte_offset, message
-                )?;
+                match loc.readable_position() {
+                    Some(pos) => writeln!(
+                        f,
+                        "Syntax error at line {}, byte offset {}: {}",
+                        pos.line, pos.byte_offset, message
+                    )?,
+                    None => writeln!(f, "Syntax error at byte offset {}: {}", loc.loc, message)?,
+                }
                 writeln!(f)?;
                 for line in loc.context_lines() {
                     writeln!(f, "{}", line)?;
@@ -308,7 +321,7 @@ mod tests {
     fn test_codeloc_readable_position_eos() {
         let data = b"line1\nline2";
         let loc = CodeLoc::new(data, 11); // Position 11 = past end
-        let pos = loc.readable_position();
+        let pos = loc.readable_position().unwrap();
 
         // Should be on line 2, with byte offset 5 (past "line2")
         assert_eq!(pos.line, 2);
