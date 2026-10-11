@@ -1,4 +1,5 @@
 use super::parser::Parser;
+use crate::cursor::Cursor;
 
 /// Parser combinator that matches zero or more occurrences of the given parser
 pub struct Many<P> {
@@ -24,6 +25,8 @@ where
 
         loop {
             match self.parser.parse(cursor) {
+                // An iteration that consumes nothing would repeat forever
+                Ok((_, next_cursor)) if next_cursor.position() == cursor.position() => break,
                 Ok((value, next_cursor)) => {
                     results.push(value);
                     cursor = next_cursor;
@@ -118,5 +121,25 @@ mod tests {
         let (results, cursor) = parser.parse(cursor).unwrap();
         assert_eq!(results, vec![]);
         assert!(matches!(cursor, ByteCursor::EndOfFile { .. }));
+    }
+
+    #[test]
+    fn test_many_non_consuming_parser_terminates() {
+        let cursor = ByteCursor::new(b"b");
+        let parser = many(crate::optional(is_byte(b'a')));
+
+        let (output, remaining) = parser.parse(cursor).unwrap();
+        assert!(output.is_empty());
+        assert_eq!(remaining.value().unwrap(), b'b');
+    }
+
+    #[test]
+    fn test_many_of_many_terminates() {
+        let cursor = ByteCursor::new(b"aab");
+        let parser = many(many(is_byte(b'a')));
+
+        let (output, remaining) = parser.parse(cursor).unwrap();
+        assert_eq!(output, vec![vec![b'a', b'a']]);
+        assert_eq!(remaining.value().unwrap(), b'b');
     }
 }

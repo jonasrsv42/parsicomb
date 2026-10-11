@@ -1,4 +1,5 @@
 use super::parser::Parser;
+use crate::cursor::Cursor;
 
 /// Parser combinator that matches one or more occurrences of the given parser
 pub struct Some<P> {
@@ -29,6 +30,8 @@ where
         // Continue parsing zero or more times
         loop {
             match self.parser.parse(cursor) {
+                // An iteration that consumes nothing would repeat forever
+                Ok((_, next_cursor)) if next_cursor.position() == cursor.position() => break,
                 Ok((value, next_cursor)) => {
                     results.push(value);
                     cursor = next_cursor;
@@ -121,5 +124,16 @@ mod tests {
 
         let result = parser.parse(cursor);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_some_non_consuming_parser_terminates() {
+        let cursor = ByteCursor::new(b"b");
+        let parser = some(crate::optional(is_byte(b'a')));
+
+        // The first (empty) match is required and kept; repetition then stops
+        let (output, remaining) = parser.parse(cursor).unwrap();
+        assert_eq!(output, vec![None]);
+        assert_eq!(remaining.value().unwrap(), b'b');
     }
 }

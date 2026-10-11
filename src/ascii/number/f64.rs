@@ -1,13 +1,9 @@
-use super::i64::i64;
-use super::u64::u64;
+use super::digit::digit;
 use crate::ByteCursor;
 use crate::Cursor;
-use crate::and::AndExt;
 use crate::byte::is_byte;
 use crate::parser::Parser;
 use crate::{CodeLoc, ParsicombError};
-
-const MAX_FRACTIONAL_DIGITS: usize = 15;
 
 /// Parser for int.uint format (e.g., 123.456, -42.789)
 fn int_dot_uint<'code>()
@@ -17,62 +13,49 @@ fn int_dot_uint<'code>()
 
 struct IntDotUintParser;
 
+/// Consume one or more ASCII digits
+fn digits(cursor: ByteCursor<'_>) -> Result<ByteCursor<'_>, ParsicombError<'_>> {
+    let (_, mut cursor) = digit().parse(cursor)?;
+    while let Ok((_, next)) = digit().parse(cursor) {
+        cursor = next;
+    }
+    Ok(cursor)
+}
+
 impl<'code> Parser<'code> for IntDotUintParser {
     type Cursor = ByteCursor<'code>;
     type Output = f64;
     type Error = ParsicombError<'code>;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
-        let (((int_part, _), frac_part), cursor) = i64()
-            .and(is_byte(b'.'))
-            .and(u64())
-            .parse(cursor)
-            .map_err(ParsicombError::wrap)?;
+        let (data, start) = cursor.inner();
 
-        let frac_digits = frac_part.to_string().len();
-
-        // Check for too many fractional digits
-        if frac_digits > MAX_FRACTIONAL_DIGITS {
-            let (data, position) = cursor.inner();
-            return Err(ParsicombError::SyntaxError {
-                message: format!(
-                    "too many fractional digits: {} (max {})",
-                    frac_digits, MAX_FRACTIONAL_DIGITS
-                )
-                .into(),
-                loc: CodeLoc::new(data, position),
-            });
+        // Match [+-]digits.digits, then let the standard library do the
+        // (correctly rounded) conversion on the matched slice.
+        let mut end = cursor;
+        if let Ok(b'-' | b'+') = end.value() {
+            end = end.next();
         }
+        let end = digits(end)?;
+        let (_, end) = is_byte(b'.').parse(end)?;
+        let end = digits(end)?;
 
-        let frac_divisor = 10_f64.powi(frac_digits as i32);
-        let fractional = frac_part as f64 / frac_divisor;
-
-        // Check for integer part precision loss
-        let int_as_f64 = int_part as f64;
-        if int_as_f64 as i64 != int_part {
-            let (data, position) = cursor.inner();
-            return Err(ParsicombError::SyntaxError {
-                message: format!("integer part too large for f64 precision: {}", int_part).into(),
-                loc: CodeLoc::new(data, position),
-            });
-        }
-
-        let result = if int_part >= 0 {
-            int_as_f64 + fractional
-        } else {
-            int_as_f64 - fractional
+        let error = |message: &'static str| ParsicombError::SyntaxError {
+            message: message.into(),
+            loc: CodeLoc::new(data, start),
         };
 
-        // Check for overflow/infinity
-        if !result.is_finite() {
-            let (data, position) = cursor.inner();
-            return Err(ParsicombError::SyntaxError {
-                message: "floating point overflow".into(),
-                loc: CodeLoc::new(data, position),
-            });
+        // The matched slice is ASCII by construction, so neither of these can
+        // fail in practice; map to errors anyway rather than panic.
+        let text = std::str::from_utf8(&data[start..end.position()])
+            .map_err(|_| error("invalid UTF-8 in float literal"))?;
+        let value: f64 = text.parse().map_err(|_| error("invalid float literal"))?;
+
+        if !value.is_finite() {
+            return Err(error("floating point overflow"));
         }
 
-        Ok((result, cursor))
+        Ok((value, end))
     }
 }
 
@@ -168,31 +151,50 @@ mod tests {
         assert!(result.is_err());
     }
 
-    #[test]
-    fn test_too_many_fractional_digits() {
-        // 20 fractional digits (exceeds MAX_FRACTIONAL_DIGITS = 15)
-        let data = b"1.12345678901234567890";
-        let cursor = ByteCursor::new(data);
-        let parser = f64();
-
-        let result = parser.parse(cursor);
-        assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("too many fractional digits")
-        );
+    fn parse(data: &[u8]) -> f64 {
+        f64().parse(ByteCursor::new(data)).unwrap().0
     }
 
     #[test]
-    fn test_max_fractional_digits_ok() {
-        // Exactly 15 fractional digits should work
-        let data = b"1.123456789012345";
-        let cursor = ByteCursor::new(data);
-        let parser = f64();
+    fn test_leading_zeros_in_fraction() {
+        assert_eq!(parse(b"1.05"), 1.05);
+        assert_eq!(parse(b"3.007"), 3.007);
+        assert_eq!(parse(b"0.000001"), 0.000001);
+    }
 
-        let result = parser.parse(cursor);
-        assert!(result.is_ok());
+    #[test]
+    fn test_negative_zero_integer_part() {
+        assert_eq!(parse(b"-0.5"), -0.5);
+        assert!(parse(b"-0.0").is_sign_negative());
+    }
+
+    #[test]
+    fn test_plus_sign() {
+        assert_eq!(parse(b"+1.5"), 1.5);
+    }
+
+    #[test]
+    fn test_many_fractional_digits() {
+        assert_eq!(parse(b"1.12345678901234567890"), 1.12345678901234567890);
+    }
+
+    #[test]
+    fn test_large_integer_part() {
+        assert_eq!(parse(b"9007199254740993.0"), 9007199254740993.0);
+        assert_eq!(parse(b"100000000000000000000.5"), 1e20);
+    }
+
+    #[test]
+    fn test_overflow_fails() {
+        let mut data = vec![b'9'; 400];
+        data.extend_from_slice(b".0");
+        let result = f64().parse(ByteCursor::new(&data));
+        assert!(result.unwrap_err().to_string().contains("overflow"));
+    }
+
+    #[test]
+    fn test_sign_only_fails() {
+        assert!(f64().parse(ByteCursor::new(b"-.5")).is_err());
+        assert!(f64().parse(ByteCursor::new(b"-")).is_err());
     }
 }

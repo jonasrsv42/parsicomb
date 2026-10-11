@@ -47,7 +47,8 @@ impl<'code> Parser<'code> for IntParser {
                     loc: CodeLoc::new(data, position),
                 });
             }
-            -(value as i64)
+            // Wrapping is exact here: value <= 2^63, and 2^63 wraps to i64::MIN
+            (value as i64).wrapping_neg()
         } else {
             // Check for positive overflow
             if value > i64::MAX as u64 {
@@ -141,6 +142,19 @@ mod tests {
 
         let result = parser.parse(cursor);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_i64_min() {
+        let cursor = ByteCursor::new(b"-9223372036854775808");
+        let (value, _) = i64().parse(cursor).unwrap();
+        assert_eq!(value, i64::MIN);
+    }
+
+    #[test]
+    fn test_below_i64_min_fails() {
+        let cursor = ByteCursor::new(b"-9223372036854775809");
+        assert!(i64().parse(cursor).is_err());
     }
 
     #[test]

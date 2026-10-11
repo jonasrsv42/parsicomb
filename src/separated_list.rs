@@ -98,6 +98,12 @@ where
 
             // Parse the next element (required after separator)
             let (value, next_cursor) = self.parser.parse(temp_cursor)?;
+
+            // Separator + element consumed nothing: stop rather than loop forever
+            if next_cursor.position() == cursor.position() {
+                break;
+            }
+
             results.push(value);
             cursor = next_cursor;
         }
@@ -216,5 +222,18 @@ mod tests {
         let (results, cursor) = parser.parse(cursor).unwrap();
         assert_eq!(results, vec![1, 2, 3]);
         assert_eq!(cursor.value().unwrap(), b' ');
+    }
+
+    #[test]
+    fn test_non_consuming_separator_and_element_terminates() {
+        let cursor = ByteCursor::new(b"b");
+        let parser = separated_list(
+            crate::optional(is_byte(b'a')),
+            crate::optional(is_byte(b',')),
+        );
+
+        let (output, remaining) = parser.parse(cursor).unwrap();
+        assert_eq!(output, vec![None]);
+        assert_eq!(remaining.value().unwrap(), b'b');
     }
 }
