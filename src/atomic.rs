@@ -1,5 +1,4 @@
 use crate::cursor::Cursor;
-use crate::error::ErrorNode;
 use crate::parser::Parser;
 use std::fmt::{Debug, Display};
 
@@ -33,12 +32,13 @@ impl<C> AtomicParser<C> {
     }
 }
 
-impl<'code, C> Parser<'code> for AtomicParser<C>
-where
-    C: Cursor<'code>,
-    C::Element: Atomic,
-    C::Error: ErrorNode<'code, Element = C::Element>,
-{
+impl<C: Cursor> Default for AtomicParser<C> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<C: Cursor> Parser for AtomicParser<C> {
     type Cursor = C;
     type Output = C::Element;
     type Error = C::Error;
@@ -111,11 +111,19 @@ mod tests {
                 U32Cursor::Valid { data, position: 0 }
             }
         }
+
+        fn source(&self) -> &'code [u32] {
+            match self {
+                U32Cursor::Valid { data, .. } => data,
+                U32Cursor::EndOfFile { data } => data,
+            }
+        }
     }
 
-    impl<'code> Cursor<'code> for U32Cursor<'code> {
+    impl<'code> Cursor for U32Cursor<'code> {
         type Element = u32;
         type Error = ParsicombError<'code, u32>;
+        type Span = crate::Span<'code, u32>;
 
         fn value(&self) -> Result<Self::Element, Self::Error> {
             match self {
@@ -166,18 +174,15 @@ mod tests {
             }
         }
 
-        fn source(&self) -> &'code [Self::Element] {
-            match self {
-                U32Cursor::Valid { data, .. } => data,
-                U32Cursor::EndOfFile { data } => data,
+        fn syntax_error(&self, message: std::borrow::Cow<'static, str>) -> Self::Error {
+            ParsicombError::SyntaxError {
+                message,
+                loc: CodeLoc::new(self.source(), self.position()),
             }
         }
 
-        fn inner(self) -> (&'code [Self::Element], usize) {
-            match self {
-                U32Cursor::Valid { data, position } => (data, position),
-                U32Cursor::EndOfFile { data } => (data, data.len()),
-            }
+        fn span_to(&self, end: Self) -> Self::Span {
+            crate::Span::new(self.source(), self.position(), end.position())
         }
     }
 

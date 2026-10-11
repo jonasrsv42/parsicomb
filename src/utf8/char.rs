@@ -1,32 +1,32 @@
 use crate::ByteCursor;
 use crate::Cursor;
 use crate::byte::ByteParser;
+use crate::error::Expected;
 use crate::parser::Parser;
-use crate::{CodeLoc, ParsicombError};
+use crate::ParsicombError;
 use std::borrow::Cow;
+use std::marker::PhantomData;
 
 /// Parser that consumes and returns a single UTF-8 character
-pub struct CharParser;
+pub struct CharParser<'code> {
+    _input: PhantomData<&'code [u8]>,
+}
 
 // Helper function to reduce error creation boilerplate
 fn create_error<'code>(
     cursor: &ByteCursor<'code>,
     message: Cow<'static, str>,
 ) -> ParsicombError<'code> {
-    let (data, position) = cursor.inner();
-    ParsicombError::SyntaxError {
-        message,
-        loc: CodeLoc::new(data, position),
-    }
+    cursor.syntax_error(message)
 }
 
-impl<'code> Parser<'code> for CharParser {
+impl<'code> Parser for CharParser<'code> {
     type Cursor = ByteCursor<'code>;
     type Output = char;
     type Error = ParsicombError<'code>;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
-        let byte_parser = ByteParser::new();
+        let byte_parser: ByteParser<'code> = ByteParser::new();
 
         // 1. Read the first byte
         let (b1, mut current_cursor) = byte_parser.parse(cursor)?;
@@ -134,34 +134,45 @@ impl<'code> Parser<'code> for CharParser {
 }
 
 /// Convenience function to create a CharParser
-pub fn char() -> CharParser {
-    CharParser
+pub fn char<'code>() -> CharParser<'code> {
+    CharParser {
+        _input: PhantomData,
+    }
 }
 
 /// Parser that matches a specific character
-pub struct IsChar(char);
+pub struct IsChar<'code> {
+    expected: char,
+    _input: PhantomData<&'code [u8]>,
+}
 
-impl<'code> Parser<'code> for IsChar {
+impl<'code> Parser for IsChar<'code> {
     type Cursor = ByteCursor<'code>;
     type Output = char;
     type Error = ParsicombError<'code>;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let (ch, next_cursor) = char().parse(cursor)?;
-        if ch == self.0 {
+        if ch == self.expected {
             Ok((ch, next_cursor))
         } else {
-            Err(create_error(
-                &cursor,
-                format!("expected {:?}, found {:?}", self.0, ch).into(),
-            ))
+            Err(ParsicombError::Expected {
+                expected: Expected::Char {
+                    expected: self.expected,
+                    found: ch,
+                },
+                loc: cursor.loc(),
+            })
         }
     }
 }
 
 /// Convenience function to create a parser that matches a specific character
-pub fn is_char(expected: char) -> IsChar {
-    IsChar(expected)
+pub fn is_char<'code>(expected: char) -> IsChar<'code> {
+    IsChar {
+        expected,
+        _input: PhantomData,
+    }
 }
 
 #[cfg(test)]

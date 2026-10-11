@@ -1,98 +1,43 @@
 use super::parser::Parser;
-use crate::atomic::Atomic;
-use crate::cursor::Cursor;
 use crate::error::{ErrorLeaf, ErrorNode};
 use std::fmt;
 
-// # And Combinator - Dynamic Dispatch for Compile Time Performance
-//
-// ## Why We Use `Box<dyn Parser>` and `Box<dyn ErrorNode>`
-//
-// Like the Or combinator, this uses dynamic dispatch to prevent compile-time explosion.
-// Without boxing, chaining `.and()` calls creates exponentially complex nested types:
-//
-// ```ignore
-// // Without boxing, this creates deeply nested types:
-// // And<And<And<P1, P2>, P3>, P4>
-// // With nested tuples: (((O1, O2), O3), O4)
-// // With nested errors: AndError<AndError<AndError<E1, E2>, E3>, E4>
-//
-// let parser = a.and(b).and(c).and(d).and(e); // Exponential complexity
-// ```
-//
-// **The Problem**: The same issues as Or combinator:
-// - Exponential compile times leading to infinite compilation
-// - Exponential memory usage during compilation
-// - Type system limitations with deep recursion
-// - Poor error messages from the compiler
-//
-// **The Solution**: Dynamic dispatch flattens to manageable types:
-// ```ignore
-// // With boxing: Always just And<'code, Cursor, Output1, Output2, E1, E2>
-// // With error: Always just AndError<'code>
-// ```
-//
-// ## Performance Characteristics
-//
-// **Runtime Cost**: Small heap allocation + virtual dispatch per combinator
-// **Compile Cost**: Dramatically reduced - enables complex parser chains
-// **Memory**: Constant per combinator instead of exponential growth
-//
-// ## Error Strategy
-//
-// Uses the same efficient error handling as Or: errors are boxed and only
-// resolved via `likely_error()` when actually needed for display, avoiding
-// unnecessary cloning during error propagation.
-
-/// Error type for And parser that can wrap errors from either the first or second parser
-pub enum AndError<'code, T: Atomic> {
+/// Error type for And parser, holding the error of whichever parser failed
+#[derive(Debug)]
+pub enum AndError<Err1, Err2> {
     /// Error from the first parser
-    FirstParser(Box<dyn ErrorNode<'code, Element = T> + 'code>),
+    FirstParser(Err1),
     /// Error from the second parser
-    SecondParser(Box<dyn ErrorNode<'code, Element = T> + 'code>),
+    SecondParser(Err2),
 }
 
-impl<'code, T: Atomic> std::fmt::Debug for AndError<'code, T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AndError::FirstParser(e) => f
-                .debug_tuple("FirstParser")
-                .field(&format!("{}", &**e))
-                .finish(),
-            AndError::SecondParser(e) => f
-                .debug_tuple("SecondParser")
-                .field(&format!("{}", &**e))
-                .finish(),
-        }
-    }
-}
-
-// Note: into_inner method removed since we now use boxed trait objects
-
-impl<'code, T: Atomic> fmt::Display for AndError<'code, T> {
+impl<Err1: fmt::Display, Err2: fmt::Display> fmt::Display for AndError<Err1, Err2> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AndError::FirstParser(e) => write!(f, "First parser failed: {}", &**e),
-            AndError::SecondParser(e) => write!(f, "Second parser failed: {}", &**e),
+            AndError::FirstParser(e) => write!(f, "First parser failed: {}", e),
+            AndError::SecondParser(e) => write!(f, "Second parser failed: {}", e),
         }
     }
 }
 
-impl<'code, T: Atomic> std::error::Error for AndError<'code, T> {}
+impl<Err1, Err2> std::error::Error for AndError<Err1, Err2>
+where
+    Err1: std::error::Error,
+    Err2: std::error::Error,
+{
+}
 
-// Note: From implementation removed to avoid calling likely_error() internally
+impl<Err1, Err2> ErrorNode for AndError<Err1, Err2>
+where
+    Err1: ErrorNode,
+    Err2: ErrorNode<Element = Err1::Element>,
+{
+    type Element = Err1::Element;
 
-// Implement ErrorNode for AndError to enable furthest-error selection in nested structures
-impl<'code, T: Atomic + 'code> ErrorNode<'code> for AndError<'code, T> {
-    type Element = T;
-
-    fn likely_error(&self) -> &dyn ErrorLeaf<'code, Element = Self::Element> {
+    fn likely_error(&self) -> &dyn ErrorLeaf<Element = Self::Element> {
         match self {
-            // First parser failed - return its error
-            AndError::FirstParser(e1) => e1.as_ref().likely_error(),
-            // Second parser failed - this means first parser succeeded and advanced the cursor,
-            // so the second parser's error is further in the input
-            AndError::SecondParser(e2) => e2.as_ref().likely_error(),
+            AndError::FirstParser(e) => e.likely_error(),
+            AndError::SecondParser(e) => e.likely_error(),
         }
     }
 }
@@ -122,76 +67,54 @@ impl<'code, T: Atomic + 'code> ErrorNode<'code> for AndError<'code, T> {
 /// assert_eq!(int_part, 123);
 /// assert_eq!(frac_part, 456);
 /// ```
-pub struct And<'code, C, O1, O2, E1, E2> {
-    parser1: Box<dyn Parser<'code, Cursor = C, Output = O1, Error = E1> + 'code>,
-    parser2: Box<dyn Parser<'code, Cursor = C, Output = O2, Error = E2> + 'code>,
+pub struct And<P1, P2> {
+    parser1: P1,
+    parser2: P2,
 }
 
-impl<'code, C, O1, O2, E1, E2> And<'code, C, O1, O2, E1, E2> {
-    pub fn new<P1, P2>(parser1: P1, parser2: P2) -> Self
-    where
-        P1: Parser<'code, Cursor = C, Output = O1, Error = E1> + 'code,
-        P2: Parser<'code, Cursor = C, Output = O2, Error = E2> + 'code,
-    {
-        And {
-            parser1: Box::new(parser1),
-            parser2: Box::new(parser2),
-        }
+impl<P1, P2> And<P1, P2> {
+    pub fn new(parser1: P1, parser2: P2) -> Self {
+        And { parser1, parser2 }
     }
 }
 
-impl<'code, C, O1, O2, E1, E2> Parser<'code> for And<'code, C, O1, O2, E1, E2>
+impl<P1, P2> Parser for And<P1, P2>
 where
-    C: Cursor<'code>,
-    C::Element: Atomic + 'code,
-    E1: std::error::Error + ErrorNode<'code, Element = C::Element> + 'code,
-    E2: std::error::Error + ErrorNode<'code, Element = C::Element> + 'code,
+    P1: Parser,
+    P2: Parser<Cursor = P1::Cursor>,
 {
-    type Cursor = C;
-    type Output = (O1, O2);
-    type Error = AndError<'code, C::Element>;
+    type Cursor = P1::Cursor;
+    type Output = (P1::Output, P2::Output);
+    type Error = AndError<P1::Error, P2::Error>;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
-        let (result1, cursor) = self
-            .parser1
-            .parse(cursor)
-            .map_err(|e| AndError::FirstParser(Box::new(e)))?;
-        let (result2, cursor) = self
-            .parser2
-            .parse(cursor)
-            .map_err(|e| AndError::SecondParser(Box::new(e)))?;
-        Ok(((result1, result2), cursor))
+        let (out1, cursor) = self.parser1.parse(cursor).map_err(AndError::FirstParser)?;
+        let (out2, cursor) = self.parser2.parse(cursor).map_err(AndError::SecondParser)?;
+        Ok(((out1, out2), cursor))
     }
 }
 
 /// Convenience function to create an And parser
-pub fn and<'code, P1, P2>(
-    parser1: P1,
-    parser2: P2,
-) -> And<'code, P1::Cursor, P1::Output, P2::Output, P1::Error, P2::Error>
+pub fn and<P1, P2>(parser1: P1, parser2: P2) -> And<P1, P2>
 where
-    P1: Parser<'code> + 'code,
-    P2: Parser<'code, Cursor = P1::Cursor> + 'code,
+    P1: Parser,
+    P2: Parser<Cursor = P1::Cursor>,
 {
     And::new(parser1, parser2)
 }
 
 /// Extension trait to add .and() method support for parsers
-pub trait AndExt<'code>: Parser<'code> + Sized {
-    fn and<P>(
-        self,
-        other: P,
-    ) -> And<'code, Self::Cursor, Self::Output, P::Output, Self::Error, P::Error>
+pub trait AndExt: Parser + Sized {
+    fn and<P>(self, other: P) -> And<Self, P>
     where
-        P: Parser<'code, Cursor = Self::Cursor> + 'code,
-        Self: 'code,
+        P: Parser<Cursor = Self::Cursor>,
     {
         And::new(self, other)
     }
 }
 
 /// Implement AndExt for all parsers
-impl<'code, P> AndExt<'code> for P where P: Parser<'code> {}
+impl<P: Parser> AndExt for P {}
 
 #[cfg(test)]
 mod tests {

@@ -13,10 +13,9 @@ impl<P, F> TakeUntilParser<P, F> {
     }
 }
 
-impl<'code, P, F, T> Parser<'code> for TakeUntilParser<P, F>
+impl<P, F, T> Parser for TakeUntilParser<P, F>
 where
-    P: Parser<'code, Output = T>,
-    P::Cursor: Cursor<'code>,
+    P: Parser<Output = T>,
     F: Fn(&T) -> bool,
 {
     type Cursor = P::Cursor;

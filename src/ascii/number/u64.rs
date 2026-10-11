@@ -1,19 +1,23 @@
 use super::digit::digit;
 use crate::ByteCursor;
-use crate::Cursor;
 use crate::parser::Parser;
 use crate::some::some;
 use crate::{CodeLoc, ParsicombError};
+use std::marker::PhantomData;
 
 /// Parser that matches one or more ASCII digits and returns them as a u64
 pub fn u64<'code>()
--> impl Parser<'code, Cursor = ByteCursor<'code>, Output = u64, Error = ParsicombError<'code>> {
-    UIntParser
+-> impl Parser<Cursor = ByteCursor<'code>, Output = u64, Error = ParsicombError<'code>> {
+    UIntParser {
+        _input: PhantomData,
+    }
 }
 
-struct UIntParser;
+struct UIntParser<'code> {
+    _input: PhantomData<&'code [u8]>,
+}
 
-impl<'code> Parser<'code> for UIntParser {
+impl<'code> Parser for UIntParser<'code> {
     type Cursor = ByteCursor<'code>;
     type Output = u64;
     type Error = ParsicombError<'code>;

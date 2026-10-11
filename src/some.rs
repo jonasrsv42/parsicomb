@@ -12,9 +12,9 @@ impl<P> Some<P> {
     }
 }
 
-impl<'code, P> Parser<'code> for Some<P>
+impl<P> Parser for Some<P>
 where
-    P: Parser<'code>,
+    P: Parser,
 {
     type Cursor = P::Cursor;
     type Output = Vec<P::Output>;
@@ -48,9 +48,9 @@ where
 }
 
 /// Convenience function to create a Some parser
-pub fn some<'code, P>(parser: P) -> Some<P>
+pub fn some<P>(parser: P) -> Some<P>
 where
-    P: Parser<'code>,
+    P: Parser,
 {
     Some::new(parser)
 }

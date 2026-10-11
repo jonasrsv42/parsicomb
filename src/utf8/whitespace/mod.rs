@@ -62,9 +62,11 @@ use crate::parser::Parser;
 use crate::utf8::char::char;
 
 /// Convenience function to create a Unicode whitespace parser
-pub fn unicode_whitespace<'a>()
--> impl Parser<'a, Cursor = ByteCursor<'a>, Output = char, Error = FilterError<'a, ParsicombError<'a>>>
-{
+pub fn unicode_whitespace<'code>() -> impl Parser<
+    Cursor = ByteCursor<'code>,
+    Output = char,
+    Error = FilterError<ParsicombError<'code>, ParsicombError<'code>>,
+> {
     char().filter(|c| c.is_whitespace(), "expected Unicode whitespace")
 }
 

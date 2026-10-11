@@ -14,9 +14,9 @@ impl<P> NTimes<P> {
     }
 }
 
-impl<'code, P> Parser<'code> for NTimes<P>
+impl<P> Parser for NTimes<P>
 where
-    P: Parser<'code>,
+    P: Parser,
 {
     type Cursor = P::Cursor;
     type Output = Vec<P::Output>;
@@ -36,9 +36,9 @@ where
 }
 
 /// Convenience function to create an NTimes parser
-pub fn ntimes<'code, P>(count: usize, parser: P) -> NTimes<P>
+pub fn ntimes<P>(count: usize, parser: P) -> NTimes<P>
 where
-    P: Parser<'code>,
+    P: Parser,
 {
     NTimes::new(parser, count)
 }

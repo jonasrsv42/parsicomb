@@ -1,6 +1,5 @@
 use crate::parser::Parser;
 use std::cell::OnceCell;
-use std::marker::PhantomData;
 
 /// A lazy parser that defers the construction of the actual parser until parse time.
 /// This is useful for breaking mutual recursion between parsers.
@@ -9,35 +8,51 @@ use std::marker::PhantomData;
 /// this `Lazy`, so repeated parses (e.g. inside `many`) don't rebuild it. For a
 /// recursive grammar each nesting level holds its own `Lazy`, so the cached tree
 /// only grows as deep as the deepest input seen.
-pub struct Lazy<'code, F, P>
-where
-    F: Fn() -> P,
-    P: Parser<'code>,
-{
+///
+/// A parser that refers to itself through `lazy` must erase its type at that
+/// point with `.boxed()`, otherwise its type would contain itself:
+///
+/// ```
+/// use parsicomb::{ByteCursor, Parser, BoxedExt, lazy};
+/// use parsicomb::and::AndExt;
+/// use parsicomb::byte::is_byte;
+/// use parsicomb::map::MapExt;
+/// use parsicomb::or::OrExt;
+///
+/// /// Nesting depth of balanced parentheses around an `x`, e.g. `((x))` → 2
+/// fn nested<'code>() -> impl Parser<Cursor = ByteCursor<'code>, Output = usize> {
+///     is_byte(b'x').map(|_| 0).or(is_byte(b'(')
+///         .and(lazy(|| nested().boxed()))
+///         .and(is_byte(b')'))
+///         .map(|((_, depth), _)| depth + 1))
+/// }
+///
+/// let (depth, _) = nested().parse(ByteCursor::new(b"(((x)))")).unwrap();
+/// assert_eq!(depth, 3);
+/// ```
+pub struct Lazy<F, P> {
     factory: F,
     parser: OnceCell<P>,
-    _phantom: PhantomData<&'code ()>,
 }
 
-impl<'code, F, P> Lazy<'code, F, P>
+impl<F, P> Lazy<F, P>
 where
     F: Fn() -> P,
-    P: Parser<'code>,
+    P: Parser,
 {
     /// Create a new lazy parser with the given factory function
     pub fn new(factory: F) -> Self {
         Self {
             factory,
             parser: OnceCell::new(),
-            _phantom: PhantomData,
         }
     }
 }
 
-impl<'code, F, P> Parser<'code> for Lazy<'code, F, P>
+impl<F, P> Parser for Lazy<F, P>
 where
     F: Fn() -> P,
-    P: Parser<'code>,
+    P: Parser,
 {
     type Cursor = P::Cursor;
     type Output = P::Output;
@@ -49,10 +64,10 @@ where
 }
 
 /// Create a lazy parser from a factory function
-pub fn lazy<'code, F, P>(factory: F) -> Lazy<'code, F, P>
+pub fn lazy<F, P>(factory: F) -> Lazy<F, P>
 where
     F: Fn() -> P,
-    P: Parser<'code>,
+    P: Parser,
 {
     Lazy::new(factory)
 }

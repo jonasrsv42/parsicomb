@@ -3,16 +3,21 @@ use crate::ByteCursor;
 use crate::Cursor;
 use crate::parser::Parser;
 use crate::{CodeLoc, ParsicombError};
+use std::marker::PhantomData;
 
 /// Parser that matches ASCII integer numbers (positive or negative)
 pub fn i64<'code>()
--> impl Parser<'code, Cursor = ByteCursor<'code>, Output = i64, Error = ParsicombError<'code>> {
-    IntParser
+-> impl Parser<Cursor = ByteCursor<'code>, Output = i64, Error = ParsicombError<'code>> {
+    IntParser {
+        _input: PhantomData,
+    }
 }
 
-struct IntParser;
+struct IntParser<'code> {
+    _input: PhantomData<&'code [u8]>,
+}
 
-impl<'code> Parser<'code> for IntParser {
+impl<'code> Parser for IntParser<'code> {
     type Cursor = ByteCursor<'code>;
     type Output = i64;
     type Error = ParsicombError<'code>;

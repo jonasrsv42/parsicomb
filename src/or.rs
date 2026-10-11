@@ -1,99 +1,49 @@
 use super::parser::Parser;
-use crate::atomic::Atomic;
-use crate::cursor::Cursor;
 use crate::error::{ErrorLeaf, ErrorNode};
 use std::fmt;
 
-// # Or Combinator - Dynamic Dispatch for Compile Time Performance
-//
-// ## Why We Use `Box<dyn Parser>` and `Box<dyn ErrorNode>`
-//
-// This combinator uses dynamic dispatch (trait objects) to solve a critical compile-time
-// performance issue. Without boxing, chaining `.or()` calls creates exponentially complex types:
-//
-// ```ignore
-// // Without boxing, this creates nested types:
-// // Or<Or<Or<P1, P2>, P3>, P4>
-// // With error types: OrError<OrError<OrError<E1, E2>, E3>, E4>
-//
-// let parser = a.or(b).or(c).or(d).or(e); // Gets progressively worse
-// ```
-//
-// **The Problem**: Deep generic nesting causes:
-// - Exponential compile times (we've seen infinite compilation in downstream crates)
-// - Exponential memory usage during compilation
-// - Unreadable error messages
-// - Inability to express recursive grammars
-//
-// **The Solution**: Dynamic dispatch flattens all chains to:
-// ```ignore
-// // With boxing: Always just Or<'code, Cursor, Output, E1, E2>
-// // With error: Always just OrError<'code>
-// ```
-//
-// ## Performance Trade-offs
-//
-// **Cost**: One additional heap allocation per combinator + virtual dispatch
-// **Benefit**: Eliminates compile-time explosion, enables recursive parsers
-// **Result**: Faster development iteration, ability to parse complex grammars
-//
-// ## Error Handling Strategy
-//
-// Errors are stored as `Box<dyn ErrorNode>` and only converted to concrete types
-// when displaying errors (via `likely_error()`). This avoids cloning during
-// error propagation while preserving full error information.
-
-/// Error type for Or parser that can wrap errors from both parsers when both fail
-pub enum OrError<'code, T: Atomic> {
+/// Error type for Or parser, holding the errors of both alternatives
+#[derive(Debug)]
+pub enum OrError<Err1, Err2> {
     /// Both parsers failed
-    BothFailed {
-        first: Box<dyn ErrorNode<'code, Element = T> + 'code>,
-        second: Box<dyn ErrorNode<'code, Element = T> + 'code>,
-    },
+    BothFailed { first: Err1, second: Err2 },
 }
 
-impl<'code, T: Atomic> std::fmt::Debug for OrError<'code, T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            OrError::BothFailed { first, second } => f
-                .debug_struct("BothFailed")
-                .field("first", &format!("{}", &**first))
-                .field("second", &format!("{}", &**second))
-                .finish(),
-        }
-    }
-}
-
-impl<'code, T: Atomic> fmt::Display for OrError<'code, T> {
+/// Displays the alternative that got furthest into the input
+impl<Err1, Err2> fmt::Display for OrError<Err1, Err2>
+where
+    Err1: ErrorNode,
+    Err2: ErrorNode<Element = Err1::Element>,
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            OrError::BothFailed { first, second } => {
-                write!(
-                    f,
-                    "Both parsers failed - First: {}, Second: {}",
-                    &**first, &**second
-                )
-            }
-        }
+        write!(f, "{}", self.likely_error())
     }
 }
 
-impl<'code, T: Atomic> std::error::Error for OrError<'code, T> {}
+impl<Err1, Err2> std::error::Error for OrError<Err1, Err2>
+where
+    Err1: ErrorNode,
+    Err2: ErrorNode<Element = Err1::Element>,
+{
+}
 
-// OrError implements ErrorNode to enable furthest-error selection
-impl<'code, T: Atomic + 'code> ErrorNode<'code> for OrError<'code, T> {
-    type Element = T;
+impl<Err1, Err2> ErrorNode for OrError<Err1, Err2>
+where
+    Err1: ErrorNode,
+    Err2: ErrorNode<Element = Err1::Element>,
+{
+    type Element = Err1::Element;
 
-    fn likely_error(&self) -> &dyn ErrorLeaf<'code, Element = Self::Element> {
+    fn likely_error(&self) -> &dyn ErrorLeaf<Element = Self::Element> {
         match self {
             OrError::BothFailed { first, second } => {
-                let first_base = first.as_ref().likely_error();
-                let second_base = second.as_ref().likely_error();
+                let first = first.likely_error();
+                let second = second.likely_error();
 
-                if first_base.loc().position() >= second_base.loc().position() {
-                    first_base
+                if first.loc().position() >= second.loc().position() {
+                    first
                 } else {
-                    second_base
+                    second
                 }
             }
         }
@@ -101,71 +51,55 @@ impl<'code, T: Atomic + 'code> ErrorNode<'code> for OrError<'code, T> {
 }
 
 /// Parser combinator that tries the first parser, and if it fails, tries the second parser
-pub struct Or<'code, C, O, E1, E2> {
-    parser1: Box<dyn Parser<'code, Cursor = C, Output = O, Error = E1> + 'code>,
-    parser2: Box<dyn Parser<'code, Cursor = C, Output = O, Error = E2> + 'code>,
+pub struct Or<P1, P2> {
+    parser1: P1,
+    parser2: P2,
 }
 
-impl<'code, C, O, E1, E2> Or<'code, C, O, E1, E2> {
-    pub fn new<P1, P2>(parser1: P1, parser2: P2) -> Self
-    where
-        P1: Parser<'code, Cursor = C, Output = O, Error = E1> + 'code,
-        P2: Parser<'code, Cursor = C, Output = O, Error = E2> + 'code,
-    {
-        Or {
-            parser1: Box::new(parser1),
-            parser2: Box::new(parser2),
-        }
+impl<P1, P2> Or<P1, P2> {
+    pub fn new(parser1: P1, parser2: P2) -> Self {
+        Or { parser1, parser2 }
     }
 }
 
-impl<'code, C, O, E1, E2> Parser<'code> for Or<'code, C, O, E1, E2>
+impl<P1, P2> Parser for Or<P1, P2>
 where
-    C: Cursor<'code>,
-    C::Element: Atomic + 'code,
-    E1: std::error::Error + ErrorNode<'code, Element = C::Element> + 'code,
-    E2: std::error::Error + ErrorNode<'code, Element = C::Element> + 'code,
+    P1: Parser,
+    P2: Parser<Cursor = P1::Cursor, Output = P1::Output>,
 {
-    type Cursor = C;
-    type Output = O;
-    type Error = OrError<'code, C::Element>;
+    type Cursor = P1::Cursor;
+    type Output = P1::Output;
+    type Error = OrError<P1::Error, P2::Error>;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         match self.parser1.parse(cursor) {
             Ok(result) => Ok(result),
-            Err(first_error) => match self.parser2.parse(cursor) {
+            Err(first) => match self.parser2.parse(cursor) {
                 Ok(result) => Ok(result),
-                Err(second_error) => Err(OrError::BothFailed {
-                    first: Box::new(first_error),
-                    second: Box::new(second_error),
-                }),
+                Err(second) => Err(OrError::BothFailed { first, second }),
             },
         }
     }
 }
 
 /// Extension trait to add .or() method support for parsers
-pub trait OrExt<'code>: Parser<'code> + Sized {
-    fn or<P>(self, other: P) -> Or<'code, Self::Cursor, Self::Output, Self::Error, P::Error>
+pub trait OrExt: Parser + Sized {
+    fn or<P>(self, other: P) -> Or<Self, P>
     where
-        P: Parser<'code, Output = Self::Output, Cursor = Self::Cursor> + 'code,
-        Self: 'code,
+        P: Parser<Cursor = Self::Cursor, Output = Self::Output>,
     {
         Or::new(self, other)
     }
 }
 
 /// Implement OrExt for all parsers
-impl<'code, P> OrExt<'code> for P where P: Parser<'code> {}
+impl<P: Parser> OrExt for P {}
 
 /// Convenience function to create an Or parser
-pub fn or<'code, P1, P2>(
-    parser1: P1,
-    parser2: P2,
-) -> Or<'code, P1::Cursor, P1::Output, P1::Error, P2::Error>
+pub fn or<P1, P2>(parser1: P1, parser2: P2) -> Or<P1, P2>
 where
-    P1: Parser<'code> + 'code,
-    P2: Parser<'code, Output = P1::Output, Cursor = P1::Cursor> + 'code,
+    P1: Parser,
+    P2: Parser<Cursor = P1::Cursor, Output = P1::Output>,
 {
     Or::new(parser1, parser2)
 }
@@ -268,8 +202,8 @@ mod tests {
         };
 
         let or_error = OrError::BothFailed {
-            first: Box::new(error1),
-            second: Box::new(error2),
+            first: error1,
+            second: error2,
         };
         let furthest = or_error.likely_error();
 
@@ -290,8 +224,8 @@ mod tests {
         };
 
         let or_error = OrError::BothFailed {
-            first: Box::new(error1),
-            second: Box::new(error2),
+            first: error1,
+            second: error2,
         };
         let furthest = or_error.likely_error();
 
@@ -319,12 +253,12 @@ mod tests {
 
         // Build the nested structure
         let inner_or = OrError::BothFailed {
-            first: Box::new(error1),
-            second: Box::new(error2),
+            first: error1,
+            second: error2,
         };
         let outer_or = OrError::BothFailed {
-            first: Box::new(inner_or),
-            second: Box::new(error3),
+            first: inner_or,
+            second: error3,
         };
 
         // Use the new ErrorBranch system - this automatically handles recursion!

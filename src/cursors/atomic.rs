@@ -1,6 +1,8 @@
 use crate::atomic::Atomic;
 use crate::cursor::Cursor;
+use crate::position::Span;
 use crate::{CodeLoc, ParsicombError};
+use std::borrow::Cow;
 
 #[derive(Debug, Copy, Clone)]
 pub enum AtomicCursor<'code, T: Atomic> {
@@ -15,18 +17,35 @@ impl<'code, T: Atomic> AtomicCursor<'code, T> {
         }
         AtomicCursor::Valid { data, position: 0 }
     }
+
+    /// The full input this cursor walks over
+    pub fn source(&self) -> &'code [T] {
+        match self {
+            AtomicCursor::Valid { data, .. } => data,
+            AtomicCursor::EndOfFile { data } => data,
+        }
+    }
+
+    /// The full input and the current position
+    pub fn inner(self) -> (&'code [T], usize) {
+        (self.source(), self.position())
+    }
+
+    /// The current position as a location in the input
+    pub fn loc(&self) -> CodeLoc<'code, T> {
+        CodeLoc::new(self.source(), self.position())
+    }
 }
 
-impl<'code, T: Atomic> Cursor<'code> for AtomicCursor<'code, T> {
+impl<'code, T: Atomic + 'code> Cursor for AtomicCursor<'code, T> {
     type Element = T;
     type Error = ParsicombError<'code, T>;
+    type Span = Span<'code, T>;
 
     fn value(&self) -> Result<Self::Element, Self::Error> {
         match self {
             AtomicCursor::Valid { data, position } => Ok(data[*position]),
-            AtomicCursor::EndOfFile { data } => Err(ParsicombError::CannotReadValueAtEof(
-                CodeLoc::new(data, data.len()),
-            )),
+            AtomicCursor::EndOfFile { .. } => Err(ParsicombError::CannotReadValueAtEof(self.loc())),
         }
     }
 
@@ -52,14 +71,12 @@ impl<'code, T: Atomic> Cursor<'code> for AtomicCursor<'code, T> {
                 let next = self.next();
                 match next {
                     AtomicCursor::Valid { .. } => Ok(next),
-                    AtomicCursor::EndOfFile { data } => Err(ParsicombError::UnexpectedEndOfFile(
-                        CodeLoc::new(data, data.len()),
-                    )),
+                    AtomicCursor::EndOfFile { .. } => {
+                        Err(ParsicombError::UnexpectedEndOfFile(next.loc()))
+                    }
                 }
             }
-            AtomicCursor::EndOfFile { data } => Err(ParsicombError::AlreadyAtEndOfFile(
-                CodeLoc::new(data, data.len()),
-            )),
+            AtomicCursor::EndOfFile { .. } => Err(ParsicombError::AlreadyAtEndOfFile(self.loc())),
         }
     }
 
@@ -70,18 +87,19 @@ impl<'code, T: Atomic> Cursor<'code> for AtomicCursor<'code, T> {
         }
     }
 
-    fn source(&self) -> &'code [Self::Element] {
-        match self {
-            AtomicCursor::Valid { data, .. } => data,
-            AtomicCursor::EndOfFile { data } => data,
+    fn eos(&self) -> bool {
+        matches!(self, AtomicCursor::EndOfFile { .. })
+    }
+
+    fn syntax_error(&self, message: Cow<'static, str>) -> Self::Error {
+        ParsicombError::SyntaxError {
+            message,
+            loc: self.loc(),
         }
     }
 
-    fn inner(self) -> (&'code [Self::Element], usize) {
-        match self {
-            AtomicCursor::Valid { data, position } => (data, position),
-            AtomicCursor::EndOfFile { data } => (data, data.len()),
-        }
+    fn span_to(&self, end: Self) -> Self::Span {
+        Span::new(self.source(), self.position(), end.position())
     }
 }
 

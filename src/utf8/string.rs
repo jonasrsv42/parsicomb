@@ -1,77 +1,74 @@
 use crate::ByteCursor;
 use crate::Cursor;
+use crate::ParsicombError;
+use crate::error::Expected;
 use crate::parser::Parser;
 use crate::utf8::char::char;
-use crate::{CodeLoc, ParsicombError};
 use std::borrow::Cow;
+use std::marker::PhantomData;
 
-// Helper function to reduce error creation boilerplate
-fn create_string_error<'code>(
-    cursor: &ByteCursor<'code>,
-    message: String,
-) -> ParsicombError<'code> {
-    let (data, position) = cursor.inner();
-    ParsicombError::SyntaxError {
-        message: message.into(),
-        loc: CodeLoc::new(data, position),
-    }
-}
-
-/// Parser that matches an exact UTF-8 string character by character
-pub struct IsStringParser {
+/// Parser that matches an exact UTF-8 string
+pub struct IsStringParser<'code> {
     expected: Cow<'static, str>,
+    _input: PhantomData<&'code [u8]>,
 }
 
-impl IsStringParser {
+impl<'code> IsStringParser<'code> {
     pub fn new(expected: impl Into<Cow<'static, str>>) -> Self {
         Self {
             expected: expected.into(),
+            _input: PhantomData,
+        }
+    }
+
+    /// Build the mismatch error at `cursor`, decoding the character found there
+    fn mismatch(&self, cursor: ByteCursor<'code>, expected: char) -> ParsicombError<'code> {
+        ParsicombError::Expected {
+            expected: Expected::CharInString {
+                expected,
+                found: char().parse(cursor).ok().map(|(found, _)| found),
+                string: self.expected.clone(),
+            },
+            loc: cursor.loc(),
         }
     }
 }
 
-impl<'code> Parser<'code> for IsStringParser {
+impl<'code> Parser for IsStringParser<'code> {
     type Cursor = ByteCursor<'code>;
     type Output = Cow<'static, str>;
     type Error = ParsicombError<'code>;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
-        let mut current_cursor = cursor;
+        let (source, start) = cursor.inner();
+        let expected = self.expected.as_bytes();
 
+        if source[start..].starts_with(expected) {
+            // Advance past the match; `expected` is valid UTF-8, so this lands
+            // on a character boundary
+            let mut end = cursor;
+            for _ in 0..expected.len() {
+                end = end.next();
+            }
+            return Ok((self.expected.clone(), end));
+        }
+
+        // Report the first character that differs
+        let mut current = cursor;
         for expected_char in self.expected.chars() {
-            match char().parse(current_cursor) {
-                Ok((parsed_char, new_cursor)) => {
-                    if parsed_char == expected_char {
-                        current_cursor = new_cursor;
-                    } else {
-                        return Err(create_string_error(
-                            &current_cursor,
-                            format!(
-                                "expected {:?}, found {:?} while matching {:?}",
-                                expected_char, parsed_char, self.expected
-                            ),
-                        ));
-                    }
-                }
-                Err(_) => {
-                    return Err(create_string_error(
-                        &current_cursor,
-                        format!(
-                            "expected {:?}, but reached end of input while matching {:?}",
-                            expected_char, self.expected
-                        ),
-                    ));
-                }
+            match char().parse(current) {
+                Ok((found, next)) if found == expected_char => current = next,
+                _ => return Err(self.mismatch(current, expected_char)),
             }
         }
 
-        // Clone is cheap here - just copies the reference for &'static str
-        Ok((self.expected.clone(), current_cursor))
+        // Unreachable when the prefix check failed, but fail rather than panic
+        Err(self.mismatch(current, self.expected.chars().next().unwrap_or_default()))
     }
 }
 
 /// Convenience function to create an IsStringParser
-pub fn is_string(expected: impl Into<Cow<'static, str>>) -> IsStringParser {
+pub fn is_string<'code>(expected: impl Into<Cow<'static, str>>) -> IsStringParser<'code> {
     IsStringParser::new(expected)
 }
 

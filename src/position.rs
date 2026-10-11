@@ -52,39 +52,26 @@ impl<P> Position<P> {
     }
 }
 
-impl<'code, P> Parser<'code> for Position<P>
-where
-    P: Parser<'code>,
-    P::Cursor: Cursor<'code>,
-    <P::Cursor as Cursor<'code>>::Element: Atomic + 'code,
-{
+impl<P: Parser> Parser for Position<P> {
     type Cursor = P::Cursor;
-    type Output = (
-        P::Output,
-        Span<'code, <P::Cursor as Cursor<'code>>::Element>,
-    );
+    type Output = (P::Output, <P::Cursor as Cursor>::Span);
     type Error = P::Error;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
-        let start_pos = cursor.position();
-        let source = cursor.source();
         let (output, new_cursor) = self.parser.parse(cursor)?;
-        let end_pos = new_cursor.position();
-
-        let span = Span::new(source, start_pos, end_pos);
-        Ok(((output, span), new_cursor))
+        Ok(((output, cursor.span_to(new_cursor)), new_cursor))
     }
 }
 
 /// Extension trait to add position tracking to any parser
-pub trait PositionExt<'code>: Parser<'code> + Sized {
+pub trait PositionExt: Parser + Sized {
     /// Wrap this parser to capture its position span
     fn with_position(self) -> Position<Self> {
         Position::new(self)
     }
 }
 
-impl<'code, P> PositionExt<'code> for P where P: Parser<'code> {}
+impl<P: Parser> PositionExt for P {}
 
 /// Convenience function to create a Position combinator
 pub fn position<P>(parser: P) -> Position<P> {

@@ -1,5 +1,4 @@
 use crate::atomic::Atomic;
-use crate::cursor::Cursor;
 use crate::error::{ErrorLeaf, ErrorNode};
 use crate::parser::Parser;
 use std::fmt;
@@ -54,17 +53,17 @@ where
 {
 }
 
-impl<'code, EOpen, EArg, ESep, EClose, T: Atomic + 'code> ErrorNode<'code>
+impl<EOpen, EArg, ESep, EClose, T: Atomic> ErrorNode
     for ArgumentListError<EOpen, EArg, ESep, EClose>
 where
-    EOpen: ErrorNode<'code, Element = T>,
-    EArg: ErrorNode<'code, Element = T>,
-    ESep: ErrorNode<'code, Element = T>,
-    EClose: ErrorNode<'code, Element = T>,
+    EOpen: ErrorNode<Element = T>,
+    EArg: ErrorNode<Element = T>,
+    ESep: ErrorNode<Element = T>,
+    EClose: ErrorNode<Element = T>,
 {
     type Element = T;
 
-    fn likely_error(&self) -> &dyn ErrorLeaf<'code, Element = T> {
+    fn likely_error(&self) -> &dyn ErrorLeaf<Element = T> {
         match self {
             ArgumentListError::OpenDelimiter(e) => e.likely_error(),
             ArgumentListError::FirstArgument(e) => e.likely_error(),
@@ -106,18 +105,12 @@ impl<POpen, PArg, PSep, PClose> ArgumentList<POpen, PArg, PSep, PClose> {
     }
 }
 
-impl<'code, POpen, PArg, PSep, PClose> Parser<'code> for ArgumentList<POpen, PArg, PSep, PClose>
+impl<POpen, PArg, PSep, PClose> Parser for ArgumentList<POpen, PArg, PSep, PClose>
 where
-    POpen: Parser<'code>,
-    PArg: Parser<'code, Cursor = POpen::Cursor>,
-    PSep: Parser<'code, Cursor = POpen::Cursor>,
-    PClose: Parser<'code, Cursor = POpen::Cursor>,
-    POpen::Cursor: Cursor<'code>,
-    <POpen::Cursor as Cursor<'code>>::Element: Atomic + 'code,
-    POpen::Error: ErrorNode<'code, Element = <POpen::Cursor as Cursor<'code>>::Element>,
-    PArg::Error: ErrorNode<'code, Element = <POpen::Cursor as Cursor<'code>>::Element>,
-    PSep::Error: ErrorNode<'code, Element = <POpen::Cursor as Cursor<'code>>::Element>,
-    PClose::Error: ErrorNode<'code, Element = <POpen::Cursor as Cursor<'code>>::Element>,
+    POpen: Parser,
+    PArg: Parser<Cursor = POpen::Cursor>,
+    PSep: Parser<Cursor = POpen::Cursor>,
+    PClose: Parser<Cursor = POpen::Cursor>,
 {
     type Cursor = POpen::Cursor;
     type Output = Vec<PArg::Output>;
@@ -175,17 +168,17 @@ where
 /// Parses: `open (arg (sep arg)*)? close`
 ///
 /// Allows empty lists and provides detailed error context.
-pub fn argument_list<'code, POpen, PArg, PSep, PClose>(
+pub fn argument_list<POpen, PArg, PSep, PClose>(
     open: POpen,
     parser: PArg,
     separator: PSep,
     close: PClose,
 ) -> ArgumentList<POpen, PArg, PSep, PClose>
 where
-    POpen: Parser<'code>,
-    PArg: Parser<'code, Cursor = POpen::Cursor>,
-    PSep: Parser<'code, Cursor = POpen::Cursor>,
-    PClose: Parser<'code, Cursor = POpen::Cursor>,
+    POpen: Parser,
+    PArg: Parser<Cursor = POpen::Cursor>,
+    PSep: Parser<Cursor = POpen::Cursor>,
+    PClose: Parser<Cursor = POpen::Cursor>,
 {
     ArgumentList::new(open, parser, separator, close)
 }
@@ -193,6 +186,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cursor::Cursor;
     use crate::ByteCursor;
     use crate::ascii::number::i64;
     use crate::byte::is_byte;

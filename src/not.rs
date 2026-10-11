@@ -1,8 +1,5 @@
 use super::parser::Parser;
-use crate::atomic::Atomic;
 use crate::cursor::Cursor;
-use crate::error::{CodeLoc, ParsicombError};
-use std::borrow::Cow;
 
 /// Parser combinator that performs negative lookahead
 ///
@@ -19,51 +16,33 @@ impl<P> Not<P> {
     }
 }
 
-impl<'code, P> Parser<'code> for Not<P>
-where
-    P: Parser<'code>,
-    P::Cursor: Cursor<'code>,
-    <P::Cursor as Cursor<'code>>::Element: Atomic + 'code,
-{
+impl<P: Parser> Parser for Not<P> {
     type Cursor = P::Cursor;
     type Output = ();
-    type Error = ParsicombError<'code, <P::Cursor as Cursor<'code>>::Element>;
+    type Error = <P::Cursor as Cursor>::Error;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         match self.parser.parse(cursor) {
-            Ok(_) => {
-                // Parser succeeded when we wanted it to fail
-                let (data, position) = cursor.inner();
-                Err(ParsicombError::SyntaxError {
-                    message: Cow::Borrowed("negative lookahead failed: unexpected match"),
-                    loc: CodeLoc::new(data, position),
-                })
-            }
-            Err(_) => {
-                // Parser failed as expected - return success without consuming input
-                Ok(((), cursor))
-            }
+            Ok(_) => Err(cursor.syntax_error("negative lookahead failed: unexpected match".into())),
+            Err(_) => Ok(((), cursor)),
         }
     }
 }
 
 /// Convenience function to create a Not parser for negative lookahead
-pub fn not<'code, P>(parser: P) -> Not<P>
-where
-    P: Parser<'code>,
-{
+pub fn not<P: Parser>(parser: P) -> Not<P> {
     Not::new(parser)
 }
 
 /// Extension trait to add .not() method support for parsers
-pub trait NotExt<'code>: Parser<'code> + Sized {
+pub trait NotExt: Parser + Sized {
     fn not(self) -> Not<Self> {
         Not::new(self)
     }
 }
 
 /// Implement NotExt for all parsers
-impl<'code, P> NotExt<'code> for P where P: Parser<'code> {}
+impl<P: Parser> NotExt for P {}
 
 #[cfg(test)]
 mod tests {

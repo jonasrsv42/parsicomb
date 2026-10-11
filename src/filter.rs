@@ -1,21 +1,20 @@
-use crate::atomic::Atomic;
+use crate::Cursor;
 use crate::error::{ErrorLeaf, ErrorNode};
 use crate::parser::Parser;
-use crate::{CodeLoc, Cursor, ParsicombError};
 use std::borrow::Cow;
 use std::fmt;
 
 /// Error type for filter parser that can wrap either the child parser's error
 /// or a filter-specific error
 #[derive(Debug)]
-pub enum FilterError<'code, E, T: Atomic = u8> {
+pub enum FilterError<E, CursorErr> {
     /// Error from the child parser
     ParserError(E),
     /// Filter predicate failed
-    FilterFailed(ParsicombError<'code, T>),
+    FilterFailed(CursorErr),
 }
 
-impl<'code, E: fmt::Display, T: Atomic> fmt::Display for FilterError<'code, E, T> {
+impl<E: fmt::Display, CursorErr: fmt::Display> fmt::Display for FilterError<E, CursorErr> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             FilterError::ParserError(e) => write!(f, "{}", e),
@@ -24,19 +23,22 @@ impl<'code, E: fmt::Display, T: Atomic> fmt::Display for FilterError<'code, E, T
     }
 }
 
-impl<'code, E: std::error::Error, T: Atomic> std::error::Error for FilterError<'code, E, T> {}
-
-// Implement ErrorBranch for FilterError to enable furthest-error selection in nested structures
-impl<'code, E, T: Atomic + 'code> ErrorNode<'code> for FilterError<'code, E, T>
-where
-    E: ErrorNode<'code, Element = T>,
+impl<E: std::error::Error, CursorErr: std::error::Error> std::error::Error
+    for FilterError<E, CursorErr>
 {
-    type Element = T;
+}
 
-    fn likely_error(&self) -> &dyn ErrorLeaf<'code, Element = Self::Element> {
+impl<E, CursorErr> ErrorNode for FilterError<E, CursorErr>
+where
+    E: ErrorNode,
+    CursorErr: ErrorNode<Element = E::Element>,
+{
+    type Element = E::Element;
+
+    fn likely_error(&self) -> &dyn ErrorLeaf<Element = Self::Element> {
         match self {
             FilterError::ParserError(e) => e.likely_error(),
-            FilterError::FilterFailed(parsicomb_error) => parsicomb_error.likely_error(),
+            FilterError::FilterFailed(e) => e.likely_error(),
         }
     }
 }
@@ -58,17 +60,14 @@ impl<P, F> FilterParser<P, F> {
     }
 }
 
-impl<'code, P, F, T> Parser<'code> for FilterParser<P, F>
+impl<P, F> Parser for FilterParser<P, F>
 where
-    P: Parser<'code, Output = T>,
-    P::Cursor: Cursor<'code>,
-    <P::Cursor as Cursor<'code>>::Element: Atomic + 'code,
-    P::Error: ErrorNode<'code, Element = <P::Cursor as Cursor<'code>>::Element>,
-    F: Fn(&T) -> bool,
+    P: Parser,
+    F: Fn(&P::Output) -> bool,
 {
     type Cursor = P::Cursor;
-    type Output = T;
-    type Error = FilterError<'code, P::Error, <P::Cursor as Cursor<'code>>::Element>;
+    type Output = P::Output;
+    type Error = FilterError<P::Error, <P::Cursor as Cursor>::Error>;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let (value, new_cursor) = self
@@ -79,17 +78,15 @@ where
         if (self.predicate)(&value) {
             Ok((value, new_cursor))
         } else {
-            let (data, position) = cursor.inner();
-            Err(FilterError::FilterFailed(ParsicombError::SyntaxError {
-                message: self.error_message.clone(),
-                loc: CodeLoc::new(data, position),
-            }))
+            Err(FilterError::FilterFailed(
+                cursor.syntax_error(self.error_message.clone()),
+            ))
         }
     }
 }
 
 /// Extension trait to add filter method to all parsers
-pub trait FilterExt<'code>: Parser<'code> {
+pub trait FilterExt: Parser {
     fn filter<F>(
         self,
         predicate: F,
@@ -103,16 +100,16 @@ pub trait FilterExt<'code>: Parser<'code> {
     }
 }
 
-impl<'code, P: Parser<'code>> FilterExt<'code> for P {}
+impl<P: Parser> FilterExt for P {}
 
 /// Convenience function to create a filtered parser
-pub fn filter<'code, P, F>(
+pub fn filter<P, F>(
     parser: P,
     predicate: F,
     error_message: impl Into<Cow<'static, str>>,
 ) -> FilterParser<P, F>
 where
-    P: Parser<'code>,
+    P: Parser,
     F: Fn(&P::Output) -> bool,
 {
     FilterParser::new(parser, predicate, error_message.into())

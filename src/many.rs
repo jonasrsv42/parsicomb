@@ -12,9 +12,9 @@ impl<P> Many<P> {
     }
 }
 
-impl<'code, P> Parser<'code> for Many<P>
+impl<P> Parser for Many<P>
 where
-    P: Parser<'code>,
+    P: Parser,
 {
     type Cursor = P::Cursor;
     type Output = Vec<P::Output>;
@@ -43,9 +43,9 @@ where
 }
 
 /// Convenience function to create a Many parser
-pub fn many<'code, P>(parser: P) -> Many<P>
+pub fn many<P>(parser: P) -> Many<P>
 where
-    P: Parser<'code>,
+    P: Parser,
 {
     Many::new(parser)
 }

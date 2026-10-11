@@ -12,9 +12,9 @@ impl<P, F> Map<P, F> {
     }
 }
 
-impl<'code, P, F, T, U> Parser<'code> for Map<P, F>
+impl<P, F, T, U> Parser for Map<P, F>
 where
-    P: Parser<'code, Output = T>,
+    P: Parser<Output = T>,
     F: Fn(T) -> U,
 {
     type Cursor = P::Cursor;
@@ -29,16 +29,16 @@ where
 }
 
 /// Convenience function to create a Map parser
-pub fn map<'code, P, F, T, U>(parser: P, mapper: F) -> Map<P, F>
+pub fn map<P, F, T, U>(parser: P, mapper: F) -> Map<P, F>
 where
-    P: Parser<'code, Output = T>,
+    P: Parser<Output = T>,
     F: Fn(T) -> U,
 {
     Map::new(parser, mapper)
 }
 
 /// Extension trait to add .map() method support for parsers
-pub trait MapExt<'code>: Parser<'code> + Sized {
+pub trait MapExt: Parser + Sized {
     fn map<F, U>(self, mapper: F) -> Map<Self, F>
     where
         F: Fn(Self::Output) -> U,
@@ -48,7 +48,7 @@ pub trait MapExt<'code>: Parser<'code> + Sized {
 }
 
 /// Implement MapExt for all parsers
-impl<'code, P> MapExt<'code> for P where P: Parser<'code> {}
+impl<P: Parser> MapExt for P {}
 
 #[cfg(test)]
 mod tests {

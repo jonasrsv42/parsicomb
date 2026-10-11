@@ -13,9 +13,9 @@ impl<P> Optional<P> {
     }
 }
 
-impl<'code, P> Parser<'code> for Optional<P>
+impl<P> Parser for Optional<P>
 where
-    P: Parser<'code>,
+    P: Parser,
 {
     type Cursor = P::Cursor;
     type Output = Option<P::Output>;
@@ -30,9 +30,9 @@ where
 }
 
 /// Convenience function to create an Optional parser
-pub fn optional<'code, P>(parser: P) -> Optional<P>
+pub fn optional<P>(parser: P) -> Optional<P>
 where
-    P: Parser<'code>,
+    P: Parser,
 {
     Optional::new(parser)
 }

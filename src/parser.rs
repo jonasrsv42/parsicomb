@@ -1,17 +1,16 @@
 use crate::cursor::Cursor;
 use crate::error::ErrorNode;
-use std::error::Error;
 
 /// Core parser trait for parser combinators
-pub trait Parser<'code> {
+pub trait Parser {
     /// The cursor type this parser operates on
-    type Cursor: Cursor<'code>;
+    type Cursor: Cursor;
 
     /// The output type produced by successful parsing
     type Output;
 
     /// The error type produced by failed parsing
-    type Error: Error + ErrorNode<'code, Element = <Self::Cursor as Cursor<'code>>::Element>;
+    type Error: ErrorNode<Element = <Self::Cursor as Cursor>::Element>;
 
     /// Attempt to parse from the given cursor position
     ///

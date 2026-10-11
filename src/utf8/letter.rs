@@ -4,8 +4,7 @@ use crate::parser::Parser;
 use crate::utf8::char::char;
 
 /// Convenience function to create a Unicode letter parser
-pub fn unicode_letter() -> impl for<'code> Parser<'code, Cursor = ByteCursor<'code>, Output = char>
-{
+pub fn unicode_letter<'code>() -> impl Parser<Cursor = ByteCursor<'code>, Output = char> {
     char().filter(|c| c.is_alphabetic(), "expected Unicode letter")
 }
 

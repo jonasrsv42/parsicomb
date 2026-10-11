@@ -27,11 +27,11 @@ where
     }
 }
 
-impl<'code, P, F, E1, E2> Parser<'code> for MapErr<P, F>
+impl<P, F, E1, E2> Parser for MapErr<P, F>
 where
-    P: Parser<'code, Error = E1>,
+    P: Parser<Error = E1>,
     F: Fn(E1) -> E2,
-    E2: std::error::Error + ErrorNode<'code, Element = <P::Cursor as Cursor<'code>>::Element>,
+    E2: std::error::Error + ErrorNode<Element = <P::Cursor as Cursor>::Element>,
 {
     type Cursor = P::Cursor;
     type Output = P::Output;
@@ -43,7 +43,7 @@ where
 }
 
 /// Extension trait to add .map_err() method support for parsers
-pub trait MapErrExt<'code>: Parser<'code> + Sized {
+pub trait MapErrExt: Parser + Sized {
     fn map_err<F, E2>(self, mapper: F) -> MapErr<Self, F>
     where
         F: Fn(Self::Error) -> E2,
@@ -54,12 +54,12 @@ pub trait MapErrExt<'code>: Parser<'code> + Sized {
 }
 
 /// Implement MapErrExt for all parsers
-impl<'code, P> MapErrExt<'code> for P where P: Parser<'code> {}
+impl<P: Parser> MapErrExt for P {}
 
 /// Convenience function to create a MapErr parser
-pub fn map_err<'code, P, F, E1, E2>(parser: P, mapper: F) -> MapErr<P, F>
+pub fn map_err<P, F, E1, E2>(parser: P, mapper: F) -> MapErr<P, F>
 where
-    P: Parser<'code, Error = E1>,
+    P: Parser<Error = E1>,
     F: Fn(E1) -> E2,
     E2: std::error::Error,
 {
@@ -92,26 +92,26 @@ mod tests {
 
     impl std::error::Error for CustomError {}
 
-    impl<'code> ErrorLeaf<'code> for CustomError {
+    impl ErrorLeaf for CustomError {
         type Element = u8;
 
-        fn loc(&self) -> CodeLoc<'code, Self::Element> {
+        fn loc(&self) -> CodeLoc<'_, Self::Element> {
             CodeLoc::new(&[], 0) // Default position for test error
         }
     }
 
-    impl<'code> ErrorNode<'code> for CustomError {
+    impl ErrorNode for CustomError {
         type Element = u8;
 
-        fn likely_error(&self) -> &dyn ErrorLeaf<'code, Element = Self::Element> {
+        fn likely_error(&self) -> &dyn ErrorLeaf<Element = Self::Element> {
             self
         }
     }
 
     // Simple test parser that always fails with ParsicombError
-    struct AlwaysFailParser;
+    struct AlwaysFailParser<'code>(std::marker::PhantomData<&'code ()>);
 
-    impl<'code> Parser<'code> for AlwaysFailParser {
+    impl<'code> Parser for AlwaysFailParser<'code> {
         type Cursor = ByteCursor<'code>;
         type Output = char;
         type Error = ParsicombError<'code>;
@@ -126,9 +126,9 @@ mod tests {
     }
 
     // Simple test parser that always succeeds
-    struct AlwaysSucceedParser;
+    struct AlwaysSucceedParser<'code>(std::marker::PhantomData<&'code ()>);
 
-    impl<'code> Parser<'code> for AlwaysSucceedParser {
+    impl<'code> Parser for AlwaysSucceedParser<'code> {
         type Cursor = ByteCursor<'code>;
         type Output = char;
         type Error = ParsicombError<'code>;
@@ -143,7 +143,7 @@ mod tests {
         let data = b"test";
         let cursor = ByteCursor::new(data);
 
-        let parser = AlwaysFailParser.map_err(|_| CustomError::Simple("mapped error".to_string()));
+        let parser = AlwaysFailParser(std::marker::PhantomData).map_err(|_| CustomError::Simple("mapped error".to_string()));
         let result = parser.parse(cursor);
 
         assert!(result.is_err());
@@ -158,7 +158,7 @@ mod tests {
         let data = b"test";
         let cursor = ByteCursor::new(data);
 
-        let parser = AlwaysSucceedParser
+        let parser = AlwaysSucceedParser(std::marker::PhantomData)
             .map_err(|_| CustomError::Simple("should not be called".to_string()));
         let result = parser.parse(cursor);
 
@@ -172,7 +172,7 @@ mod tests {
         let data = b"test";
         let cursor = ByteCursor::new(data);
 
-        let parser = AlwaysFailParser.map_err(|_| CustomError::WithCode(404));
+        let parser = AlwaysFailParser(std::marker::PhantomData).map_err(|_| CustomError::WithCode(404));
         let result = parser.parse(cursor);
 
         assert!(result.is_err());
@@ -184,7 +184,7 @@ mod tests {
         let data = b"test";
         let cursor = ByteCursor::new(data);
 
-        let parser = AlwaysFailParser
+        let parser = AlwaysFailParser(std::marker::PhantomData)
             .map_err(|_| CustomError::Simple("first".to_string()))
             .map_err(|_| CustomError::WithCode(500));
 
@@ -198,7 +198,7 @@ mod tests {
         let data = b"test";
         let cursor = ByteCursor::new(data);
 
-        let parser = AlwaysFailParser
+        let parser = AlwaysFailParser(std::marker::PhantomData)
             .map_err(|original_err| CustomError::Simple(format!("Wrapped: {}", original_err)));
 
         let result = parser.parse(cursor);
@@ -217,7 +217,7 @@ mod tests {
         let cursor = ByteCursor::new(data);
 
         // Test that the extension trait works
-        let parser = AlwaysFailParser.map_err(|_| CustomError::Simple("string error".to_string()));
+        let parser = AlwaysFailParser(std::marker::PhantomData).map_err(|_| CustomError::Simple("string error".to_string()));
         let result = parser.parse(cursor);
 
         assert!(result.is_err());
@@ -233,7 +233,7 @@ mod tests {
         let cursor = ByteCursor::new(data);
 
         // Test the standalone function
-        let parser = map_err(AlwaysFailParser, |_| CustomError::WithCode(42));
+        let parser = map_err(AlwaysFailParser(std::marker::PhantomData), |_| CustomError::WithCode(42));
         let result = parser.parse(cursor);
 
         assert!(result.is_err());

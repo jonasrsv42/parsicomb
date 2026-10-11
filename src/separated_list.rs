@@ -29,14 +29,14 @@ where
 {
 }
 
-impl<'code, E1, E2, T: Atomic + 'code> ErrorNode<'code> for SeparatedListError<E1, E2>
+impl<E1, E2, T: Atomic> ErrorNode for SeparatedListError<E1, E2>
 where
-    E1: ErrorNode<'code, Element = T>,
-    E2: ErrorNode<'code, Element = T>,
+    E1: ErrorNode<Element = T>,
+    E2: ErrorNode<Element = T>,
 {
     type Element = T;
 
-    fn likely_error(&self) -> &dyn ErrorLeaf<'code, Element = T> {
+    fn likely_error(&self) -> &dyn ErrorLeaf<Element = T> {
         match self {
             SeparatedListError::Element(e) => e.likely_error(),
             SeparatedListError::Separator(e) => e.likely_error(),
@@ -68,14 +68,10 @@ impl<P, PS> SeparatedList<P, PS> {
     }
 }
 
-impl<'code, P, PS> Parser<'code> for SeparatedList<P, PS>
+impl<P, PS> Parser for SeparatedList<P, PS>
 where
-    P: Parser<'code>,
-    P::Cursor: Cursor<'code>,
-    <P::Cursor as Cursor<'code>>::Element: Atomic + 'code,
-    P::Error: ErrorNode<'code, Element = <P::Cursor as Cursor<'code>>::Element>,
-    PS: Parser<'code, Cursor = P::Cursor>,
-    PS::Error: ErrorNode<'code, Element = <P::Cursor as Cursor<'code>>::Element>,
+    P: Parser,
+    PS: Parser<Cursor = P::Cursor>,
 {
     type Cursor = P::Cursor;
     type Output = Vec<P::Output>;
@@ -117,10 +113,10 @@ where
 /// Constraints:
 /// - Both parsers must use the same cursor type
 /// - Both parsers must have errors with the same element type
-pub fn separated_list<'code, P, PS>(parser: P, separator: PS) -> SeparatedList<P, PS>
+pub fn separated_list<P, PS>(parser: P, separator: PS) -> SeparatedList<P, PS>
 where
-    P: Parser<'code>,
-    PS: Parser<'code, Cursor = P::Cursor>,
+    P: Parser,
+    PS: Parser<Cursor = P::Cursor>,
 {
     SeparatedList::new(parser, separator)
 }

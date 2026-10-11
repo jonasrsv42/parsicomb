@@ -1,16 +1,26 @@
-use std::error::Error;
+use crate::atomic::Atomic;
+use crate::error::ErrorNode;
+use std::borrow::Cow;
 
 /// Generic cursor trait for parser combinators
 ///
 /// A cursor represents a position in a sequence of elements that can be advanced
 /// and queried. This abstraction allows parsers to work with different underlying
 /// data types (bytes, tokens, etc.) while maintaining the same combinator interface.
-pub trait Cursor<'code>: Copy + Clone + Sized {
+///
+/// The cursor type carries the lifetime of the input it borrows (e.g.
+/// `ByteCursor<'code>`), so the traits themselves need no lifetime parameter.
+/// Anything that must borrow the input — errors, spans — is produced by the
+/// cursor through its associated types.
+pub trait Cursor: Copy {
     /// The type of elements this cursor iterates over
-    type Element;
+    type Element: Atomic;
 
-    /// Error type returned when cursor operations fail
-    type Error: Error;
+    /// Error type for failures located at a cursor position
+    type Error: ErrorNode<Element = Self::Element>;
+
+    /// A range of the input between two cursor positions
+    type Span;
 
     /// Get the element at the current cursor position
     ///
@@ -38,12 +48,9 @@ pub trait Cursor<'code>: Copy + Clone + Sized {
         self.value().is_err()
     }
 
-    /// Get the source data without consuming the cursor
-    fn source(&self) -> &'code [Self::Element];
+    /// Create an error located at this cursor
+    fn syntax_error(&self, message: Cow<'static, str>) -> Self::Error;
 
-    /// Consume the cursor and return its inner data and position
-    ///
-    /// Returns a tuple of (data_slice, current_position) where data_slice
-    /// contains all the elements and current_position is the cursor's position
-    fn inner(self) -> (&'code [Self::Element], usize);
+    /// The span of input from this cursor up to (not including) `end`
+    fn span_to(&self, end: Self) -> Self::Span;
 }

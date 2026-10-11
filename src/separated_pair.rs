@@ -1,5 +1,4 @@
 use crate::atomic::Atomic;
-use crate::cursor::Cursor;
 use crate::error::{ErrorLeaf, ErrorNode};
 use crate::parser::Parser;
 use std::fmt;
@@ -35,15 +34,15 @@ where
 {
 }
 
-impl<'code, E1, ES, E2, T: Atomic + 'code> ErrorNode<'code> for SeparatedPairError<E1, ES, E2>
+impl<E1, ES, E2, T: Atomic> ErrorNode for SeparatedPairError<E1, ES, E2>
 where
-    E1: ErrorNode<'code, Element = T>,
-    ES: ErrorNode<'code, Element = T>,
-    E2: ErrorNode<'code, Element = T>,
+    E1: ErrorNode<Element = T>,
+    ES: ErrorNode<Element = T>,
+    E2: ErrorNode<Element = T>,
 {
     type Element = T;
 
-    fn likely_error(&self) -> &dyn ErrorLeaf<'code, Element = T> {
+    fn likely_error(&self) -> &dyn ErrorLeaf<Element = T> {
         match self {
             SeparatedPairError::LeftParser(e1) => e1.likely_error(),
             SeparatedPairError::Separator(e) => e.likely_error(),
@@ -57,8 +56,7 @@ where
 /// This combinator parses: `left + separator + right`
 /// and returns a tuple `(left_value, right_value)` with the separator discarded.
 ///
-/// Unlike the UTF-8 whitespace version, this does not handle whitespace automatically.
-/// For whitespace handling, use the specific version in `utf8::whitespace::separated_pair`.
+/// It does not handle whitespace.
 ///
 /// # Examples
 /// - `"1.0,2.0"` with separator `,` → `(1.0, 2.0)`
@@ -80,16 +78,11 @@ impl<P1, PS, P2> SeparatedPair<P1, PS, P2> {
     }
 }
 
-impl<'code, P1, PS, P2> Parser<'code> for SeparatedPair<P1, PS, P2>
+impl<P1, PS, P2> Parser for SeparatedPair<P1, PS, P2>
 where
-    P1: Parser<'code>,
-    P1::Cursor: Cursor<'code>,
-    <P1::Cursor as Cursor<'code>>::Element: Atomic + 'code,
-    P1::Error: ErrorNode<'code, Element = <P1::Cursor as Cursor<'code>>::Element>,
-    PS: Parser<'code, Cursor = P1::Cursor>,
-    PS::Error: ErrorNode<'code, Element = <P1::Cursor as Cursor<'code>>::Element>,
-    P2: Parser<'code, Cursor = P1::Cursor>,
-    P2::Error: ErrorNode<'code, Element = <P1::Cursor as Cursor<'code>>::Element>,
+    P1: Parser,
+    PS: Parser<Cursor = P1::Cursor>,
+    P2: Parser<Cursor = P1::Cursor>,
 {
     type Cursor = P1::Cursor;
     type Output = (P1::Output, P2::Output);
@@ -119,20 +112,15 @@ where
 /// Constraints:
 /// - All three parsers must use the same cursor type
 /// - All three parsers must have errors with the same element type
-pub fn separated_pair<'code, P1, PS, P2>(
+pub fn separated_pair<P1, PS, P2>(
     left: P1,
     separator: PS,
     right: P2,
 ) -> SeparatedPair<P1, PS, P2>
 where
-    P1: Parser<'code>,
-    PS: Parser<'code, Cursor = P1::Cursor>,
-    P2: Parser<'code, Cursor = P1::Cursor>,
-    P1::Cursor: Cursor<'code>,
-    P1::Error: ErrorNode<'code, Element = <P1::Cursor as Cursor<'code>>::Element>,
-    PS::Error: ErrorNode<'code, Element = <P1::Cursor as Cursor<'code>>::Element>,
-    P2::Error: ErrorNode<'code, Element = <P1::Cursor as Cursor<'code>>::Element>,
-    <P1::Cursor as Cursor<'code>>::Element: Atomic + 'code,
+    P1: Parser,
+    PS: Parser<Cursor = P1::Cursor>,
+    P2: Parser<Cursor = P1::Cursor>,
 {
     SeparatedPair::new(left, separator, right)
 }

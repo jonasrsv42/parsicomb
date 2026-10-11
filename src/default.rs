@@ -1,5 +1,5 @@
 use super::parser::Parser;
-use crate::{Atomic, Cursor, ParsicombError};
+use crate::Cursor;
 
 /// Parser that always succeeds without consuming input and returns the default value of T
 pub struct DefaultParser<T, C> {
@@ -7,7 +7,7 @@ pub struct DefaultParser<T, C> {
     _phantom_cursor: std::marker::PhantomData<C>,
 }
 
-impl<'code, T, C> DefaultParser<T, C> {
+impl<T, C> DefaultParser<T, C> {
     pub fn new(default: T) -> Self {
         DefaultParser {
             default,
@@ -16,15 +16,10 @@ impl<'code, T, C> DefaultParser<T, C> {
     }
 }
 
-impl<'code, T, C> Parser<'code> for DefaultParser<T, C>
-where
-    T: Clone,
-    C: Cursor<'code>,
-    C::Element: Atomic + 'code,
-{
+impl<T: Clone, C: Cursor> Parser for DefaultParser<T, C> {
     type Cursor = C;
     type Output = T;
-    type Error = ParsicombError<'code, <C as Cursor<'code>>::Element>;
+    type Error = C::Error;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         Ok((self.default.clone(), cursor))
@@ -32,11 +27,7 @@ where
 }
 
 /// Convenience function to create a default parser
-pub fn default<'code, T, C>(default: T) -> DefaultParser<T, C>
-where
-    T: Clone,
-    C: Cursor<'code>,
-{
+pub fn default<T: Clone, C: Cursor>(default: T) -> DefaultParser<T, C> {
     DefaultParser::new(default)
 }
 

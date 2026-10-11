@@ -1,20 +1,19 @@
 use super::cursor::Cursor;
 use super::parser::Parser;
-use crate::atomic::Atomic;
-use crate::error::{CodeLoc, ErrorLeaf, ErrorNode, ParsicombError};
+use crate::error::{ErrorLeaf, ErrorNode};
 use std::fmt;
 
 /// Error type for the All parser
 #[derive(Debug)]
-pub enum AllError<'code, E, T: Atomic = u8> {
+pub enum AllError<E, CursorErr> {
     /// Error from the child parser
     ParserError(E),
     /// The child parser succeeded without consuming input before end-of-stream,
     /// so repeating it would never terminate
-    NoProgress(ParsicombError<'code, T>),
+    NoProgress(CursorErr),
 }
 
-impl<'code, E: fmt::Display, T: Atomic> fmt::Display for AllError<'code, E, T> {
+impl<E: fmt::Display, CursorErr: fmt::Display> fmt::Display for AllError<E, CursorErr> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             AllError::ParserError(e) => write!(f, "{}", e),
@@ -23,15 +22,19 @@ impl<'code, E: fmt::Display, T: Atomic> fmt::Display for AllError<'code, E, T> {
     }
 }
 
-impl<'code, E: std::error::Error, T: Atomic> std::error::Error for AllError<'code, E, T> {}
-
-impl<'code, E, T: Atomic + 'code> ErrorNode<'code> for AllError<'code, E, T>
-where
-    E: ErrorNode<'code, Element = T>,
+impl<E: std::error::Error, CursorErr: std::error::Error> std::error::Error
+    for AllError<E, CursorErr>
 {
-    type Element = T;
+}
 
-    fn likely_error(&self) -> &dyn ErrorLeaf<'code, Element = Self::Element> {
+impl<E, CursorErr> ErrorNode for AllError<E, CursorErr>
+where
+    E: ErrorNode,
+    CursorErr: ErrorNode<Element = E::Element>,
+{
+    type Element = E::Element;
+
+    fn likely_error(&self) -> &dyn ErrorLeaf<Element = Self::Element> {
         match self {
             AllError::ParserError(e) => e.likely_error(),
             AllError::NoProgress(e) => e.likely_error(),
@@ -57,27 +60,24 @@ impl<P> All<P> {
     }
 }
 
-impl<'code, P> Parser<'code> for All<P>
-where
-    P: Parser<'code>,
-    <P::Cursor as Cursor<'code>>::Element: Atomic + 'code,
-{
+impl<P: Parser> Parser for All<P> {
     type Cursor = P::Cursor;
     type Output = Vec<P::Output>;
-    type Error = AllError<'code, P::Error, <P::Cursor as Cursor<'code>>::Element>;
+    type Error = AllError<P::Error, <P::Cursor as Cursor>::Error>;
 
     fn parse(&self, mut cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let mut results = Vec::new();
 
         while !cursor.eos() {
-            let (value, next_cursor) = self.parser.parse(cursor).map_err(AllError::ParserError)?;
+            let (value, next_cursor) = self
+                .parser
+                .parse(cursor)
+                .map_err(AllError::ParserError)?;
 
             if next_cursor.position() == cursor.position() {
-                let (data, position) = cursor.inner();
-                return Err(AllError::NoProgress(ParsicombError::SyntaxError {
-                    message: "parser succeeded without consuming input".into(),
-                    loc: CodeLoc::new(data, position),
-                }));
+                return Err(AllError::NoProgress(cursor.syntax_error(
+                    "parser succeeded without consuming input".into(),
+                )));
             }
 
             results.push(value);
@@ -102,10 +102,7 @@ where
 /// let result = parser.parse(cursor);
 /// assert!(result.is_ok());
 /// ```
-pub fn all<'code, P>(parser: P) -> All<P>
-where
-    P: Parser<'code>,
-{
+pub fn all<P: Parser>(parser: P) -> All<P> {
     All::new(parser)
 }
 

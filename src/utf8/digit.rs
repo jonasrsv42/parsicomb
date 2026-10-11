@@ -4,7 +4,7 @@ use crate::parser::Parser;
 use crate::utf8::char::char;
 
 /// Convenience function to create a Unicode digit parser
-pub fn unicode_digit() -> impl for<'code> Parser<'code, Cursor = ByteCursor<'code>, Output = char> {
+pub fn unicode_digit<'code>() -> impl Parser<Cursor = ByteCursor<'code>, Output = char> {
     char().filter(|c| c.is_numeric(), "expected Unicode digit")
 }
 

@@ -5,12 +5,12 @@ use std::fmt;
 
 /// Trait for errors that can report their location in the input
 /// This enables selecting the error that progressed furthest when multiple parsers fail
-pub trait ErrorLeaf<'code>: Error {
+pub trait ErrorLeaf: Error {
     /// The element type used in the source code (e.g., u8 for bytes)
     type Element: Atomic;
 
     /// Returns the location where this error occurred
-    fn loc(&self) -> CodeLoc<'code, Self::Element>;
+    fn loc(&self) -> CodeLoc<'_, Self::Element>;
 }
 
 /// Generic trait for error types that can be flattened to find the furthest error
@@ -26,7 +26,7 @@ pub trait ErrorLeaf<'code>: Error {
 /// use std::error::Error;
 /// use std::fmt;
 ///
-/// // Your custom error type
+/// // Your custom error type, borrowing the input it points into
 /// #[derive(Debug)]
 /// struct MyError<'code> {
 ///     code: &'code [u8],
@@ -42,35 +42,31 @@ pub trait ErrorLeaf<'code>: Error {
 ///
 /// impl<'code> Error for MyError<'code> {}
 ///
-/// // Implement ErrorLeaf
-/// impl<'code> ErrorLeaf<'code> for MyError<'code> {
+/// impl<'code> ErrorLeaf for MyError<'code> {
 ///     type Element = u8;
-///     
-///     fn loc(&self) -> CodeLoc<'code, Self::Element> {
+///
+///     fn loc(&self) -> CodeLoc<'_, Self::Element> {
 ///         CodeLoc::new(self.code, self.position)
 ///     }
 /// }
 ///
-/// // Implement ErrorNode (converts to itself since it's already a terminal type)
-/// impl<'code> ErrorNode<'code> for MyError<'code> {
+/// // A leaf error is its own most likely error
+/// impl<'code> ErrorNode for MyError<'code> {
 ///     type Element = u8;
-///     
-///     fn likely_error(&self) -> &dyn ErrorLeaf<'code, Element = Self::Element> {
+///
+///     fn likely_error(&self) -> &dyn ErrorLeaf<Element = Self::Element> {
 ///         self
 ///     }
 /// }
 /// ```
-pub trait ErrorNode<'code>: Error {
+pub trait ErrorNode: Error {
     /// The element type used in the source code (e.g., u8 for bytes)
     type Element: Atomic;
 
     /// Flatten nested error structures and return the likely error that made it furthest
-    fn likely_error(&self) -> &dyn ErrorLeaf<'code, Element = Self::Element>;
+    fn likely_error(&self) -> &dyn ErrorLeaf<Element = Self::Element>;
 }
 
-// Re-exported for backwards compatibility; the position/context computation now
-// lives in `error_fmt` so the (fiddly, bounded) windowing logic can be unit
-// tested in isolation.
 pub use crate::error_fmt::ReadablePosition;
 
 #[derive(Debug, Copy, Clone)]
@@ -87,6 +83,11 @@ impl<'code, T: Atomic> CodeLoc<'code, T> {
 
     pub fn position(&self) -> usize {
         self.loc
+    }
+
+    /// The input this location points into
+    pub fn code(&self) -> &'code [T] {
+        self.code
     }
 }
 
@@ -107,24 +108,7 @@ impl<'code, T: Atomic> CodeLoc<'code, T> {
     fn context_lines(&self) -> Vec<String> {
         crate::error_fmt::context_lines(self.code, self.loc)
     }
-}
 
-#[derive(Debug)]
-pub enum ParsicombError<'code, T: Atomic = u8> {
-    UnexpectedEndOfFile(CodeLoc<'code, T>),
-    AlreadyAtEndOfFile(CodeLoc<'code, T>),
-    CannotReadValueAtEof(CodeLoc<'code, T>),
-    SyntaxError {
-        message: Cow<'static, str>,
-        loc: CodeLoc<'code, T>,
-    },
-    /// Wrapped error from another parser combinator
-    WrappedError {
-        inner: Box<dyn ErrorNode<'code, Element = T> + 'code>,
-    },
-}
-
-impl<'code, T: Atomic> CodeLoc<'code, T> {
     /// Write the location as `line L, column C (offset N)`, or just `offset N`
     /// when the line is too far in to resolve.
     ///
@@ -152,6 +136,94 @@ impl<'code, T: Atomic> CodeLoc<'code, T> {
     }
 }
 
+/// What a leaf parser expected and what it found instead
+///
+/// Holds plain data so constructing it never allocates; the message is only
+/// built when the error is displayed.
+#[derive(Debug, Clone)]
+pub enum Expected {
+    /// A specific byte
+    Byte { expected: u8, found: u8 },
+    /// A byte in an inclusive range
+    ByteInRange { start: u8, end: u8, found: u8 },
+    /// A specific character
+    Char { expected: char, found: char },
+    /// A character of a string being matched; `found` is `None` at end of input
+    CharInString {
+        expected: char,
+        found: Option<char>,
+        string: Cow<'static, str>,
+    },
+}
+
+impl fmt::Display for Expected {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Printable ASCII as-is, everything else escaped (`\n`, `\x80`, ...)
+        let show = std::ascii::escape_default;
+        match self {
+            Expected::Byte { expected, found } => write!(
+                f,
+                "expected byte 0x{:02X} ('{}'), found 0x{:02X} ('{}')",
+                expected,
+                show(*expected),
+                found,
+                show(*found)
+            ),
+            Expected::ByteInRange { start, end, found } => write!(
+                f,
+                "expected byte in range 0x{:02X}-0x{:02X} ('{}'-'{}'), found 0x{:02X} ('{}')",
+                start,
+                end,
+                show(*start),
+                show(*end),
+                found,
+                show(*found)
+            ),
+            Expected::Char { expected, found } => {
+                write!(f, "expected {:?}, found {:?}", expected, found)
+            }
+            Expected::CharInString {
+                expected,
+                found: Some(found),
+                string,
+            } => write!(
+                f,
+                "expected {:?}, found {:?} while matching {:?}",
+                expected, found, string
+            ),
+            Expected::CharInString {
+                expected,
+                found: None,
+                string,
+            } => write!(
+                f,
+                "expected {:?}, but reached end of input while matching {:?}",
+                expected, string
+            ),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum ParsicombError<'code, T: Atomic = u8> {
+    UnexpectedEndOfFile(CodeLoc<'code, T>),
+    AlreadyAtEndOfFile(CodeLoc<'code, T>),
+    CannotReadValueAtEof(CodeLoc<'code, T>),
+    SyntaxError {
+        message: Cow<'static, str>,
+        loc: CodeLoc<'code, T>,
+    },
+    /// A leaf parser found something other than what it expected
+    Expected {
+        expected: Expected,
+        loc: CodeLoc<'code, T>,
+    },
+    /// Wrapped error from another parser combinator
+    WrappedError {
+        inner: Box<dyn ErrorNode<Element = T> + 'code>,
+    },
+}
+
 impl<'code, T: Atomic> fmt::Display for ParsicombError<'code, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let (headline, loc) = match self {
@@ -159,16 +231,18 @@ impl<'code, T: Atomic> fmt::Display for ParsicombError<'code, T> {
             ParsicombError::AlreadyAtEndOfFile(loc) => ("Already at end of file", loc),
             ParsicombError::CannotReadValueAtEof(loc) => ("Cannot read value at EOF", loc),
             ParsicombError::SyntaxError { loc, .. } => ("Syntax error", loc),
+            ParsicombError::Expected { loc, .. } => ("Syntax error", loc),
             ParsicombError::WrappedError { inner } => {
-                // Delegate to the inner error's likely_error for display
                 return write!(f, "{}", inner.likely_error());
             }
         };
 
         write!(f, "{} at ", headline)?;
         loc.write_location(f)?;
-        if let ParsicombError::SyntaxError { message, .. } = self {
-            write!(f, ": {}", message)?;
+        match self {
+            ParsicombError::SyntaxError { message, .. } => write!(f, ": {}", message)?,
+            ParsicombError::Expected { expected, .. } => write!(f, ": {}", expected)?,
+            _ => {}
         }
         writeln!(f)?;
         loc.write_context(f)
@@ -179,7 +253,7 @@ impl<'code, T: Atomic> Error for ParsicombError<'code, T> {}
 
 impl<'code, T: Atomic> ParsicombError<'code, T> {
     /// Wrap an ErrorNode in a ParsicombError
-    pub fn wrap(error: impl ErrorNode<'code, Element = T> + 'code) -> Self {
+    pub fn wrap(error: impl ErrorNode<Element = T> + 'code) -> Self {
         ParsicombError::WrappedError {
             inner: Box::new(error),
         }
@@ -187,45 +261,33 @@ impl<'code, T: Atomic> ParsicombError<'code, T> {
 
     /// Returns the position where this error occurred
     pub fn position(&self) -> usize {
+        self.loc().position()
+    }
+}
+
+impl<'code, T: Atomic> ErrorLeaf for ParsicombError<'code, T> {
+    type Element = T;
+
+    fn loc(&self) -> CodeLoc<'_, Self::Element> {
         match self {
-            ParsicombError::UnexpectedEndOfFile(code_loc) => code_loc.position(),
-            ParsicombError::AlreadyAtEndOfFile(code_loc) => code_loc.position(),
-            ParsicombError::CannotReadValueAtEof(code_loc) => code_loc.position(),
-            ParsicombError::SyntaxError { loc, .. } => loc.position(),
-            ParsicombError::WrappedError { inner } => {
-                // Delegate to the wrapped error's likely_error
-                inner.likely_error().loc().position()
-            }
+            ParsicombError::UnexpectedEndOfFile(loc)
+            | ParsicombError::AlreadyAtEndOfFile(loc)
+            | ParsicombError::CannotReadValueAtEof(loc)
+            | ParsicombError::SyntaxError { loc, .. }
+            | ParsicombError::Expected { loc, .. } => *loc,
+            ParsicombError::WrappedError { inner } => inner.likely_error().loc(),
         }
     }
 }
 
-impl<'code, T: Atomic> ErrorLeaf<'code> for ParsicombError<'code, T> {
+impl<'code, T: Atomic> ErrorNode for ParsicombError<'code, T> {
     type Element = T;
 
-    fn loc(&self) -> CodeLoc<'code, Self::Element> {
+    fn likely_error(&self) -> &dyn ErrorLeaf<Element = Self::Element> {
         match self {
-            ParsicombError::UnexpectedEndOfFile(code_loc) => *code_loc,
-            ParsicombError::AlreadyAtEndOfFile(code_loc) => *code_loc,
-            ParsicombError::CannotReadValueAtEof(code_loc) => *code_loc,
-            ParsicombError::SyntaxError { loc, .. } => *loc,
-            ParsicombError::WrappedError { inner } => {
-                // Get the likely error and call loc on it
-                inner.likely_error().loc()
-            }
+            ParsicombError::WrappedError { inner } => inner.likely_error(),
+            _ => self,
         }
-    }
-}
-
-// ParsicombError implements ErrorNode (converts to itself since it's a terminal type)
-impl<'code, T: Atomic> ErrorNode<'code> for ParsicombError<'code, T>
-where
-    T: 'code,
-{
-    type Element = T;
-
-    fn likely_error(&self) -> &dyn ErrorLeaf<'code, Element = Self::Element> {
-        self // Already the base type
     }
 }
 

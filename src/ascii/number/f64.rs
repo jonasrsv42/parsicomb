@@ -4,14 +4,19 @@ use crate::Cursor;
 use crate::byte::is_byte;
 use crate::parser::Parser;
 use crate::{CodeLoc, ParsicombError};
+use std::marker::PhantomData;
 
 /// Parser for int.uint format (e.g., 123.456, -42.789)
 fn int_dot_uint<'code>()
--> impl Parser<'code, Cursor = ByteCursor<'code>, Output = f64, Error = ParsicombError<'code>> {
-    IntDotUintParser
+-> impl Parser<Cursor = ByteCursor<'code>, Output = f64, Error = ParsicombError<'code>> {
+    IntDotUintParser {
+        _input: PhantomData,
+    }
 }
 
-struct IntDotUintParser;
+struct IntDotUintParser<'code> {
+    _input: PhantomData<&'code [u8]>,
+}
 
 /// Consume one or more ASCII digits
 fn digits(cursor: ByteCursor<'_>) -> Result<ByteCursor<'_>, ParsicombError<'_>> {
@@ -22,7 +27,7 @@ fn digits(cursor: ByteCursor<'_>) -> Result<ByteCursor<'_>, ParsicombError<'_>> 
     Ok(cursor)
 }
 
-impl<'code> Parser<'code> for IntDotUintParser {
+impl<'code> Parser for IntDotUintParser<'code> {
     type Cursor = ByteCursor<'code>;
     type Output = f64;
     type Error = ParsicombError<'code>;
@@ -61,7 +66,7 @@ impl<'code> Parser<'code> for IntDotUintParser {
 
 /// Parser that matches ASCII floating point numbers
 pub fn f64<'code>()
--> impl Parser<'code, Cursor = ByteCursor<'code>, Output = f64, Error = ParsicombError<'code>> {
+-> impl Parser<Cursor = ByteCursor<'code>, Output = f64, Error = ParsicombError<'code>> {
     int_dot_uint()
 }
 

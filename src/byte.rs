@@ -1,11 +1,7 @@
 use crate::cursor::Cursor;
-use crate::{AtomicParser, ByteCursor, CodeLoc, Parser, ParsicombError, atomic};
-
-/// Render a byte for error messages: printable ASCII as-is, everything else
-/// escaped (`\n`, `\t`, `\x80`, ...) so messages stay on one line
-fn show(byte: u8) -> std::ascii::EscapeDefault {
-    std::ascii::escape_default(byte)
-}
+use crate::error::Expected;
+use crate::{AtomicParser, ByteCursor, Parser, ParsicombError, atomic};
+use std::marker::PhantomData;
 
 /// Type alias for a parser that consumes and returns a single byte
 pub type ByteParser<'code> = AtomicParser<ByteCursor<'code>>;
@@ -16,91 +12,83 @@ pub fn byte<'code>() -> ByteParser<'code> {
 }
 
 /// Parser that matches a specific byte
-pub struct IsByteParser {
+pub struct IsByteParser<'code> {
     expected: u8,
+    _input: PhantomData<&'code [u8]>,
 }
 
-impl IsByteParser {
+impl<'code> IsByteParser<'code> {
     pub fn new(expected: u8) -> Self {
-        IsByteParser { expected }
+        IsByteParser {
+            expected,
+            _input: PhantomData,
+        }
     }
 }
 
-impl<'code> Parser<'code> for IsByteParser {
+impl<'code> Parser for IsByteParser<'code> {
     type Cursor = ByteCursor<'code>;
     type Output = u8;
     type Error = ParsicombError<'code>;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
-        match cursor.value() {
-            Ok(byte) if byte == self.expected => Ok((byte, cursor.next())),
-            Ok(byte) => {
-                let (data, position) = cursor.inner();
-                let message = format!(
-                    "expected byte 0x{:02X} ('{}'), found 0x{:02X} ('{}')",
-                    self.expected,
-                    show(self.expected),
-                    byte,
-                    show(byte)
-                );
-                Err(ParsicombError::SyntaxError {
-                    message: message.into(),
-                    loc: CodeLoc::new(data, position),
-                })
-            }
-            Err(e) => Err(e),
+        match cursor.value()? {
+            byte if byte == self.expected => Ok((byte, cursor.next())),
+            found => Err(ParsicombError::Expected {
+                expected: Expected::Byte {
+                    expected: self.expected,
+                    found,
+                },
+                loc: cursor.loc(),
+            }),
         }
     }
 }
 
 /// Parser that matches a byte within a range (inclusive)
-pub struct BetweenBytesParser {
+pub struct BetweenBytesParser<'code> {
     start: u8,
     end: u8,
+    _input: PhantomData<&'code [u8]>,
 }
 
-impl BetweenBytesParser {
+impl<'code> BetweenBytesParser<'code> {
     pub fn new(start: u8, end: u8) -> Self {
-        BetweenBytesParser { start, end }
+        BetweenBytesParser {
+            start,
+            end,
+            _input: PhantomData,
+        }
     }
 }
 
-impl<'code> Parser<'code> for BetweenBytesParser {
+impl<'code> Parser for BetweenBytesParser<'code> {
     type Cursor = ByteCursor<'code>;
     type Output = u8;
     type Error = ParsicombError<'code>;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
-        match cursor.value() {
-            Ok(byte) if byte >= self.start && byte <= self.end => Ok((byte, cursor.next())),
-            Ok(byte) => {
-                let (data, position) = cursor.inner();
-                let message = format!(
-                    "expected byte in range 0x{:02X}-0x{:02X} ('{}'-'{}'), found 0x{:02X} ('{}')",
-                    self.start,
-                    self.end,
-                    show(self.start),
-                    show(self.end),
-                    byte,
-                    show(byte)
-                );
-                Err(ParsicombError::SyntaxError {
-                    message: message.into(),
-                    loc: CodeLoc::new(data, position),
-                })
-            }
-            Err(e) => Err(e),
+        match cursor.value()? {
+            byte if (self.start..=self.end).contains(&byte) => Ok((byte, cursor.next())),
+            found => Err(ParsicombError::Expected {
+                expected: Expected::ByteInRange {
+                    start: self.start,
+                    end: self.end,
+                    found,
+                },
+                loc: cursor.loc(),
+            }),
         }
     }
 }
 
 /// Convenience function to create an IsByteParser
-pub fn is_byte(expected: u8) -> IsByteParser {
+pub fn is_byte<'code>(expected: u8) -> IsByteParser<'code> {
     IsByteParser::new(expected)
 }
 
 /// Convenience function to create a BetweenBytesParser
-pub fn between_bytes(start: u8, end: u8) -> BetweenBytesParser {
+pub fn between_bytes<'code>(start: u8, end: u8) -> BetweenBytesParser<'code> {
     BetweenBytesParser::new(start, end)
 }
 

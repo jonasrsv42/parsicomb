@@ -5,7 +5,7 @@ use crate::parser::Parser;
 
 /// Parser that matches a single ASCII digit (0-9)
 pub fn digit<'code>()
--> impl Parser<'code, Cursor = ByteCursor<'code>, Output = u8, Error = ParsicombError<'code>> {
+-> impl Parser<Cursor = ByteCursor<'code>, Output = u8, Error = ParsicombError<'code>> {
     between_bytes(b'0', b'9')
 }
 
