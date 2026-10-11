@@ -108,6 +108,7 @@ assert_eq!(numbers().parse(ByteCursor::new(b"1,2,3")).unwrap().0, vec![1, 2, 3])
 | `ascii::f64()` | a float in `int.frac` form | `f64` |
 | `ascii::whitespace()` | a space, tab, `\n` or `\r` | `u8` |
 | `atomic()`, `is_atomic(e)`, `atomic_between(lo, hi)` | the same, for any element type | the element |
+| `is_sequence(&[...])` | a run of elements | the matched `Span` |
 
 ## Combinators
 
@@ -186,11 +187,11 @@ assert_eq!(
 
 ## Custom Element Types
 
-Any `Copy + PartialEq + Debug + Display` type can be parsed by implementing
-`Atomic`, e.g. tokens produced by a lexer:
+Any plain (non-borrowing) `Copy + PartialEq + Debug + Display` type can be
+parsed by implementing `Atomic`, e.g. tokens produced by a lexer:
 
 ```rust
-use parsicomb::{Atomic, AtomicCursor, Parser, is_atomic};
+use parsicomb::{Atomic, AtomicCursor, Parser, is_atomic, is_sequence};
 use parsicomb::and::AndExt;
 use std::fmt;
 
@@ -213,7 +214,7 @@ impl Atomic for Token {
     }
 
     fn format_slice(slice: &[Self]) -> String {
-        slice.iter().map(|t| format!("{} ", t)).collect()
+        slice.iter().map(|t| t.to_string()).collect::<Vec<_>>().join(" ")
     }
 }
 
@@ -224,6 +225,14 @@ let error = is_atomic(Token::Let)
     .unwrap_err();
 
 assert!(error.to_string().contains("expected Ident, found Let"));
+
+// Runs of elements, from a static slice so failures don't allocate
+static LET_IDENT: [Token; 2] = [Token::Let, Token::Ident];
+let error = is_sequence(&LET_IDENT[..])
+    .parse(AtomicCursor::new(&tokens))
+    .unwrap_err();
+
+assert!(error.to_string().contains(r#"expected "Let Ident", found "Let Let""#));
 ```
 
 ## Error Messages
@@ -239,7 +248,7 @@ let error = is_string("hello").parse(ByteCursor::new(b"help")).unwrap_err();
 assert_eq!(
     error.to_string(),
     "Syntax error at line 1, column 3 (offset 3): \
-     expected 'l', found 'p' while matching \"hello\"\n\
+     expected \"hello\", found \"help\"\n\
      \n  > 1 | help\n           ^--- here\n"
 );
 ```

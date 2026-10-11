@@ -5,13 +5,18 @@ use std::marker::PhantomData;
 
 pub mod between;
 pub mod is;
+pub mod sequence;
 
 pub use between::{AtomicBetween, atomic_between};
 pub use is::{IsAtomic, is_atomic};
+pub use sequence::{IsSequence, is_sequence};
 
 /// Trait for atomic elements that can be used in parsing
 /// This enables generic error formatting and position calculation
-pub trait Atomic: Copy + Clone + PartialEq + Debug + Display {
+///
+/// Elements are plain values (bytes, tokens, ...) that do not borrow, so
+/// parsers can describe expected elements with `'static` data.
+pub trait Atomic: Copy + Clone + PartialEq + Debug + Display + 'static {
     /// Check if this element represents a newline for this atomic type
     fn is_newline(&self) -> bool;
 

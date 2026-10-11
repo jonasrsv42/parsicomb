@@ -1,23 +1,29 @@
 use crate::ByteCursor;
-use crate::Cursor;
 use crate::ParsicombError;
-use crate::error::Expected;
+use crate::atomic::{IsSequence, is_sequence};
 use crate::parser::Parser;
-use crate::utf8::char::char;
 use std::borrow::Cow;
-use std::marker::PhantomData;
 
-/// Parser that matches an exact UTF-8 string character by character
+/// Parser that matches an exact UTF-8 string
+///
+/// Failures don't allocate for `&'static str`; an owned string is cloned
+/// into each error.
 pub struct IsStringParser<'code> {
     expected: Cow<'static, str>,
-    _input: PhantomData<&'code [u8]>,
+    bytes: IsSequence<ByteCursor<'code>>,
 }
 
 impl<'code> IsStringParser<'code> {
     pub fn new(expected: impl Into<Cow<'static, str>>) -> Self {
+        let expected = expected.into();
+        let bytes: Cow<'static, [u8]> = match &expected {
+            Cow::Borrowed(s) => Cow::Borrowed(s.as_bytes()),
+            Cow::Owned(s) => Cow::Owned(s.as_bytes().to_vec()),
+        };
+
         Self {
-            expected: expected.into(),
-            _input: PhantomData,
+            expected,
+            bytes: is_sequence(bytes),
         }
     }
 }
@@ -28,26 +34,9 @@ impl<'code> Parser for IsStringParser<'code> {
     type Error = ParsicombError<'code>;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
-        let mut current_cursor = cursor;
-
-        for expected_char in self.expected.chars() {
-            let parsed = char().parse(current_cursor).ok();
-            match parsed {
-                Some((found, next_cursor)) if found == expected_char => {
-                    current_cursor = next_cursor;
-                }
-                _ => {
-                    return Err(current_cursor.expected_error(Expected::CharInString {
-                        expected: expected_char,
-                        found: parsed.map(|(found, _)| found),
-                        string: self.expected.clone(),
-                    }));
-                }
-            }
-        }
-
+        let (_, next_cursor) = self.bytes.parse(cursor)?;
         // Cheap for `&'static str` (the common case): clones the reference
-        Ok((self.expected.clone(), current_cursor))
+        Ok((self.expected.clone(), next_cursor))
     }
 }
 
@@ -59,6 +48,7 @@ pub fn is_string<'code>(expected: impl Into<Cow<'static, str>>) -> IsStringParse
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utf8::char::char;
 
     #[test]
     fn test_exact_match() {
@@ -129,7 +119,7 @@ mod tests {
             result
                 .unwrap_err()
                 .to_string()
-                .contains("expected 'h', found 'w'")
+                .contains(r#"expected "hello", found "w""#)
         );
     }
 
@@ -146,7 +136,7 @@ mod tests {
             result
                 .unwrap_err()
                 .to_string()
-                .contains("expected 'l', found 'p'")
+                .contains(r#"expected "hello", found "help""#)
         );
     }
 
@@ -159,12 +149,7 @@ mod tests {
 
         let result = parser.parse(cursor);
         assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("found end of input")
-        );
+        assert!(result.unwrap_err().to_string().contains("at end of input"));
     }
 
     #[test]
@@ -196,7 +181,7 @@ mod tests {
             result
                 .unwrap_err()
                 .to_string()
-                .contains("expected 'h', found 'H'")
+                .contains(r#"expected "hello", found "H""#)
         );
     }
 

@@ -1,9 +1,10 @@
 use crate::ByteCursor;
 use crate::Cursor;
 use crate::ParsicombError;
+use crate::atomic::{IsSequence, is_sequence};
 use crate::byte::ByteParser;
-use crate::error::Expected;
 use crate::parser::Parser;
+use std::borrow::Cow;
 use std::marker::PhantomData;
 
 /// Parser that consumes and returns a single UTF-8 character
@@ -116,10 +117,21 @@ pub fn char<'code>() -> CharParser<'code> {
     }
 }
 
-/// Parser that matches a specific character
+/// Every ASCII byte, so an ASCII character's encoding is a `'static` slice
+static ASCII: [u8; 128] = {
+    let mut table = [0u8; 128];
+    let mut i = 0;
+    while i < 128 {
+        table[i] = i as u8;
+        i += 1;
+    }
+    table
+};
+
+/// Parser that matches a specific character by its UTF-8 encoding
 pub struct IsChar<'code> {
     expected: char,
-    _input: PhantomData<&'code [u8]>,
+    encoding: IsSequence<ByteCursor<'code>>,
 }
 
 impl<'code> Parser for IsChar<'code> {
@@ -128,23 +140,25 @@ impl<'code> Parser for IsChar<'code> {
     type Error = ParsicombError<'code>;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
-        let (ch, next_cursor) = char().parse(cursor)?;
-        if ch == self.expected {
-            Ok((ch, next_cursor))
-        } else {
-            Err(cursor.expected_error(Expected::Char {
-                expected: self.expected,
-                found: Some(ch),
-            }))
-        }
+        let (_, next_cursor) = self.encoding.parse(cursor)?;
+        Ok((self.expected, next_cursor))
     }
 }
 
 /// Convenience function to create a parser that matches a specific character
+///
+/// Failures don't allocate for ASCII characters; other characters own their
+/// encoding, which is cloned into each error.
 pub fn is_char<'code>(expected: char) -> IsChar<'code> {
+    let encoding: Cow<'static, [u8]> = if expected.is_ascii() {
+        Cow::Borrowed(&ASCII[expected as usize..][..1])
+    } else {
+        Cow::Owned(expected.encode_utf8(&mut [0; 4]).as_bytes().to_vec())
+    };
+
     IsChar {
         expected,
-        _input: PhantomData,
+        encoding: is_sequence(encoding),
     }
 }
 

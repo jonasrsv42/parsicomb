@@ -12,7 +12,6 @@ pub mod cursor;
 pub mod cursors;
 pub mod default;
 pub mod error;
-pub mod error_fmt;
 pub mod filter;
 pub mod lazy;
 pub mod many;
@@ -33,7 +32,8 @@ pub mod utf8;
 pub use all::all;
 pub use argument_list::argument_list;
 pub use atomic::{
-    Atomic, AtomicBetween, AtomicParser, IsAtomic, atomic, atomic_between, is_atomic,
+    Atomic, AtomicBetween, AtomicParser, IsAtomic, IsSequence, atomic, atomic_between, is_atomic,
+    is_sequence,
 };
 pub use between::between;
 pub use boxed::{BoxedExt, BoxedParser};
