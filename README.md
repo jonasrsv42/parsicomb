@@ -142,6 +142,78 @@ Also available: `argument_list` (`(a, b, c)`-style lists), `filter`, `not`
 (negative lookahead), `take_until`, `ntimes`, `all`, `map_err` and
 `with_position` (captures the `Span` a parser consumed).
 
+### Runs without collecting
+
+`many` and `some` collect their outputs into a `Vec`. When only the matched
+input matters, `skip_many`/`skip_some` repeat without collecting, and
+`recognize` outputs the span a parser matched:
+
+```rust
+use parsicomb::{ByteCursor, Parser, recognize, skip_some};
+use parsicomb::byte::byte;
+use parsicomb::filter::FilterExt;
+
+let ident = recognize(skip_some(
+    byte().filter(|b| b.is_ascii_alphanumeric() || *b == b'_', "expected identifier"),
+));
+let (span, _) = ident.parse(ByteCursor::new(b"foo_bar baz")).unwrap();
+assert_eq!(span.slice(), b"foo_bar");
+```
+
+### Context-dependent parsing
+
+`and_then` runs a parser, then a parser built from its output. Here the
+closing quote must repeat as many `#` as opened it, as in Rust raw strings:
+
+```rust
+use parsicomb::{ByteCursor, Parser, ntimes, recognize, skip_many};
+use parsicomb::and::AndExt;
+use parsicomb::and_then::AndThenExt;
+use parsicomb::byte::{byte, is_byte};
+use parsicomb::filter::FilterExt;
+use parsicomb::many::many;
+use parsicomb::map::MapExt;
+
+let raw = many(is_byte(b'#'))
+    .map(|hashes| hashes.len())
+    .and_then(|n| {
+        is_byte(b'"')
+            .and(recognize(skip_many(byte().filter(|b| *b != b'"', "expected text"))))
+            .and(is_byte(b'"'))
+            .and(ntimes(n, is_byte(b'#')))
+            .map(|(((_, text), _), _)| text)
+    });
+
+let (text, _) = raw.parse(ByteCursor::new(b"##\"hi\"##")).unwrap();
+assert_eq!(text.slice(), b"hi");
+```
+
+### Hand-written parsers
+
+`parser_fn` turns a closure from a cursor to a parse result into a parser,
+e.g. to pick a rule by the next element without trying each in turn:
+
+```rust
+use parsicomb::{ByteCursor, Cursor, Parser, ParsicombError, parser_fn};
+use parsicomb::ascii::u64;
+use parsicomb::byte::is_byte;
+use parsicomb::map::MapExt;
+
+fn maybe_number<'code>()
+-> impl Parser<Cursor = ByteCursor<'code>, Output = Option<u64>, Error = ParsicombError<'code>> {
+    let number = u64().map(Some);
+    let none = is_byte(b'-').map(|_| None);
+    parser_fn(move |cursor: ByteCursor<'code>| match cursor.value()? {
+        b'-' => none.parse(cursor),
+        _ => number.parse(cursor),
+    })
+}
+
+assert_eq!(maybe_number().parse(ByteCursor::new(b"-")).unwrap().0, None);
+```
+
+Cursors can also skip ahead: `cursor.advance(n)` moves `n` elements in one step.
+
 ## Recursive Grammars
 
 A parser that refers to itself goes through `lazy`, which builds the inner
@@ -263,3 +335,9 @@ combinators makes for deep types: compile time grows steeply, and around 40–50
 combinators the compiler's recursion limit is reached. Split long chains into
 functions returning `impl Parser`, and erase types with `.boxed()` at a few
 boundaries if needed.
+
+Every distinct parser type is compiled separately. Keep a grammar's type
+parameters to things that are the same across call sites: a grammar that is
+generic over closures passed in by each caller is compiled once per caller,
+since every closure has its own type. Take a trait implementation (one type
+shared by all callers) instead, or erase the varying part with `.boxed()`.

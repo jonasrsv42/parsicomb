@@ -39,6 +39,11 @@ pub trait Cursor: Copy {
     /// end of the sequence or if the cursor is already there
     fn try_next(self) -> Result<Self, Self::Error>;
 
+    /// Advance the cursor by `n` elements, stopping at the end of the sequence
+    fn advance(self, n: usize) -> Self {
+        (0..n).fold(self, |cursor, _| cursor.next())
+    }
+
     /// Get the current position in the sequence
     ///
     /// For end-of-sequence cursors, this typically returns the length of the sequence

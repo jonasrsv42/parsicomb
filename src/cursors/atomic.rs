@@ -82,6 +82,16 @@ impl<'code, T: Atomic + 'code> Cursor for AtomicCursor<'code, T> {
         }
     }
 
+    fn advance(self, n: usize) -> Self {
+        let data = self.source();
+        let position = self.position().saturating_add(n);
+        if position < data.len() {
+            AtomicCursor::Valid { data, position }
+        } else {
+            AtomicCursor::EndOfFile { data }
+        }
+    }
+
     fn position(&self) -> usize {
         match self {
             AtomicCursor::Valid { position, .. } => *position,
@@ -328,5 +338,17 @@ mod tests {
         let (source, pos) = cursor.inner();
         assert_eq!(source, &[99, 88, 77]);
         assert_eq!(pos, 2);
+    }
+
+    #[test]
+    fn test_advance_jumps_and_stops_at_end() {
+        let data = b"abcd";
+        let cursor: AtomicCursor<u8> = AtomicCursor::new(data);
+
+        assert_eq!(cursor.advance(2).value().unwrap(), b'c');
+        assert_eq!(cursor.advance(0).position(), 0);
+        assert!(cursor.advance(4).eos());
+        assert_eq!(cursor.advance(99).position(), 4);
+        assert_eq!(cursor.advance(1).advance(2).position(), 3);
     }
 }
