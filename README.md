@@ -160,6 +160,23 @@ let (span, _) = ident.parse(ByteCursor::new(b"foo_bar baz")).unwrap();
 assert_eq!(span.slice(), b"foo_bar");
 ```
 
+For runs of single elements or characters, `skip_while` (any element type) and
+`utf8::skip_chars_while` check each one directly. They build no error where
+the run ends, which makes them much faster in hot loops than
+`skip_many(..filter(..))`:
+
+```rust
+use parsicomb::{ByteCursor, Parser, recognize};
+use parsicomb::utf8::{skip_chars_while, skip_chars_while1};
+
+let word = recognize(skip_chars_while1(char::is_alphanumeric, "a letter or digit"));
+let (span, rest) = word.parse(ByteCursor::new("größe 42".as_bytes())).unwrap();
+assert_eq!(span.slice(), "größe".as_bytes());
+
+let (_, rest) = skip_chars_while(char::is_whitespace).parse(rest).unwrap();
+assert_eq!(word.parse(rest).unwrap().0.slice(), b"42");
+```
+
 ### Context-dependent parsing
 
 `and_then` runs a parser, then a parser built from its output. Here the

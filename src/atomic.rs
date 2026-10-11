@@ -6,10 +6,12 @@ use std::marker::PhantomData;
 pub mod between;
 pub mod is;
 pub mod sequence;
+pub mod skip_while;
 
 pub use between::{AtomicBetween, atomic_between};
 pub use is::{IsAtomic, is_atomic};
 pub use sequence::{IsSequence, is_sequence};
+pub use skip_while::{SkipWhile, SkipWhile1, skip_while, skip_while1};
 
 /// Trait for atomic elements that can be used in parsing
 /// This enables generic error formatting and position calculation

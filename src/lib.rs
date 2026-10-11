@@ -38,7 +38,7 @@ pub use all::all;
 pub use argument_list::argument_list;
 pub use atomic::{
     Atomic, AtomicBetween, AtomicParser, IsAtomic, IsSequence, atomic, atomic_between, is_atomic,
-    is_sequence,
+    is_sequence, skip_while, skip_while1,
 };
 pub use between::between;
 pub use boxed::{BoxedExt, BoxedParser};
