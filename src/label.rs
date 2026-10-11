@@ -70,7 +70,7 @@ where
     Cur: Cursor,
 {
     let rank = error.rank();
-    if rank.position <= cursor.position() && rank.is_expectation {
+    if rank.position <= cursor.position() && rank.is_expectation && !rank.is_committed {
         LabelError::Labeled(cursor.expected_error(Expected::Label(label)))
     } else {
         LabelError::Inner(error)

@@ -3,11 +3,22 @@ use crate::atomic::Atomic;
 use std::fmt;
 
 /// A position in the input, together with the input it points into
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub struct CodeLoc<'code, T: Atomic = u8> {
     code: &'code [T],
     /// The position in `code` where the cursor encountered an error
     loc: usize,
+}
+
+/// Shows the position and input length, not the input, so debug-printing an
+/// error (e.g. through `unwrap`) stays small on large inputs
+impl<T: Atomic> fmt::Debug for CodeLoc<'_, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CodeLoc")
+            .field("position", &self.loc)
+            .field("input_len", &self.code.len())
+            .finish()
+    }
 }
 
 impl<'code, T: Atomic> CodeLoc<'code, T> {

@@ -2,6 +2,7 @@
 
 use super::parser::Parser;
 use crate::cursor::Cursor;
+use crate::error::ErrorNode;
 
 /// Parser combinator that matches one or more occurrences of the given
 /// parser and discards their outputs
@@ -27,12 +28,14 @@ impl<P: Parser> Parser for SkipSome<P> {
         // First parse must succeed
         let (_, mut cursor) = self.parser.parse(cursor)?;
 
-        while let Ok((_, next_cursor)) = self.parser.parse(cursor) {
-            // An iteration that consumes nothing would repeat forever
-            if next_cursor.position() == cursor.position() {
-                break;
+        loop {
+            match self.parser.parse(cursor) {
+                // An iteration that consumes nothing would repeat forever
+                Ok((_, next_cursor)) if next_cursor.position() == cursor.position() => break,
+                Ok((_, next_cursor)) => cursor = next_cursor,
+                Err(error) if error.rank().is_committed => return Err(error),
+                Err(_) => break,
             }
-            cursor = next_cursor;
         }
 
         Ok(((), cursor))

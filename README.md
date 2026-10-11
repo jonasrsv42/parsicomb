@@ -99,6 +99,12 @@ fn numbers<'code>() -> impl Parser<Cursor = ByteCursor<'code>, Output = Vec<u64>
 assert_eq!(numbers().parse(ByteCursor::new(b"1,2,3")).unwrap().0, vec![1, 2, 3]);
 ```
 
+The `'code` in the cursor type ties a built parser to one input: call
+`numbers()` again for each input rather than keeping one parser around.
+Building a parser is cheap (it allocates only for `boxed`), but parsers that
+contain `boxed` or `lazy` are not `Send` or `Sync`, so each thread builds its
+own.
+
 ## Basic Parsers
 
 | Parser | Matches | Output |
@@ -143,12 +149,19 @@ assert_eq!(pair.parse(cursor(b"key=42")).unwrap().0, ("key".into(), 42));
 ```
 
 Also available: `argument_list` (`(a, b, c)`-style lists), `filter`, `label`,
-`not` (negative lookahead), `take_until`, `ntimes`, `all`, `map_err` and
+`commit` (commit: see [Error Messages](#error-messages)), `not` (negative lookahead), `take_until`, `ntimes`, `all`, `map_err` and
 `with_position` (captures the `Span` a parser consumed).
 
 `a.or(b)` tries `b` only if `a` fails, and commits to the first that succeeds.
 Repetitions (`many`, `some`, `skip_many`, `separated_list`, ...) stop when an
 iteration succeeds without consuming input, since it would repeat forever.
+
+Backtracking re-parses: when `a` fails, `b` starts over from the same place.
+If both alternatives begin with the same recursive rule, such as
+`'(' expr ')' '+' x` or `'(' expr ')'`, that rule is parsed twice at every
+nesting level, and the time doubles with each level (20 levels already take
+about 300 ms). Parse the shared beginning once and make the difference
+optional: `'(' expr ')'` followed by `optional('+' x)`.
 
 ### Runs without collecting
 
@@ -295,6 +308,10 @@ use parsicomb::MaxDepthExt;
 let element = lazy(|| value().boxed()).max_depth(256);
 ```
 
+`max_depth` bounds stack use, not time: a grammar whose alternatives share a
+recursive beginning can still take exponential time well within the limit
+(see [Combinators](#combinators)).
+
 ## Custom Element Types
 
 Any plain (non-borrowing) `Copy + PartialEq + Debug + Display + Send + Sync`
@@ -405,6 +422,22 @@ let error = many(is_string("hello"))
     .parse(ByteCursor::new(b"help"))
     .unwrap_err();
 assert!(error.to_string().contains("expected byte 0x21 ('!'), found byte 0x68 ('h')"));
+```
+
+To report the real problem, commit with `commit` once the input can only mean
+one thing, typically after a keyword or opening delimiter. A failure after a
+commit is final: `or` doesn't try other alternatives, and `optional` and
+repetitions pass it on instead of stopping:
+
+```rust
+use parsicomb::{AndExt, ByteCursor, CommitExt, Parser, many};
+use parsicomb::ascii::u64;
+use parsicomb::byte::is_byte;
+
+// `x=<number>;`, committed once `x=` has matched
+let assignment = is_byte(b'x').and(is_byte(b'=')).and(u64().and(is_byte(b';')).commit());
+let error = many(assignment).parse(ByteCursor::new(b"x=1;x=;")).unwrap_err();
+assert!(error.to_string().contains("expected a digit, found byte 0x3B (';')"));
 ```
 
 Leaf parsers that run out of input report `expected …, found end of input`;

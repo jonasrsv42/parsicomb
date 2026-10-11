@@ -1,7 +1,7 @@
 //! Zero or one occurrence
 
 use super::parser::Parser;
-use crate::cursor::Cursor;
+use crate::error::ErrorNode;
 
 /// Parser combinator that optionally matches the given parser.
 /// Returns Some(value) if the parser succeeds, None if it fails.
@@ -23,11 +23,12 @@ where
 {
     type Cursor = P::Cursor;
     type Output = Option<P::Output>;
-    type Error = <P::Cursor as Cursor>::Error;
+    type Error = P::Error;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         match self.parser.parse(cursor) {
             Ok((value, next_cursor)) => Ok((Some(value), next_cursor)),
+            Err(error) if error.rank().is_committed => Err(error),
             Err(_) => Ok((None, cursor)),
         }
     }

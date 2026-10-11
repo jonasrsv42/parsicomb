@@ -17,6 +17,8 @@ use crate::parser::Parser;
 /// - Requires at least one element
 /// - Trailing separators cause an error
 /// - Does not handle whitespace automatically
+/// - A failing separator ends the list, even after a `commit` inside it;
+///   commit in the elements instead
 pub struct SeparatedList<P, PSep> {
     parser: P,
     separator: PSep,

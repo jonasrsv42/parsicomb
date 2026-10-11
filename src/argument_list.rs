@@ -1,6 +1,7 @@
 //! Delimited, separated lists such as `(a, b, c)`
 
 use crate::cursor::Cursor;
+use crate::error::ErrorNode;
 use crate::parser::Parser;
 
 use crate::error::composite_error;
@@ -69,8 +70,12 @@ where
             .map_err(ArgumentListError::OpenDelimiter)?;
 
         // Check if we have an empty list (immediate closing delimiter)
-        if let Ok((_, cursor)) = self.close.parse(cursor) {
-            return Ok((vec![], cursor));
+        match self.close.parse(cursor) {
+            Ok((_, cursor)) => return Ok((vec![], cursor)),
+            Err(error) if error.rank().is_committed => {
+                return Err(ArgumentListError::ExpectedClosingDelimiter(error));
+            }
+            Err(_) => {}
         }
 
         // Parse first argument (required if not empty)

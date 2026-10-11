@@ -8,7 +8,7 @@ use crate::{CodeLoc, ParsicombError};
 use std::borrow::Cow;
 
 /// Cursor over a slice of atomic elements (bytes, tokens, ...)
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub enum AtomicCursor<'code, T: Atomic> {
     /// At element `position` of `data`
     Valid {
@@ -22,6 +22,23 @@ pub enum AtomicCursor<'code, T: Atomic> {
         /// The full input
         data: &'code [T],
     },
+}
+
+/// Shows the position and input length, not the input
+impl<T: Atomic> std::fmt::Debug for AtomicCursor<'_, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AtomicCursor::Valid { data, position } => f
+                .debug_struct("Valid")
+                .field("position", position)
+                .field("input_len", &data.len())
+                .finish(),
+            AtomicCursor::EndOfFile { data } => f
+                .debug_struct("EndOfFile")
+                .field("input_len", &data.len())
+                .finish(),
+        }
+    }
 }
 
 impl<'code, T: Atomic> AtomicCursor<'code, T> {

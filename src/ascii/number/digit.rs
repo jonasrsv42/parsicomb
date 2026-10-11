@@ -2,13 +2,18 @@
 
 use crate::ByteCursor;
 use crate::ParsicombError;
-use crate::byte::between_bytes;
+use crate::byte::byte;
+use crate::filter::FilterExt;
+use crate::map_err::MapErrExt;
 use crate::parser::Parser;
 
-/// Parser that matches a single ASCII digit (0-9)
+/// Parser that matches a single ASCII digit (0-9); fails with
+/// `expected a digit, found …`
 pub fn digit<'code>()
 -> impl Parser<Cursor = ByteCursor<'code>, Output = u8, Error = ParsicombError<'code>> {
-    between_bytes(b'0', b'9')
+    byte()
+        .filter(u8::is_ascii_digit, "a digit")
+        .map_err(ParsicombError::from)
 }
 
 #[cfg(test)]
@@ -58,7 +63,7 @@ mod tests {
 
         let result = parser.parse(cursor);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("expected byte"));
+        assert!(result.unwrap_err().to_string().contains("expected a digit"));
     }
 
     #[test]
@@ -69,5 +74,17 @@ mod tests {
 
         let result = parser.parse(cursor);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_failure_says_a_digit() {
+        let message = digit()
+            .parse(ByteCursor::new(b"x"))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            message.contains("expected a digit, found byte 0x78 ('x')"),
+            "got {message}"
+        );
     }
 }

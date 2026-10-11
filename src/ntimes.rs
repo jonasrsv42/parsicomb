@@ -1,8 +1,26 @@
 //! Parser combinator that matches exactly N occurrences
 
 use super::parser::Parser;
+use crate::cursor::Cursor;
+use crate::error::composite_error;
+
+composite_error! {
+    /// Error type for the NTimes parser
+    pub enum NTimesError<PErr, CurErr> {
+        /// Error from the repeated parser
+        ParserError(PErr),
+        /// The repeated parser matched without consuming input and would be
+        /// repeated again at the same place
+        NoProgress(CurErr),
+    }
+}
 
 /// Parser combinator that matches exactly N occurrences of the given parser
+///
+/// `count` may come from the input, so it is never used as a capacity, and a
+/// match that consumes nothing is not repeated: if the parser matches without
+/// consuming input and more repetitions remain, `ntimes` fails with
+/// [`NTimesError::NoProgress`] instead of producing `count` identical matches.
 pub struct NTimes<P> {
     parser: P,
     count: usize,
@@ -21,14 +39,21 @@ where
 {
     type Cursor = P::Cursor;
     type Output = Vec<P::Output>;
-    type Error = P::Error;
+    type Error = NTimesError<P::Error, <P::Cursor as Cursor>::Error>;
 
     fn parse(&self, mut cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
-        // `count` may come from the input, so it is not trusted as a capacity
         let mut results = Vec::new();
 
-        for _ in 0..self.count {
-            let (value, next_cursor) = self.parser.parse(cursor)?;
+        for remaining in (0..self.count).rev() {
+            let (value, next_cursor) = self
+                .parser
+                .parse(cursor)
+                .map_err(NTimesError::ParserError)?;
+            if remaining > 0 && next_cursor.position() == cursor.position() {
+                return Err(NTimesError::NoProgress(cursor.syntax_error(
+                    "repeated parser matched without consuming input".into(),
+                )));
+            }
             results.push(value);
             cursor = next_cursor;
         }
@@ -37,7 +62,7 @@ where
     }
 }
 
-/// Convenience function to create an NTimes parser
+/// Create a parser that matches `parser` exactly `count` times
 pub fn ntimes<P>(parser: P, count: usize) -> NTimes<P>
 where
     P: Parser,
@@ -143,5 +168,23 @@ mod tests {
         let parser = ntimes(is_byte(b'a'), usize::MAX);
 
         assert!(parser.parse(cursor).is_err());
+    }
+
+    #[test]
+    fn test_zero_width_match_is_not_repeated() {
+        use crate::optional::optional;
+
+        let parser = ntimes(optional(is_byte(b'x')), 50_000_000);
+        let message = parser
+            .parse(ByteCursor::new(b"xy"))
+            .unwrap_err()
+            .to_string();
+        assert!(message.contains("without consuming input"), "got {message}");
+
+        // A zero-width match as the last repetition is fine
+        let (values, _) = ntimes(optional(is_byte(b'x')), 2)
+            .parse(ByteCursor::new(b"xy"))
+            .unwrap();
+        assert_eq!(values, vec![Some(b'x'), None]);
     }
 }

@@ -2,6 +2,7 @@
 
 use super::parser::Parser;
 use crate::cursor::Cursor;
+use crate::error::ErrorNode;
 
 /// Parser combinator that matches one or more occurrences of the given parser
 ///
@@ -42,10 +43,9 @@ where
                     results.push(value);
                     cursor = next_cursor;
                 }
-                Err(_) => {
-                    // Stop on first error after at least one match
-                    break;
-                }
+                Err(error) if error.rank().is_committed => return Err(error),
+                // Stop on first error after at least one match
+                Err(_) => break,
             }
         }
 

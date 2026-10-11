@@ -2,6 +2,7 @@
 
 use super::parser::Parser;
 use crate::cursor::Cursor;
+use crate::error::ErrorNode;
 
 /// Parser combinator that matches zero or more occurrences of the given parser
 pub struct Many<P> {
@@ -21,7 +22,7 @@ where
 {
     type Cursor = P::Cursor;
     type Output = Vec<P::Output>;
-    type Error = <P::Cursor as Cursor>::Error;
+    type Error = P::Error;
 
     fn parse(&self, mut cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let mut results = Vec::new();
@@ -34,10 +35,9 @@ where
                     results.push(value);
                     cursor = next_cursor;
                 }
-                Err(_) => {
-                    // Many matches zero or more, so error is not propagated
-                    break;
-                }
+                Err(error) if error.rank().is_committed => return Err(error),
+                // Many matches zero or more, so the error that stops it is dropped
+                Err(_) => break,
             }
         }
 

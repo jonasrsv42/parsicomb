@@ -22,11 +22,21 @@ pub fn u64<'code>()
         });
         match value {
             Some(value) => Ok((value, end)),
-            None => {
-                Err(start.syntax_error(format!("number too large: {}", digits.as_string()).into()))
-            }
+            None => Err(start.syntax_error(too_large(digits.slice()).into())),
         }
     })
+}
+
+/// `number too large: <digits>`, with long runs of digits shortened so the
+/// message stays small however long the input number is
+fn too_large(digits: &[u8]) -> String {
+    const SHOWN: usize = 24;
+    let shown = String::from_utf8_lossy(&digits[..digits.len().min(SHOWN)]);
+    if digits.len() > SHOWN {
+        format!("number too large: {shown}… ({} digits)", digits.len())
+    } else {
+        format!("number too large: {shown}")
+    }
 }
 
 #[cfg(test)]
@@ -110,5 +120,20 @@ mod tests {
         let result = parser.parse(cursor);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("number too large"));
+    }
+
+    #[test]
+    fn test_overflow_message_is_bounded() {
+        let input = vec![b'9'; 1 << 20];
+        let message = u64()
+            .parse(ByteCursor::new(&input))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            message.contains("number too large: 999999999999999999999999… (1048576 digits)"),
+            "got {}",
+            &message[..200.min(message.len())]
+        );
+        assert!(message.len() < 5_000, "got {} bytes", message.len());
     }
 }

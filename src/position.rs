@@ -6,11 +6,35 @@ use crate::parser::Parser;
 
 /// Represents a span in the source code with start and end positions
 /// and a reference to the source code
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// Two spans are equal when they cover the same range of the same input
+/// (compared by address, not contents).
+#[derive(Clone, Copy)]
 pub struct Span<'code, T: Atomic = u8> {
     source: &'code [T],
     start: usize,
     end: usize,
+}
+
+impl<T: Atomic> PartialEq for Span<'_, T> {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::eq(self.source, other.source)
+            && self.start == other.start
+            && self.end == other.end
+    }
+}
+
+impl<T: Atomic> Eq for Span<'_, T> {}
+
+/// Shows the range and input length, not the input
+impl<T: Atomic> std::fmt::Debug for Span<'_, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Span")
+            .field("start", &self.start)
+            .field("end", &self.end)
+            .field("input_len", &self.source.len())
+            .finish()
+    }
 }
 
 impl<'code, T: Atomic> Span<'code, T> {

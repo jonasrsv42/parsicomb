@@ -37,14 +37,31 @@ pub trait ErrorLeaf: Error {
     fn is_expectation(&self) -> bool;
 }
 
-/// Where an error's [`likely_error`](ErrorNode::likely_error) is and whether
-/// it is an expectation, used to compare errors without walking them
+/// Where an error's [`likely_error`](ErrorNode::likely_error) is, whether it
+/// is an expectation, and whether it is committed; used by combinators to compare
+/// errors and decide whether to recover, without walking them
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct ErrorRank {
     /// Position of the likely error in the input
     pub position: usize,
     /// [`ErrorLeaf::is_expectation`] of the likely error
     pub is_expectation: bool,
+    /// The failure happened after a [`commit`](crate::commit()), so combinators
+    /// that would otherwise recover from it (`or`, `optional`, repetitions)
+    /// pass it on instead
+    pub is_committed: bool,
+}
+
+impl ErrorRank {
+    /// The rank of a leaf error: its position and kind, not committed
+    pub fn of_leaf(leaf: &dyn ErrorLeaf<Element = impl Atomic>) -> Self {
+        ErrorRank {
+            position: leaf.loc().position(),
+            is_expectation: leaf.is_expectation(),
+            is_committed: false,
+        }
+    }
 }
 
 /// Generic trait for error types that can be flattened to find the furthest error
@@ -107,14 +124,12 @@ pub trait ErrorNode: Error {
 
     /// [`ErrorRank`] of [`likely_error`](ErrorNode::likely_error)
     ///
-    /// `or` and `label` call this on every failure. Errors that hold a chain
-    /// of other errors (such as a wrapped error) override it to return a rank
-    /// computed once, so comparing errors stays cheap in deeply nested input.
+    /// Combinators call this on every failure. The default suits leaf errors.
+    /// An error that holds another error must return that error's rank
+    /// (otherwise a committed failure inside it is treated as recoverable), and
+    /// should compute it once rather than walk a chain of errors on every
+    /// call, so comparing errors stays cheap in deeply nested input.
     fn rank(&self) -> ErrorRank {
-        let leaf = self.likely_error();
-        ErrorRank {
-            position: leaf.loc().position(),
-            is_expectation: leaf.is_expectation(),
-        }
+        ErrorRank::of_leaf(self.likely_error())
     }
 }

@@ -115,10 +115,7 @@ impl<'code, T: Atomic> ErrorNode for ParsicombError<'code, T> {
     fn rank(&self) -> ErrorRank {
         match self {
             ParsicombError::WrappedError { rank, .. } => *rank,
-            _ => ErrorRank {
-                position: self.loc().position(),
-                is_expectation: self.is_expectation(),
-            },
+            _ => ErrorRank::of_leaf(self),
         }
     }
 }
@@ -273,5 +270,27 @@ mod tests {
         assert_eq!(wrapped.position(), 5);
         assert_eq!(wrapped.likely_error().loc().position(), 5);
         assert!(!wrapped.rank().is_expectation);
+    }
+
+    #[test]
+    fn test_debug_does_not_print_the_input() {
+        use crate::Parser;
+        use crate::byte::is_byte;
+        use crate::cursors::ByteCursor;
+        use crate::position::PositionExt;
+
+        let input = vec![b'z'; 1 << 20];
+        let error = is_byte(b'a').parse(ByteCursor::new(&input)).unwrap_err();
+        let debug = format!("{error:?}");
+        assert!(debug.len() < 200, "got {} bytes", debug.len());
+        assert!(debug.contains("input_len: 1048576"), "got {debug}");
+
+        let cursor = ByteCursor::new(&input);
+        assert!(format!("{cursor:?}").len() < 100);
+        let ((_, span), _) = crate::byte::byte().with_position().parse(cursor).unwrap();
+        assert_eq!(
+            format!("{span:?}"),
+            "Span { start: 0, end: 1, input_len: 1048576 }"
+        );
     }
 }

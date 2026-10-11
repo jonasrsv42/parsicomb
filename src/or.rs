@@ -1,7 +1,7 @@
 //! Alternatives: `a.or(b)` tries `b` if `a` fails
 
 use super::parser::Parser;
-use crate::error::ErrorNode;
+use crate::error::{ErrorNode, ErrorRank};
 use std::cmp::Ordering;
 
 use crate::error::composite_error;
@@ -28,19 +28,29 @@ where
 {
     /// Keep the error that got furthest
     ///
-    /// On a tie `first` is kept, unless it only says what was expected and
+    /// A committed error (see [`commit`](crate::commit())) is always kept. On
+    /// a tie `first` is kept, unless it only says what was expected and
     /// `second` describes a real problem (see [`ErrorLeaf::is_expectation`]),
     /// such as an overflowing number.
     ///
     /// [`ErrorLeaf::is_expectation`]: crate::ErrorLeaf::is_expectation
     pub fn furthest(first: Err1, second: Err2) -> Self {
         let first_rank = first.rank();
+        Self::pick(first, first_rank, second)
+    }
+
+    /// [`furthest`](Self::furthest) with `first`'s rank already computed
+    fn pick(first: Err1, first_rank: ErrorRank, second: Err2) -> Self {
         let second_rank = second.rank();
-        let second_is_more_informative = first_rank.is_expectation && !second_rank.is_expectation;
-        let keep_first = match first_rank.position.cmp(&second_rank.position) {
-            Ordering::Greater => true,
-            Ordering::Equal => !second_is_more_informative,
-            Ordering::Less => false,
+        let keep_first = if first_rank.is_committed || second_rank.is_committed {
+            first_rank.is_committed
+        } else {
+            match first_rank.position.cmp(&second_rank.position) {
+                Ordering::Greater => true,
+                // Prefer a real problem over an expectation
+                Ordering::Equal => !first_rank.is_expectation || second_rank.is_expectation,
+                Ordering::Less => false,
+            }
         };
         if keep_first {
             OrError::First(first)
@@ -75,10 +85,17 @@ where
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         match self.parser1.parse(cursor) {
             Ok(result) => Ok(result),
-            Err(first) => match self.parser2.parse(cursor) {
-                Ok(result) => Ok(result),
-                Err(second) => Err(OrError::furthest(first, second)),
-            },
+            Err(first) => {
+                let first_rank = first.rank();
+                // The first alternative committed: don't try the second
+                if first_rank.is_committed {
+                    return Err(OrError::First(first));
+                }
+                match self.parser2.parse(cursor) {
+                    Ok(result) => Ok(result),
+                    Err(second) => Err(OrError::pick(first, first_rank, second)),
+                }
+            }
         }
     }
 }

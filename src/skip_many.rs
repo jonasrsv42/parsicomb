@@ -2,6 +2,7 @@
 
 use super::parser::Parser;
 use crate::cursor::Cursor;
+use crate::error::ErrorNode;
 
 /// Parser combinator that matches zero or more occurrences of the given
 /// parser and discards their outputs
@@ -22,15 +23,17 @@ impl<P> SkipMany<P> {
 impl<P: Parser> Parser for SkipMany<P> {
     type Cursor = P::Cursor;
     type Output = ();
-    type Error = <P::Cursor as Cursor>::Error;
+    type Error = P::Error;
 
     fn parse(&self, mut cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
-        while let Ok((_, next_cursor)) = self.parser.parse(cursor) {
-            // An iteration that consumes nothing would repeat forever
-            if next_cursor.position() == cursor.position() {
-                break;
+        loop {
+            match self.parser.parse(cursor) {
+                // An iteration that consumes nothing would repeat forever
+                Ok((_, next_cursor)) if next_cursor.position() == cursor.position() => break,
+                Ok((_, next_cursor)) => cursor = next_cursor,
+                Err(error) if error.rank().is_committed => return Err(error),
+                Err(_) => break,
             }
-            cursor = next_cursor;
         }
 
         Ok(((), cursor))

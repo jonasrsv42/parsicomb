@@ -5,6 +5,7 @@ use crate::ParsicombError;
 use crate::and::AndExt;
 use crate::byte::is_byte;
 use crate::map::MapExt;
+use crate::map_err::MapErrExt;
 use crate::optional::optional;
 use crate::or::OrExt;
 use crate::parser::Parser;
@@ -48,8 +49,11 @@ pub fn number<'code>()
 }
 
 /// Parser for a leading `-` or `+` sign
-fn sign<'code>() -> impl Parser<Cursor = ByteCursor<'code>, Output = u8> {
-    is_byte(b'-').or(is_byte(b'+'))
+fn sign<'code>()
+-> impl Parser<Cursor = ByteCursor<'code>, Output = u8, Error = ParsicombError<'code>> {
+    is_byte(b'-')
+        .or(is_byte(b'+'))
+        .map_err(ParsicombError::from)
 }
 
 #[cfg(test)]

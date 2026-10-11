@@ -67,6 +67,24 @@ pub(crate) fn readable_position<T: Atomic>(code: &[T], loc: usize) -> Option<Rea
     Some(ReadablePosition { line, column })
 }
 
+/// `text` with characters that would act on the terminal instead of showing
+/// up replaced, one for one so columns stay aligned: ASCII control characters
+/// (except tab) by their Unicode control pictures (`␛` for ESC, `␍` for a
+/// carriage return), and other control and bidirectional formatting
+/// characters by U+FFFD.
+fn printable(text: &str) -> String {
+    text.chars()
+        .map(|c| match c {
+            '\t' => c,
+            '\u{0}'..='\u{1F}' => char::from_u32(0x2400 + c as u32).unwrap_or('\u{FFFD}'),
+            '\u{7F}' => '\u{2421}',
+            '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}' => '\u{FFFD}',
+            c if c.is_control() => '\u{FFFD}',
+            c => c,
+        })
+        .collect()
+}
+
 /// The rendered text of the line starting at `line_start` through the
 /// element at `loc`, and how many of its characters come before that element
 ///
@@ -181,7 +199,7 @@ pub(crate) fn context_lines_at<T: Atomic>(
         lines.push(format!(
             "{}{}",
             prefix,
-            T::format_slice(&code[line_start..line_end])
+            printable(&T::format_slice(&code[line_start..line_end]))
         ));
 
         if is_err {
@@ -519,5 +537,17 @@ mod tests {
         // Separators between token-like elements count
         let code: [u32; 4] = [1, 22, 333, 4444];
         assert_eq!(readable_position(&code, 3).unwrap().column, 9);
+    }
+
+    #[test]
+    fn test_snippet_shows_control_characters_as_symbols() {
+        let code = b"a\x1b[31mb\rc\x7f\tdX";
+        let loc = code.len() - 1;
+        let out = context_lines(code, loc);
+        let source = out.iter().position(|l| l.starts_with("  > 1 | ")).unwrap();
+        assert_eq!(out[source], "  > 1 | a\u{241B}[31mb\u{240D}c\u{2421}\tdX");
+        // The pointer still lines up under `X`
+        assert_eq!(out[source + 1], "                  \t ^--- here");
+        assert_eq!(readable_position(code, loc).unwrap().column, 12);
     }
 }
