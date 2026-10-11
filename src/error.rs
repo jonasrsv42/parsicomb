@@ -124,79 +124,54 @@ pub enum ParsicombError<'code, T: Atomic = u8> {
     },
 }
 
+impl<'code, T: Atomic> CodeLoc<'code, T> {
+    /// Write the location as `line L, column C (offset N)`, or just `offset N`
+    /// when the line is too far in to resolve.
+    ///
+    /// `column` is in display widths of the rendered line (it matches the
+    /// `^--- here` pointer); `offset` is the absolute index into the input
+    /// (bytes for a byte cursor, elements for any other cursor).
+    fn write_location(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.readable_position() {
+            Some(pos) => write!(
+                f,
+                "line {}, column {} (offset {})",
+                pos.line, pos.column, self.loc
+            ),
+            None => write!(f, "offset {}", self.loc),
+        }
+    }
+
+    /// Write the blank separator line and the context snippet
+    fn write_context(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f)?;
+        for line in self.context_lines() {
+            writeln!(f, "{}", line)?;
+        }
+        Ok(())
+    }
+}
+
 impl<'code, T: Atomic> fmt::Display for ParsicombError<'code, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ParsicombError::UnexpectedEndOfFile(code_loc) => {
-                match code_loc.readable_position() {
-                    Some(pos) => writeln!(
-                        f,
-                        "Unexpected end of file at line {}, byte offset {} (absolute position: {})",
-                        pos.line, pos.byte_offset, code_loc.loc
-                    )?,
-                    None => writeln!(f, "Unexpected end of file at byte offset {}", code_loc.loc)?,
-                }
-                writeln!(f)?;
-                for line in code_loc.context_lines() {
-                    writeln!(f, "{}", line)?;
-                }
-                Ok(())
-            }
-            ParsicombError::AlreadyAtEndOfFile(code_loc) => {
-                match code_loc.readable_position() {
-                    Some(pos) => writeln!(
-                        f,
-                        "Already at end of file at line {}, byte offset {} (absolute position: {})",
-                        pos.line, pos.byte_offset, code_loc.loc
-                    )?,
-                    None => writeln!(f, "Already at end of file at byte offset {}", code_loc.loc)?,
-                }
-                writeln!(f)?;
-                for line in code_loc.context_lines() {
-                    writeln!(f, "{}", line)?;
-                }
-                Ok(())
-            }
-            ParsicombError::CannotReadValueAtEof(code_loc) => {
-                match code_loc.readable_position() {
-                    Some(pos) => writeln!(
-                        f,
-                        "Cannot read value at EOF at line {}, byte offset {} (absolute position: {})",
-                        pos.line, pos.byte_offset, code_loc.loc
-                    )?,
-                    None => writeln!(
-                        f,
-                        "Cannot read value at EOF at byte offset {}",
-                        code_loc.loc
-                    )?,
-                }
-                writeln!(f)?;
-                for line in code_loc.context_lines() {
-                    writeln!(f, "{}", line)?;
-                }
-                Ok(())
-            }
-            ParsicombError::SyntaxError { message, loc } => {
-                match loc.readable_position() {
-                    Some(pos) => writeln!(
-                        f,
-                        "Syntax error at line {}, byte offset {}: {}",
-                        pos.line, pos.byte_offset, message
-                    )?,
-                    None => writeln!(f, "Syntax error at byte offset {}: {}", loc.loc, message)?,
-                }
-                writeln!(f)?;
-                for line in loc.context_lines() {
-                    writeln!(f, "{}", line)?;
-                }
-                Ok(())
-            }
+        let (headline, loc) = match self {
+            ParsicombError::UnexpectedEndOfFile(loc) => ("Unexpected end of file", loc),
+            ParsicombError::AlreadyAtEndOfFile(loc) => ("Already at end of file", loc),
+            ParsicombError::CannotReadValueAtEof(loc) => ("Cannot read value at EOF", loc),
+            ParsicombError::SyntaxError { loc, .. } => ("Syntax error", loc),
             ParsicombError::WrappedError { inner } => {
                 // Delegate to the inner error's likely_error for display
-                let likely = inner.likely_error();
-                write!(f, "{}", likely)
+                return write!(f, "{}", inner.likely_error());
             }
+        };
+
+        write!(f, "{} at ", headline)?;
+        loc.write_location(f)?;
+        if let ParsicombError::SyntaxError { message, .. } = self {
+            write!(f, ": {}", message)?;
         }
+        writeln!(f)?;
+        loc.write_context(f)
     }
 }
 
@@ -323,9 +298,9 @@ mod tests {
         let loc = CodeLoc::new(data, 11); // Position 11 = past end
         let pos = loc.readable_position().unwrap();
 
-        // Should be on line 2, with byte offset 5 (past "line2")
+        // Should be on line 2, at column 5 (past "line2")
         assert_eq!(pos.line, 2);
-        assert_eq!(pos.byte_offset, 5);
+        assert_eq!(pos.column, 5);
     }
 
     #[test]
@@ -380,6 +355,30 @@ mod tests {
 
         // Should be on line 2 with offset 0
         assert!(display_str.contains("line 2"));
-        assert!(display_str.contains("byte offset 0"));
+        assert!(display_str.contains("column 0"));
+    }
+
+    #[test]
+    fn test_location_reports_line_column_and_offset() {
+        let code = "ab\ncé?".as_bytes();
+        let error: ParsicombError = ParsicombError::SyntaxError {
+            message: "boom".into(),
+            loc: CodeLoc::new(code, code.len() - 1),
+        };
+        // column counts 'é' once; offset counts its two bytes
+        let first = error.to_string().lines().next().unwrap().to_string();
+        assert_eq!(first, "Syntax error at line 2, column 2 (offset 6): boom");
+    }
+
+    #[test]
+    fn test_location_far_offset_falls_back_to_offset_only() {
+        let code = vec![b'x'; crate::error_fmt::MAX_POSITION_SCAN + 8];
+        let error: ParsicombError =
+            ParsicombError::UnexpectedEndOfFile(CodeLoc::new(&code, code.len()));
+        let first = error.to_string().lines().next().unwrap().to_string();
+        assert_eq!(
+            first,
+            format!("Unexpected end of file at offset {}", code.len())
+        );
     }
 }

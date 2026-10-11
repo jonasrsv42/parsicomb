@@ -174,6 +174,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::excessive_precision)] // the point: more digits than f64 holds
     fn test_many_fractional_digits() {
         assert_eq!(parse(b"1.12345678901234567890"), 1.12345678901234567890);
     }

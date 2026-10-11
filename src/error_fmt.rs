@@ -39,8 +39,8 @@ pub(crate) const MAX_POSITION_SCAN: usize = 1 << 20; // 1 MiB
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ReadablePosition {
     pub line: usize,
-    /// Character offset within the line using display widths.
-    pub byte_offset: usize,
+    /// Column within the line (0-based), in display widths.
+    pub column: usize,
 }
 
 /// Calculate the line number and display-width column of `loc` within `code`,
@@ -57,18 +57,18 @@ pub(crate) fn readable_position<T: Atomic>(code: &[T], loc: usize) -> Option<Rea
     }
 
     let mut line = 1;
-    let mut byte_offset = 0;
+    let mut column = 0;
 
     for element in &code[..loc] {
         if element.is_newline() {
             line += 1;
-            byte_offset = 0;
+            column = 0;
         } else {
-            byte_offset += element.display_width();
+            column += element.display_width();
         }
     }
 
-    Some(ReadablePosition { line, byte_offset })
+    Some(ReadablePosition { line, column })
 }
 
 /// Compute the byte window of `code` to materialize for the context snippet,
@@ -95,7 +95,12 @@ fn context_window<T: Atomic>(code: &[T], loc: usize, err_line: usize) -> (usize,
         }
         i -= 1;
     }
-    let win_start = if nb == 3 { nl_back[2] + 1 } else { i };
+    let mut win_start = if nb == 3 { nl_back[2] + 1 } else { i };
+    // If the radius cap cut a line, don't start on a zero-width element (e.g. a
+    // UTF-8 continuation byte), which would render as a stray glyph.
+    while win_start < loc && code[win_start].display_width() == 0 {
+        win_start += 1;
+    }
     // Newlines remaining strictly inside [win_start, loc) tell us how many lines
     // below `first_line` the error line sits.
     let inside = (0..nb).filter(|&k| nl_back[k] >= win_start).count();
@@ -122,6 +127,11 @@ fn context_window<T: Atomic>(code: &[T], loc: usize, err_line: usize) -> (usize,
 ///
 /// Only the bounded window from [`context_window`] is materialized; the rest of
 /// the input is never stringified.
+///
+/// Lines are split on the raw `code` elements and each line is formatted on its
+/// own. Offsets are never carried over from formatted text back into `code`:
+/// `format_slice` may change length (e.g. lossy UTF-8 turns one invalid byte
+/// into a 3-byte U+FFFD), so mixing the two coordinate systems is unsound.
 pub(crate) fn context_lines<T: Atomic>(code: &[T], loc: usize) -> Vec<String> {
     let len = code.len();
     let loc = loc.min(len);
@@ -133,53 +143,52 @@ pub(crate) fn context_lines<T: Atomic>(code: &[T], loc: usize) -> Vec<String> {
     };
     let (win_start, win_end, first_line) = context_window(code, loc, pos.line);
 
-    // Materialize only the bounded window, not the whole input.
-    let text = T::format_slice(&code[win_start..win_end]);
-
     let mut lines = Vec::new();
-    let mut current_line = first_line;
-    let mut line_start = 0; // byte offset within `text`
 
-    let emit =
-        |current_line: usize, line_start: usize, line_end: usize, lines: &mut Vec<String>| {
-            // Same ±2 line context window as before (saturating on the low end).
-            if current_line + 2 < pos.line || current_line > pos.line + 2 {
-                return;
-            }
-            let is_err = current_line == pos.line;
-            let prefix = if is_err {
-                format!("  > {} | ", current_line)
-            } else {
-                format!("    {} | ", current_line)
-            };
-            lines.push(format!("{}{}", prefix, &text[line_start..line_end]));
-
-            if is_err {
-                // Column of the error within the (windowed) line, in display
-                // widths. Bounded by the window, so no O(input) work and no
-                // pathological `" ".repeat(huge_offset)` allocation.
-                let line_abs_start = win_start + line_start;
-                let col: usize = code[line_abs_start..loc]
-                    .iter()
-                    .map(|e| e.display_width())
-                    .sum();
-                let pointer_offset = prefix.len() + col;
-                lines.push(format!("{}^--- here", " ".repeat(pointer_offset)));
-            }
+    // `line_start..line_end` are absolute indices into `code`.
+    let mut emit = |line: usize, line_start: usize, line_end: usize| {
+        // ±2 lines of context around the error line
+        if line + 2 < pos.line || line > pos.line + 2 {
+            return;
+        }
+        let is_err = line == pos.line;
+        let prefix = if is_err {
+            format!("  > {} | ", line)
+        } else {
+            format!("    {} | ", line)
         };
+        lines.push(format!(
+            "{}{}",
+            prefix,
+            T::format_slice(&code[line_start..line_end])
+        ));
 
-    for (i, ch) in text.char_indices() {
-        if ch == '\n' {
-            emit(current_line, line_start, i, &mut lines);
-            current_line += 1;
+        if is_err {
+            // Column of the error within the (windowed) line, in display widths.
+            let col: usize = code[line_start..loc]
+                .iter()
+                .map(|e| e.display_width())
+                .sum();
+            lines.push(format!("{}^--- here", " ".repeat(prefix.len() + col)));
+        }
+    };
+
+    let mut line = first_line;
+    let mut line_start = win_start;
+    for (i, element) in code.iter().enumerate().take(win_end).skip(win_start) {
+        if element.is_newline() {
+            emit(line, line_start, i);
+            line += 1;
             line_start = i + 1;
         }
     }
 
     // Handle the last line if there is no trailing newline (this is also the
-    // binary / no-newline case, where the whole window is one "line").
-    if line_start < text.len() {
-        emit(current_line, line_start, text.len(), &mut lines);
+    // binary / no-newline case, where the whole window is one "line"). An
+    // empty last line is still rendered when it holds the error, e.g. an
+    // unexpected EOF after a trailing newline, so the pointer has a home.
+    if line_start < win_end || line == pos.line {
+        emit(line, line_start, win_end);
     }
 
     lines
@@ -212,7 +221,7 @@ mod tests {
                 };
                 lines.push(format!("{}{}", prefix, &text[line_start..line_end]));
                 if current_line == pos.line {
-                    let pointer_offset = prefix.len() + pos.byte_offset;
+                    let pointer_offset = prefix.len() + pos.column;
                     lines.push(format!("{}^--- here", " ".repeat(pointer_offset)));
                 }
             }
@@ -225,7 +234,7 @@ mod tests {
                 line_start = i + 1;
             }
         }
-        if line_start < text.len() {
+        if line_start < text.len() || current_line == pos.line {
             emit(current_line, line_start, text.len(), &text, &mut lines);
         }
         lines
@@ -237,14 +246,14 @@ mod tests {
         // position of 'e' (index 5) is line 2, column 1
         let p = readable_position(code, 5).unwrap();
         assert_eq!(p.line, 2);
-        assert_eq!(p.byte_offset, 1);
+        assert_eq!(p.column, 1);
     }
 
     #[test]
     fn readable_position_start() {
         let p = readable_position(b"hello", 0).unwrap();
         assert_eq!(p.line, 1);
-        assert_eq!(p.byte_offset, 0);
+        assert_eq!(p.column, 0);
     }
 
     #[test]
@@ -370,5 +379,71 @@ mod tests {
         let _ = context_lines(code, 999);
         let p = readable_position(code, 999).unwrap();
         assert_eq!(p.line, 1);
+    }
+
+    #[test]
+    fn invalid_utf8_before_newline_does_not_panic() {
+        // Lossy decoding expands each 0xFF into a 3-byte U+FFFD; offsets in the
+        // formatted text must never be used to index `code`.
+        let mut code = vec![0xFFu8; 10];
+        code.extend_from_slice(b"\nxy");
+        let out = context_lines(&code, 12);
+        assert!(
+            out.iter().any(|l| l.starts_with("  > 2 | xy")),
+            "got {out:?}"
+        );
+        assert!(out.iter().any(|l| l == "         ^--- here"), "got {out:?}");
+    }
+
+    #[test]
+    fn multibyte_utf8_counts_as_one_column() {
+        let code = "let café = ?".as_bytes();
+        let loc = code.len() - 1; // the '?'
+        assert_eq!(readable_position(code, loc).unwrap().column, 11);
+        let out = context_lines(code, loc);
+        let line = out.iter().position(|l| l.starts_with("  > ")).unwrap();
+        let caret = out[line + 1].find('^').unwrap();
+        let qmark = out[line].chars().position(|c| c == '?').unwrap();
+        assert_eq!(caret, qmark, "got {out:?}");
+    }
+
+    #[test]
+    fn window_does_not_start_mid_character() {
+        // A long line of 2-byte chars, cut by the radius at an odd offset
+        let mut code = "é".repeat(CONTEXT_RADIUS).into_bytes();
+        code.push(b'!');
+        let loc = code.len() - 1;
+        let out = context_lines(&code, loc);
+        assert!(!out[0].contains('\u{FFFD}'), "got {out:?}");
+    }
+
+    #[test]
+    fn eof_after_trailing_newline_has_pointer() {
+        let code = b"a\nb\n";
+        let out = context_lines(code, code.len());
+        assert!(out.iter().any(|l| l.starts_with("  > 3 | ")), "got {out:?}");
+        assert!(out.iter().any(|l| l.contains("^--- here")), "got {out:?}");
+    }
+
+    #[test]
+    fn random_bytes_never_panic() {
+        // Deterministic xorshift so failures are reproducible without a dep
+        let mut state: u64 = 0x2545F4914F6CDD1D;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        let alphabet = [b'a', b'\n', 0xC3, 0xA9, 0xFF, 0x80, 0xE2, 0xF0, b' '];
+        for _ in 0..2000 {
+            let len = (next() % (3 * CONTEXT_RADIUS as u64)) as usize;
+            let code: Vec<u8> = (0..len)
+                .map(|_| alphabet[(next() % alphabet.len() as u64) as usize])
+                .collect();
+            let loc = (next() % (len as u64 + 2)) as usize;
+            let _ = readable_position(&code, loc);
+            let _ = context_lines(&code, loc);
+        }
     }
 }

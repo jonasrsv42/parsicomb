@@ -63,6 +63,12 @@ impl Atomic for u8 {
     fn format_slice(slice: &[Self]) -> String {
         String::from_utf8_lossy(slice).to_string()
     }
+
+    /// UTF-8 continuation bytes are zero-width so a multi-byte character
+    /// occupies a single column (its lead byte).
+    fn display_width(&self) -> usize {
+        if (0x80..0xC0).contains(self) { 0 } else { 1 }
+    }
 }
 
 #[cfg(test)]

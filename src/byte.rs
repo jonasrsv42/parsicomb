@@ -1,6 +1,12 @@
 use crate::cursor::Cursor;
 use crate::{AtomicParser, ByteCursor, CodeLoc, Parser, ParsicombError, atomic};
 
+/// Render a byte for error messages: printable ASCII as-is, everything else
+/// escaped (`\n`, `\t`, `\x80`, ...) so messages stay on one line
+fn show(byte: u8) -> std::ascii::EscapeDefault {
+    std::ascii::escape_default(byte)
+}
+
 /// Type alias for a parser that consumes and returns a single byte
 pub type ByteParser<'code> = AtomicParser<ByteCursor<'code>>;
 
@@ -33,9 +39,9 @@ impl<'code> Parser<'code> for IsByteParser {
                 let message = format!(
                     "expected byte 0x{:02X} ('{}'), found 0x{:02X} ('{}')",
                     self.expected,
-                    std::str::from_utf8(&[self.expected]).unwrap_or("<non-utf8>"),
+                    show(self.expected),
                     byte,
-                    std::str::from_utf8(&[byte]).unwrap_or("<non-utf8>")
+                    show(byte)
                 );
                 Err(ParsicombError::SyntaxError {
                     message: message.into(),
@@ -73,10 +79,10 @@ impl<'code> Parser<'code> for BetweenBytesParser {
                     "expected byte in range 0x{:02X}-0x{:02X} ('{}'-'{}'), found 0x{:02X} ('{}')",
                     self.start,
                     self.end,
-                    std::str::from_utf8(&[self.start]).unwrap_or("<non-utf8>"),
-                    std::str::from_utf8(&[self.end]).unwrap_or("<non-utf8>"),
+                    show(self.start),
+                    show(self.end),
                     byte,
-                    std::str::from_utf8(&[byte]).unwrap_or("<non-utf8>")
+                    show(byte)
                 );
                 Err(ParsicombError::SyntaxError {
                     message: message.into(),
@@ -188,7 +194,11 @@ mod tests {
         let result = parser.parse(cursor);
         assert!(result.is_err());
         let error = result.unwrap_err();
-        assert!(error.to_string().contains("<non-utf8>"));
+        let msg = error.to_string();
+        assert!(
+            msg.contains(r"expected byte 0xAA ('\xaa'), found 0xFF ('\xff')"),
+            "got {msg}"
+        );
     }
 
     #[test]
@@ -242,5 +252,16 @@ mod tests {
 
         let result = parser.parse(cursor);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_control_bytes_are_escaped_in_message() {
+        let data = b"\n";
+        let err = is_byte(b'\t').parse(ByteCursor::new(data)).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains(r"expected byte 0x09 ('\t'), found 0x0A ('\n')"),
+            "got {msg}"
+        );
     }
 }

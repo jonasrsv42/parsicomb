@@ -47,7 +47,7 @@ impl<'code> Parser<'code> for IsStringParser {
                         return Err(create_string_error(
                             &current_cursor,
                             format!(
-                                "expected '{}', found '{}' while matching '{}'",
+                                "expected {:?}, found {:?} while matching {:?}",
                                 expected_char, parsed_char, self.expected
                             ),
                         ));
@@ -57,7 +57,7 @@ impl<'code> Parser<'code> for IsStringParser {
                     return Err(create_string_error(
                         &current_cursor,
                         format!(
-                            "expected '{}', but reached end of input while matching '{}'",
+                            "expected {:?}, but reached end of input while matching {:?}",
                             expected_char, self.expected
                         ),
                     ));

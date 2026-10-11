@@ -153,7 +153,7 @@ impl<'code> Parser<'code> for IsChar {
         } else {
             Err(create_error(
                 &cursor,
-                format!("expected '{}', found '{}'", self.0, ch).into(),
+                format!("expected {:?}, found {:?}", self.0, ch).into(),
             ))
         }
     }
