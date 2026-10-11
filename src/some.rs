@@ -8,6 +8,11 @@ use crate::error::ErrorNode;
 ///
 /// A glob import of this module (`use parsicomb::some::*`) shadows
 /// [`Option::Some`]; import [`some`] by name instead.
+///
+/// Stops where the parser matches nothing (see
+/// [`ErrorRank::is_no_match_at`](crate::error::ErrorRank::is_no_match_at));
+/// any other failure, one after the parser matched part of its input or a
+/// real problem, is passed on.
 pub struct Some<P> {
     parser: P,
 }
@@ -43,8 +48,8 @@ where
                     results.push(value);
                     cursor = next_cursor;
                 }
-                Err(error) if error.rank().is_committed => return Err(error),
-                // Stop on first error after at least one match
+                Err(error) if !error.rank().is_no_match_at(cursor.position()) => return Err(error),
+                // Nothing matched: the repetition ends here
                 Err(_) => break,
             }
         }

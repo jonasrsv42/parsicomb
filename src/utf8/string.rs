@@ -3,13 +3,16 @@
 use crate::ByteCursor;
 use crate::ParsicombError;
 use crate::atomic::{IsSequence, is_sequence};
+use crate::cursor::Cursor;
+use crate::error::Expected;
 use crate::parser::Parser;
 use std::borrow::Cow;
 
 /// Parser that matches an exact UTF-8 string
 ///
-/// Failures don't allocate for `&'static str`; an owned string is cloned
-/// into each error.
+/// A mismatch is reported at the start of the character it falls in (`é`
+/// and `è` share their first byte). Failures don't allocate for
+/// `&'static str`; an owned string is cloned into each error.
 pub struct IsString<'code> {
     expected: Cow<'static, str>,
     bytes: IsSequence<ByteCursor<'code>>,
@@ -37,9 +40,26 @@ impl<'code> Parser for IsString<'code> {
     type Error = ParsicombError<'code>;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
-        let (_, next_cursor) = self.bytes.parse(cursor)?;
-        // Cheap for `&'static str` (the common case): clones the reference
-        Ok((self.expected.clone(), next_cursor))
+        match self.bytes.parse(cursor) {
+            // Cheap for `&'static str` (the common case): clones the reference
+            Ok((_, next_cursor)) => Ok((self.expected.clone(), next_cursor)),
+            Err(ParsicombError::Expected {
+                expected: Expected::Sequence { expected, matched },
+                ..
+            }) if !self.expected.is_char_boundary(matched) => {
+                let mut char_start = matched;
+                while !self.expected.is_char_boundary(char_start) {
+                    char_start -= 1;
+                }
+                Err(cursor
+                    .advance(char_start)
+                    .expected_error(Expected::Sequence {
+                        expected,
+                        matched: char_start,
+                    }))
+            }
+            Err(error) => Err(error),
+        }
     }
 }
 
@@ -265,6 +285,18 @@ mod tests {
         assert!(
             message.contains(r#"expected "€", found "–""#),
             "got {message}"
+        );
+    }
+
+    #[test]
+    fn test_mismatch_inside_a_character_is_reported_at_its_start() {
+        let error = is_string("aé")
+            .parse(ByteCursor::new("aè".as_bytes()))
+            .unwrap_err();
+        assert_eq!(error.position(), 1);
+        assert!(
+            error.to_string().contains(r#"expected "aé", found "aè""#),
+            "got {error}"
         );
     }
 }

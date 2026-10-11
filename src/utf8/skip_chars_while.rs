@@ -142,7 +142,7 @@ mod tests {
 
         let message = word.parse(ByteCursor::new(b"+")).unwrap_err().to_string();
         assert!(
-            message.contains("expected an identifier character, found byte 0x2B ('+')"),
+            message.contains("expected an identifier character, found '+'"),
             "got {message}"
         );
     }

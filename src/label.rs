@@ -30,7 +30,7 @@ composite_error! {
 ///
 /// let sign = is_byte(b'+').or(is_byte(b'-')).label("a sign");
 /// let error = sign.parse(ByteCursor::new(b"x")).unwrap_err();
-/// assert!(error.to_string().contains("expected a sign, found byte 0x78 ('x')"));
+/// assert!(error.to_string().contains("expected a sign, found 'x'"));
 /// ```
 ///
 /// [`ErrorLeaf::is_expectation`]: crate::ErrorLeaf::is_expectation
@@ -70,7 +70,7 @@ where
     Cur: Cursor,
 {
     let rank = error.rank();
-    if rank.position <= cursor.position() && rank.is_expectation && !rank.is_committed {
+    if rank.is_no_match_at(cursor.position()) {
         LabelError::Labeled(cursor.expected_error(Expected::Label(label)))
     } else {
         LabelError::Inner(error)
@@ -117,7 +117,7 @@ mod tests {
             .label("a, b or c");
         let message = parser.parse(ByteCursor::new(b"x")).unwrap_err().to_string();
         assert!(
-            message.contains("expected a, b or c, found byte 0x78 ('x')"),
+            message.contains("expected a, b or c, found 'x'"),
             "got {message}"
         );
     }
@@ -139,10 +139,7 @@ mod tests {
             .parse(ByteCursor::new(b"ax"))
             .unwrap_err()
             .to_string();
-        assert!(
-            message.contains("expected byte 0x62 ('b'), found byte 0x78 ('x')"),
-            "got {message}"
-        );
+        assert!(message.contains("expected 'b', found 'x'"), "got {message}");
     }
 
     #[test]

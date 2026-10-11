@@ -1,13 +1,11 @@
 //! Unsigned ASCII integers
 
-use super::digit::digit;
+use super::{digits, unsigned_value};
 use crate::ByteCursor;
 use crate::ParsicombError;
-use crate::cursor::Cursor;
 use crate::parser::Parser;
 use crate::parser_fn::parser_fn;
 use crate::recognize::recognize;
-use crate::skip_some::skip_some;
 
 /// Parser that matches one or more ASCII digits and returns them as a u64
 ///
@@ -15,28 +13,9 @@ use crate::skip_some::skip_some;
 pub fn u64<'code>()
 -> impl Parser<Cursor = ByteCursor<'code>, Output = u64, Error = ParsicombError<'code>> {
     parser_fn(|start: ByteCursor<'code>| {
-        let (digits, end) = recognize(skip_some(digit())).parse(start)?;
-
-        let value = digits.slice().iter().try_fold(0u64, |value, digit| {
-            value.checked_mul(10)?.checked_add(u64::from(digit - b'0'))
-        });
-        match value {
-            Some(value) => Ok((value, end)),
-            None => Err(start.syntax_error(too_large(digits.slice()).into())),
-        }
+        let (digits, end) = recognize(digits()).parse(start)?;
+        Ok((unsigned_value(start, digits.slice())?, end))
     })
-}
-
-/// `number too large: <digits>`, with long runs of digits shortened so the
-/// message stays small however long the input number is
-fn too_large(digits: &[u8]) -> String {
-    const SHOWN: usize = 24;
-    let shown = String::from_utf8_lossy(&digits[..digits.len().min(SHOWN)]);
-    if digits.len() > SHOWN {
-        format!("number too large: {shown}… ({} digits)", digits.len())
-    } else {
-        format!("number too large: {shown}")
-    }
 }
 
 #[cfg(test)]

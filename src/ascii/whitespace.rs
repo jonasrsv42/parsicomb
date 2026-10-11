@@ -7,11 +7,12 @@ use crate::filter::FilterExt;
 use crate::map_err::MapErrExt;
 use crate::parser::Parser;
 
-/// Parser that matches a single ASCII whitespace character (space, tab, newline, carriage return)
+/// Parser that matches a single ASCII whitespace character (space, tab,
+/// newline, form feed, carriage return; see [`u8::is_ascii_whitespace`])
 pub fn whitespace<'code>()
 -> impl Parser<Cursor = ByteCursor<'code>, Output = u8, Error = ParsicombError<'code>> {
     byte()
-        .filter(|b| matches!(b, b' ' | b'\t' | b'\n' | b'\r'), "whitespace")
+        .filter(u8::is_ascii_whitespace, "whitespace")
         .map_err(ParsicombError::from)
 }
 
@@ -78,7 +79,7 @@ mod tests {
             result
                 .unwrap_err()
                 .to_string()
-                .contains("expected whitespace, found byte 0x61 ('a')")
+                .contains("expected whitespace, found 'a'")
         );
     }
 

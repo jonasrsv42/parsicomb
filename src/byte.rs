@@ -103,11 +103,7 @@ mod tests {
         let result = parser.parse(cursor);
         assert!(result.is_err());
         let error = result.unwrap_err();
-        assert!(
-            error
-                .to_string()
-                .contains("expected byte 0x68 ('h'), found byte 0x77 ('w')")
-        );
+        assert!(error.to_string().contains("expected 'h', found 'w'"));
     }
 
     #[test]
@@ -146,11 +142,7 @@ mod tests {
         let result = parser.parse(cursor);
         assert!(result.is_err());
         let error = result.unwrap_err();
-        assert!(
-            error
-                .to_string()
-                .contains("expected byte 0x30 ('0') to byte 0x39 ('9'), found byte 0x2F ('/')")
-        );
+        assert!(error.to_string().contains("expected '0' to '9', found '/'"));
     }
 
     #[test]
@@ -162,11 +154,7 @@ mod tests {
         let result = parser.parse(cursor);
         assert!(result.is_err());
         let error = result.unwrap_err();
-        assert!(
-            error
-                .to_string()
-                .contains("expected byte 0x30 ('0') to byte 0x39 ('9'), found byte 0x3A (':')")
-        );
+        assert!(error.to_string().contains("expected '0' to '9', found ':'"));
     }
 
     #[test]

@@ -363,6 +363,6 @@ mod tests {
     fn test_tie_between_expectations_keeps_first() {
         let parser = is_byte(b'a').or(is_byte(b'b'));
         let message = parser.parse(ByteCursor::new(b"x")).unwrap_err().to_string();
-        assert!(message.contains("expected byte 0x61"), "got {message}");
+        assert!(message.contains("expected 'a'"), "got {message}");
     }
 }

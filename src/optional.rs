@@ -1,11 +1,16 @@
 //! Zero or one occurrence
 
 use super::parser::Parser;
+use crate::cursor::Cursor;
 use crate::error::ErrorNode;
 
-/// Parser combinator that optionally matches the given parser.
-/// Returns Some(value) if the parser succeeds, None if it fails.
-/// Never fails - on parser failure, returns None and leaves cursor unchanged.
+/// Parser combinator that optionally matches the given parser
+///
+/// Returns `Some(value)` if the parser succeeds, and `None` without moving
+/// the cursor if it matches nothing (see
+/// [`ErrorRank::is_no_match_at`](crate::error::ErrorRank::is_no_match_at)).
+/// Any other failure, one after the parser matched part of its input or a
+/// real problem, is passed on.
 pub struct Optional<P> {
     parser: P,
 }
@@ -28,7 +33,7 @@ where
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         match self.parser.parse(cursor) {
             Ok((value, next_cursor)) => Ok((Some(value), next_cursor)),
-            Err(error) if error.rank().is_committed => Err(error),
+            Err(error) if !error.rank().is_no_match_at(cursor.position()) => Err(error),
             Err(_) => Ok((None, cursor)),
         }
     }

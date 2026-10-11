@@ -1,43 +1,27 @@
 //! ASCII floats in `int.frac` form
 
-use super::digit::digit;
-use super::sign;
+use super::{digits, float_value, sign};
 use crate::ByteCursor;
 use crate::ParsicombError;
 use crate::byte::is_byte;
-use crate::cursor::Cursor;
 use crate::optional::optional;
 use crate::parser::Parser;
 use crate::parser_fn::parser_fn;
-use crate::skip_some::skip_some;
 
 /// Parser that matches ASCII floating point numbers in `int.uint` form
 /// (e.g. `123.456`, `-42.789`, `+0.5`)
 ///
-/// Fails at the start of the number if it overflows an f64.
+/// Fails at the start of the number if it overflows an f64; a number too
+/// small for an f64 becomes 0.0, as with [`str::parse`].
 pub fn f64<'code>()
 -> impl Parser<Cursor = ByteCursor<'code>, Output = f64, Error = ParsicombError<'code>> {
     parser_fn(|start: ByteCursor<'code>| {
         // Match [+-]digits.digits
         let (_, end) = optional(sign()).parse(start)?;
-        let (_, end) = skip_some(digit()).parse(end)?;
+        let (_, end) = digits().parse(end)?;
         let (_, end) = is_byte(b'.').parse(end)?;
-        let (_, end) = skip_some(digit()).parse(end)?;
-
-        // The standard library does the correctly rounded conversion. The
-        // matched slice is ASCII, so the conversions cannot fail in practice;
-        // map them to errors anyway rather than panic.
-        let span = start.span_to(end);
-        let value: f64 = std::str::from_utf8(span.slice())
-            .ok()
-            .and_then(|text| text.parse().ok())
-            .ok_or_else(|| start.syntax_error("invalid float literal".into()))?;
-
-        if !value.is_finite() {
-            return Err(start.syntax_error("floating point overflow".into()));
-        }
-
-        Ok((value, end))
+        let (_, end) = digits().parse(end)?;
+        Ok((float_value(start, end)?, end))
     })
 }
 

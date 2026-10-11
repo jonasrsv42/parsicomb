@@ -1,5 +1,6 @@
 //! Bound recursion depth to avoid stack overflow on nested input
 
+use crate::commit::CommitError;
 use crate::cursor::Cursor;
 use crate::parser::Parser;
 use std::cell::Cell;
@@ -13,11 +14,12 @@ use crate::error::composite_error;
 
 composite_error! {
     /// Error type for MaxDepth parser
-    pub enum MaxDepthError<PErr, CurErr> {
+    pub enum MaxDepthError<PErr, TooDeepErr> {
         /// Error from the inner parser
         Inner(PErr),
-        /// Parsing would nest deeper than the limit
-        TooDeep(CurErr),
+        /// Parsing would nest deeper than the limit; committed, so enclosing
+        /// `or`, `optional` and repetitions don't try something else
+        TooDeep(TooDeepErr),
     }
 }
 
@@ -88,14 +90,14 @@ impl Drop for DepthGuard {
 impl<P: Parser> Parser for MaxDepth<P> {
     type Cursor = P::Cursor;
     type Output = P::Output;
-    type Error = MaxDepthError<P::Error, <P::Cursor as Cursor>::Error>;
+    type Error = MaxDepthError<P::Error, CommitError<<P::Cursor as Cursor>::Error>>;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let current = DEPTH.with(Cell::get);
         if current >= self.max {
-            return Err(MaxDepthError::TooDeep(
+            return Err(MaxDepthError::TooDeep(CommitError::new(
                 cursor.syntax_error("maximum nesting depth exceeded".into()),
-            ));
+            )));
         }
         DEPTH.with(|depth| depth.set(current + 1));
         let _guard = DepthGuard;
@@ -175,5 +177,14 @@ mod tests {
             let _ = nested(2).parse(ByteCursor::new(b"(((x)))"));
         }
         assert_eq!(DEPTH.with(Cell::get), 0);
+    }
+
+    #[test]
+    fn test_too_deep_is_not_swallowed_by_repetitions() {
+        let data = b"(x)((((x))))";
+        let error = crate::many(nested(3))
+            .parse(ByteCursor::new(data))
+            .unwrap_err();
+        assert!(error.to_string().contains("maximum nesting depth exceeded"));
     }
 }

@@ -54,8 +54,19 @@ pub struct ErrorRank {
 }
 
 impl ErrorRank {
+    /// Whether the failure only means "nothing here matched" for a parser
+    /// that started at `start`: an expectation at `start` that isn't committed
+    ///
+    /// `optional` and repetitions stop on such failures and pass every other
+    /// failure on: one that got past `start` (the parser had matched part of
+    /// its input) or that describes a real problem. `label` replaces only such
+    /// failures.
+    pub fn is_no_match_at(&self, start: usize) -> bool {
+        self.is_expectation && !self.is_committed && self.position <= start
+    }
+
     /// The rank of a leaf error: its position and kind, not committed
-    pub fn of_leaf(leaf: &dyn ErrorLeaf<Element = impl Atomic>) -> Self {
+    pub fn of_leaf<L: ErrorLeaf + ?Sized>(leaf: &L) -> Self {
         ErrorRank {
             position: leaf.loc().position(),
             is_expectation: leaf.is_expectation(),

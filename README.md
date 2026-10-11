@@ -84,15 +84,18 @@ Combinator methods such as `.and()`, `.or()` and `.map()` come from extension
 traits (`AndExt`, `OrExt`, `MapExt`, ...), re-exported at the crate root
 together with the free functions.
 
-Parser-building functions return `impl Parser`, naming the cursor and output:
+Parser-building functions return `impl Parser`, naming the cursor, output and
+error. Naming the error matters once a grammar is recursive, and lets
+callers use `?` on the parser inside `parser_fn`:
 
 ```rust
-use parsicomb::{ByteCursor, Parser};
+use parsicomb::{ByteCursor, Parser, ParsicombError};
 use parsicomb::ascii::u64;
 use parsicomb::byte::is_byte;
 use parsicomb::separated_list;
 
-fn numbers<'code>() -> impl Parser<Cursor = ByteCursor<'code>, Output = Vec<u64>> {
+fn numbers<'code>()
+-> impl Parser<Cursor = ByteCursor<'code>, Output = Vec<u64>, Error = ParsicombError<'code>> {
     separated_list(u64(), is_byte(b','))
 }
 
@@ -149,12 +152,44 @@ assert_eq!(pair.parse(cursor(b"key=42")).unwrap().0, ("key".into(), 42));
 ```
 
 Also available: `argument_list` (`(a, b, c)`-style lists), `filter`, `label`,
-`commit` (commit: see [Error Messages](#error-messages)), `not` (negative lookahead), `take_until`, `ntimes`, `all`, `map_err` and
-`with_position` (captures the `Span` a parser consumed).
+`commit` and `skip_then` (see below), `not` (negative lookahead), `take_until`,
+`ntimes`, `all`, `map_err` and `with_position` (captures the `Span` a parser
+consumed). A parser can be used in several places by reference:
+`item.and(&separator)`.
 
-`a.or(b)` tries `b` only if `a` fails, and commits to the first that succeeds.
-Repetitions (`many`, `some`, `skip_many`, `separated_list`, ...) stop when an
-iteration succeeds without consuming input, since it would repeat forever.
+`a.or(b)` tries `b` if `a` fails, and takes the first that succeeds.
+
+`optional` and the repetitions (`many`, `some`, `skip_many`, `separated_list`,
+...) stop where their parser matches nothing. Once it has matched part of its
+input, a failure means the input is wrong, so they pass it on instead of
+stopping early, and the error points at the problem (the rule Parsec uses).
+Real problems, such as a number too large, are passed on too:
+
+```rust
+use parsicomb::{AndExt, ByteCursor, Parser, many};
+use parsicomb::ascii::u64;
+use parsicomb::byte::is_byte;
+
+// `x=<number>;` repeated
+let assignment = is_byte(b'x').and(is_byte(b'=')).and(u64()).and(is_byte(b';'));
+let error = many(assignment).parse(ByteCursor::new(b"x=1;x=;")).unwrap_err();
+assert!(error.to_string().contains("offset 6): expected a digit, found ';'"));
+```
+
+So `optional(separated_list(item, comma))` reads an empty or non-empty list,
+and fails at a malformed item rather than at the closing bracket. Two
+patterns follow from the rule:
+
+- Skip whitespace after each token (`token.and(whitespace)`), so a token that
+  isn't there matches nothing. In grammars that skip whitespace before tokens,
+  use `skip_then(whitespace, token)`, which doesn't count the skipped
+  whitespace as a match.
+- Match keywords as whole words, e.g. `identifier().filter(|w| w == "let",
+  "`let`")`, rather than `is_string("let")` followed by more: on `letter`, the
+  latter has matched `let` and fails, where the filter matches nothing.
+
+Repetitions also stop when an iteration succeeds without consuming input,
+since it would repeat forever; `all` and `ntimes` fail in that case instead.
 
 Backtracking re-parses: when `a` fails, `b` starts over from the same place.
 If both alternatives begin with the same recursive rule, such as
@@ -298,14 +333,21 @@ assert_eq!(
 Each nesting level of the input uses more stack, so deeply nested input such as
 `[[[[…` can overflow the stack and abort the process. When parsing untrusted
 input, bound the nesting with `max_depth`, which fails with "maximum nesting
-depth exceeded" instead. The count is per thread and shared by all
-`max_depth` parsers on it, so use one limit per grammar:
+depth exceeded" instead. That error is committed (see `commit` below), so it
+ends the parse. The count is per thread and shared by all `max_depth` parsers
+on it, so use one limit per grammar.
+
+How much stack a level takes depends on the grammar and the build: a
+JSON-like grammar uses about 3 KB per level in release builds and up to 10 KB
+in debug builds. Spawned threads, including test threads, have 2 MiB of stack,
+so keep the limit around 100 or lower there, or run the parser on a thread
+with a larger stack:
 
 ```rust
 # use parsicomb::{BoxedExt, ByteCursor, Parser, lazy};
 use parsicomb::MaxDepthExt;
 # fn value<'code>() -> impl Parser<Cursor = ByteCursor<'code>, Output = u8, Error = parsicomb::ParsicombError<'code>> { parsicomb::byte::byte() }
-let element = lazy(|| value().boxed()).max_depth(256);
+let element = lazy(|| value().boxed()).max_depth(64);
 ```
 
 `max_depth` bounds stack use, not time: a grammar whose alternatives share a
@@ -372,14 +414,14 @@ let error = is_string("hello").parse(ByteCursor::new(b"help")).unwrap_err();
 
 assert_eq!(
     error.to_string(),
-    "Syntax error at line 1, column 3 (offset 3): \
+    "Syntax error at line 1, column 4 (offset 3): \
      expected \"hello\", found \"help\"\n\
      \n  > 1 | help\n           ^--- here\n"
 );
 ```
 
-Lines count from 1 and columns from 0. `column` counts the characters before
-the error in the rendered line, so it matches the `^` pointer (the snippet
+Lines and columns count from 1. `column` counts the characters of the
+rendered line up to the error, so it matches the `^` pointer (the snippet
 shows at most 512 elements on each side, so a longer line is cut); `offset` is the
 absolute index into the input (bytes for a byte cursor, elements otherwise).
 For errors more than 2^20 elements into the input only the offset is shown, so
@@ -402,43 +444,18 @@ let literal = is_string("true")
     .or(is_string("null"))
     .label("a literal");
 let error = literal.parse(ByteCursor::new(b"maybe")).unwrap_err();
-assert!(error.to_string().contains("expected a literal, found byte 0x6D ('m')"));
+assert!(error.to_string().contains("expected a literal, found 'm'"));
 
 let error = u64().label("a number").parse(ByteCursor::new(b"99999999999999999999")).unwrap_err();
 assert!(error.to_string().contains("number too large"));
 ```
 
-Repetitions and `optional` succeed with what they matched and drop the failure that
-stopped them, so a later error points at the parser after them:
-
-```rust
-use parsicomb::{AndExt, ByteCursor, Parser, many};
-use parsicomb::byte::is_byte;
-use parsicomb::utf8::is_string;
-
-// `many` stops at "help" and succeeds with no items; `!` then fails at offset 0
-let error = many(is_string("hello"))
-    .and(is_byte(b'!'))
-    .parse(ByteCursor::new(b"help"))
-    .unwrap_err();
-assert!(error.to_string().contains("expected byte 0x21 ('!'), found byte 0x68 ('h')"));
-```
-
-To report the real problem, commit with `commit` once the input can only mean
-one thing, typically after a keyword or opening delimiter. A failure after a
-commit is final: `or` doesn't try other alternatives, and `optional` and
-repetitions pass it on instead of stopping:
-
-```rust
-use parsicomb::{AndExt, ByteCursor, CommitExt, Parser, many};
-use parsicomb::ascii::u64;
-use parsicomb::byte::is_byte;
-
-// `x=<number>;`, committed once `x=` has matched
-let assignment = is_byte(b'x').and(is_byte(b'=')).and(u64().and(is_byte(b';')).commit());
-let error = many(assignment).parse(ByteCursor::new(b"x=1;x=;")).unwrap_err();
-assert!(error.to_string().contains("expected a digit, found byte 0x3B (';')"));
-```
+`or` keeps trying alternatives after one that matched part of its input, and
+reports whichever got furthest. Once the input can only mean one thing,
+typically after a keyword or an opening delimiter, `commit` makes a failure
+final: inside `p.commit()`, a failure stops `or` from trying the remaining
+alternatives, and `optional` and repetitions pass it on even where it
+matched nothing. This also saves re-parsing alternatives that can't match.
 
 Leaf parsers that run out of input report `expected …, found end of input`;
 reading past the end with `cursor.value()` in a hand-written parser gives

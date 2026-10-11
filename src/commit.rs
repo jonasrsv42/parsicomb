@@ -15,6 +15,10 @@ pub struct CommitError<E> {
 }
 
 impl<E> CommitError<E> {
+    pub(crate) fn new(inner: E) -> Self {
+        CommitError { inner }
+    }
+
     /// The inner parser's error
     pub fn into_inner(self) -> E {
         self.inner
@@ -56,22 +60,29 @@ where
 }
 
 /// Parser combinator that commits: if the inner parser fails, the failure is
-/// committed and enclosing `or`, `optional` and repetitions don't backtrack past it
+/// final, so enclosing `or`, `optional` and repetitions don't backtrack past it
 ///
-/// Commit where the input can only mean one thing, typically right after
-/// a keyword or opening delimiter has matched. Without it, a failure inside a
-/// repetition just ends the repetition, and the error reported is whatever
-/// fails next; with it, the error points at the real problem:
+/// Commit where the input can only mean one thing, typically right after a
+/// keyword or opening delimiter has matched. `or` then doesn't try its
+/// remaining alternatives, and `optional` and repetitions pass the failure on
+/// even where it matched nothing:
 ///
 /// ```
-/// use parsicomb::{AndExt, ByteCursor, CommitExt, Parser, many};
+/// use parsicomb::{AndExt, ByteCursor, CommitExt, MapExt, OrExt, Parser};
 /// use parsicomb::ascii::u64;
 /// use parsicomb::byte::is_byte;
 ///
-/// // `x=<number>;`, committed once `x=` has matched
-/// let assignment = is_byte(b'x').and(is_byte(b'=')).and(u64().and(is_byte(b';')).commit());
-/// let error = many(assignment).parse(ByteCursor::new(b"x=1;x=;")).unwrap_err();
-/// assert!(error.to_string().contains("expected a digit, found byte 0x3B (';')"));
+/// let input = ByteCursor::new(b"#x");
+/// let bare = || is_byte(b'#').map(|_| 0);
+///
+/// // `or` falls back to a bare `#` after `#` and no number
+/// let tagged = is_byte(b'#').and(u64()).map(|(_, n)| n);
+/// assert_eq!(tagged.or(bare()).parse(input).unwrap().0, 0);
+///
+/// // Committed after `#`, a number is required
+/// let tagged = is_byte(b'#').and(u64().commit()).map(|(_, n)| n);
+/// let error = tagged.or(bare()).parse(input).unwrap_err();
+/// assert!(error.to_string().contains("expected a digit, found 'x'"));
 /// ```
 ///
 /// Lookahead (`not`) still treats a committed failure as "doesn't match", and
@@ -196,8 +207,11 @@ mod tests {
             4
         );
 
-        // Without a commit the repetition just stops
-        let (values, cursor) = many(is_byte(b'a').and(is_byte(b'b'))).parse(input).unwrap();
+        // Without a commit too, an element that matched part of its input
+        // fails the repetition; one that matches nothing ends it
+        let ab = || is_byte(b'a').and(is_byte(b'b'));
+        assert_eq!(many(ab()).parse(input).unwrap_err().rank().position, 3);
+        let (values, cursor) = many(ab()).parse(ByteCursor::new(b"abx")).unwrap();
         assert_eq!(values.len(), 1);
         assert_eq!(cursor.position(), 2);
     }
@@ -209,10 +223,7 @@ mod tests {
             .parse(ByteCursor::new(b"(x"))
             .unwrap_err()
             .to_string();
-        assert!(
-            message.contains("expected byte 0x29 (')')"),
-            "got {message}"
-        );
+        assert!(message.contains("expected ')'"), "got {message}");
     }
 
     #[test]
@@ -245,9 +256,7 @@ mod tests {
         assert!(error.rank().is_committed);
         assert_eq!(error.position(), 10);
         assert!(
-            error
-                .to_string()
-                .contains("expected a digit, found byte 0x78 ('x')"),
+            error.to_string().contains("expected a digit, found 'x'"),
             "got {error}"
         );
     }

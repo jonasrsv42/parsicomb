@@ -72,7 +72,7 @@ where
         // Check if we have an empty list (immediate closing delimiter)
         match self.close.parse(cursor) {
             Ok((_, cursor)) => return Ok((vec![], cursor)),
-            Err(error) if error.rank().is_committed => {
+            Err(error) if !error.rank().is_no_match_at(cursor.position()) => {
                 return Err(ArgumentListError::ExpectedClosingDelimiter(error));
             }
             Err(_) => {}
@@ -88,11 +88,18 @@ where
 
         // Parse remaining arguments preceded by separator
         while let Ok((_, sep_cursor)) = self.separator.parse(cursor) {
-            // Found separator, must parse another argument
-            let (arg, next_cursor) = self
-                .parser
-                .parse(sep_cursor)
-                .map_err(ArgumentListError::ArgumentAfterSeparator)?;
+            // Found separator, must parse another argument, unless the
+            // separator matched nothing: then the arguments ended
+            let (arg, next_cursor) = match self.parser.parse(sep_cursor) {
+                Ok(result) => result,
+                Err(error)
+                    if sep_cursor.position() == cursor.position()
+                        && error.rank().is_no_match_at(cursor.position()) =>
+                {
+                    break;
+                }
+                Err(error) => return Err(ArgumentListError::ArgumentAfterSeparator(error)),
+            };
 
             // Separator + argument consumed nothing: stop rather than loop forever
             if next_cursor.position() == cursor.position() {

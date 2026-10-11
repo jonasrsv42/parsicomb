@@ -117,9 +117,15 @@ impl Atomic for u8 {
         valid.chars().next().map_or(1, char::len_utf8)
     }
 
-    /// `byte 0x28 ('(')`, with non-printable bytes escaped (`'\n'`, `'\xff'`)
+    /// `'('` for printable ASCII; `byte 0x0A ('\n')` for other bytes, escaped
     fn describe(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "byte 0x{:02X} ('{}')", self, self.escape_ascii())
+        if matches!(self, b'\'' | b'\\') {
+            write!(f, "'\\{}'", char::from(*self))
+        } else if self.is_ascii_graphic() || *self == b' ' {
+            write!(f, "'{}'", char::from(*self))
+        } else {
+            write!(f, "byte 0x{:02X} ('{}')", self, self.escape_ascii())
+        }
     }
 }
 

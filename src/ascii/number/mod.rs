@@ -2,15 +2,15 @@
 
 use crate::ByteCursor;
 use crate::ParsicombError;
-use crate::and::AndExt;
+use crate::atomic::skip_while1;
 use crate::byte::is_byte;
-use crate::map::MapExt;
+use crate::cursor::Cursor;
 use crate::map_err::MapErrExt;
 use crate::optional::optional;
 use crate::or::OrExt;
 use crate::parser::Parser;
 use crate::parser_fn::parser_fn;
-use crate::skip_some::skip_some;
+use crate::recognize::recognize;
 
 pub mod digit;
 pub mod f64;
@@ -35,16 +35,24 @@ pub enum Number {
 ///
 /// A number is a float when its digits are followed by `.` and a digit, and
 /// an integer otherwise; it then fails as [`f64()`] or [`i64()`] would, e.g. with
-/// "number too large" for an integer that does not fit in an i64.
+/// "number too large" for an integer that does not fit in an i64. The input is
+/// scanned once.
 pub fn number<'code>()
 -> impl Parser<Cursor = ByteCursor<'code>, Output = Number, Error = ParsicombError<'code>> {
     parser_fn(|start: ByteCursor<'code>| {
-        let (_, integer_end) = optional(sign()).and(skip_some(digit())).parse(start)?;
-        if is_byte(b'.').and(digit()).parse(integer_end).is_ok() {
-            f64().map(Number::F64).parse(start)
-        } else {
-            i64().map(Number::I64).parse(start)
+        let (sign, after_sign) = optional(sign()).parse(start)?;
+        let (integer, integer_end) = recognize(digits()).parse(after_sign)?;
+
+        if let Some(fraction_start) = fraction_start(integer_end) {
+            let (_, end) = digits().parse(fraction_start)?;
+            return Ok((Number::F64(float_value(start, end)?), end));
         }
+
+        let magnitude = unsigned_value(after_sign, integer.slice())?;
+        Ok((
+            Number::I64(signed_value(start, sign, magnitude)?),
+            integer_end,
+        ))
     })
 }
 
@@ -54,6 +62,90 @@ fn sign<'code>()
     is_byte(b'-')
         .or(is_byte(b'+'))
         .map_err(ParsicombError::from)
+}
+
+/// One or more ASCII digits; fails with `expected a digit` if there are none,
+/// and builds no error where a run of digits ends
+fn digits<'code>()
+-> impl Parser<Cursor = ByteCursor<'code>, Output = (), Error = ParsicombError<'code>> {
+    skip_while1(|b: u8| b.is_ascii_digit(), "a digit")
+}
+
+/// The cursor after the `.` if `cursor` is at `.` followed by a digit
+fn fraction_start(cursor: ByteCursor<'_>) -> Option<ByteCursor<'_>> {
+    let after_dot = cursor.next();
+    let is_fraction = cursor.value().is_ok_and(|b| b == b'.')
+        && after_dot.value().is_ok_and(|b| b.is_ascii_digit());
+    is_fraction.then_some(after_dot)
+}
+
+/// The value of a run of ASCII digits; overflow is reported at `start`
+fn unsigned_value<'code>(
+    start: ByteCursor<'code>,
+    digits: &[u8],
+) -> Result<u64, ParsicombError<'code>> {
+    digits
+        .iter()
+        .try_fold(0u64, |value, digit| {
+            value.checked_mul(10)?.checked_add(u64::from(digit - b'0'))
+        })
+        .ok_or_else(|| start.syntax_error(too_large(digits).into()))
+}
+
+/// `number too large: <digits>`, with long runs of digits shortened so the
+/// message stays small however long the input number is
+fn too_large(digits: &[u8]) -> String {
+    const SHOWN: usize = 24;
+    let shown = String::from_utf8_lossy(&digits[..digits.len().min(SHOWN)]);
+    if digits.len() > SHOWN {
+        format!("number too large: {shown}… ({} digits)", digits.len())
+    } else {
+        format!("number too large: {shown}")
+    }
+}
+
+/// `magnitude` with `sign` applied; overflow is reported at `start`
+fn signed_value<'code>(
+    start: ByteCursor<'code>,
+    sign: Option<u8>,
+    magnitude: u64,
+) -> Result<i64, ParsicombError<'code>> {
+    if sign == Some(b'-') {
+        if magnitude > i64::MAX as u64 + 1 {
+            return Err(
+                start.syntax_error(format!("negative number too large: -{}", magnitude).into())
+            );
+        }
+        // Wrapping is exact here: magnitude <= 2^63, and 2^63 wraps to i64::MIN
+        Ok((magnitude as i64).wrapping_neg())
+    } else {
+        if magnitude > i64::MAX as u64 {
+            return Err(
+                start.syntax_error(format!("positive number too large: {}", magnitude).into())
+            );
+        }
+        Ok(magnitude as i64)
+    }
+}
+
+/// The float in `start..end`, which holds `[sign]digits.digits`; overflow is
+/// reported at `start`
+fn float_value<'code>(
+    start: ByteCursor<'code>,
+    end: ByteCursor<'code>,
+) -> Result<f64, ParsicombError<'code>> {
+    // The standard library does the correctly rounded conversion. The matched
+    // slice is ASCII, so the conversions cannot fail in practice; map them to
+    // errors anyway rather than panic.
+    let span = start.span_to(end);
+    let value: f64 = std::str::from_utf8(span.slice())
+        .ok()
+        .and_then(|text| text.parse().ok())
+        .ok_or_else(|| start.syntax_error("invalid float literal".into()))?;
+    if !value.is_finite() {
+        return Err(start.syntax_error("floating point overflow".into()));
+    }
+    Ok(value)
 }
 
 #[cfg(test)]

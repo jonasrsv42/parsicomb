@@ -1,6 +1,7 @@
 //! One or more items separated by a separator
 
 use crate::cursor::Cursor;
+use crate::error::ErrorNode;
 use crate::parser::Parser;
 
 /// Parser combinator that matches a list of items separated by a parser
@@ -54,8 +55,18 @@ where
                 Err(_) => break,
             };
 
-            // An element is required after a separator
-            let (value, next_cursor) = self.parser.parse(after_separator)?;
+            // An element is required after a separator, unless the separator
+            // matched nothing (e.g. optional whitespace): then the list ended
+            let (value, next_cursor) = match self.parser.parse(after_separator) {
+                Ok(result) => result,
+                Err(error)
+                    if after_separator.position() == cursor.position()
+                        && error.rank().is_no_match_at(cursor.position()) =>
+                {
+                    break;
+                }
+                Err(error) => return Err(error),
+            };
 
             // Separator + element consumed nothing: stop rather than loop forever
             if next_cursor.position() == cursor.position() {

@@ -51,7 +51,8 @@ impl<'code, T: Atomic> CodeLoc<'code, T> {
     /// when the line is too far in to resolve, and return the resolved
     /// position for [`write_context`](Self::write_context).
     ///
-    /// `column` counts characters of the rendered line from its start (it
+    /// Lines and columns count from 1. `column` counts characters of the
+    /// rendered line from its start (it
     /// matches the `^--- here` pointer unless the snippet had to cut a very
     /// long line); `offset` is the absolute index into the input (bytes for a
     /// byte cursor, elements for any other cursor).
@@ -64,7 +65,9 @@ impl<'code, T: Atomic> CodeLoc<'code, T> {
             Some(pos) => write!(
                 f,
                 "line {}, column {} (offset {})",
-                pos.line, pos.column, self.loc
+                pos.line,
+                pos.column + 1,
+                self.loc
             )?,
             None => write!(f, "offset {}", self.loc)?,
         }

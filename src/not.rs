@@ -67,7 +67,7 @@ mod tests {
 
         let message = parser.parse(cursor).unwrap_err().to_string();
         assert!(
-            message.contains("expected something else, found byte 0x68 ('h')"),
+            message.contains("expected something else, found 'h'"),
             "got {message}"
         );
     }
@@ -82,7 +82,7 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(
-            message.contains("expected an identifier, found byte 0x69 ('i')"),
+            message.contains("expected an identifier, found 'i'"),
             "got {message}"
         );
     }

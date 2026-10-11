@@ -204,9 +204,9 @@ mod tests {
         let display_str = format!("{}", error);
         println!("EOS After Newline:\n{}", display_str);
 
-        // Should be on line 2 with offset 0
+        // Should be on line 2, column 1
         assert!(display_str.contains("line 2"));
-        assert!(display_str.contains("column 0"));
+        assert!(display_str.contains("column 1"));
     }
     #[test]
     fn test_location_reports_line_column_and_offset() {
@@ -217,7 +217,7 @@ mod tests {
         };
         // column counts 'é' once; offset counts its two bytes
         let first = error.to_string().lines().next().unwrap().to_string();
-        assert_eq!(first, "Syntax error at line 2, column 2 (offset 6): boom");
+        assert_eq!(first, "Syntax error at line 2, column 3 (offset 6): boom");
     }
     #[test]
     fn test_location_far_offset_falls_back_to_offset_only() {

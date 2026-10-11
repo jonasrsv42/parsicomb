@@ -1,10 +1,9 @@
 //! Signed ASCII integers
 
-use super::sign;
 use super::u64::u64;
+use super::{sign, signed_value};
 use crate::ByteCursor;
 use crate::ParsicombError;
-use crate::cursor::Cursor;
 use crate::optional::optional;
 use crate::parser::Parser;
 use crate::parser_fn::parser_fn;
@@ -18,32 +17,15 @@ pub fn i64<'code>()
 -> impl Parser<Cursor = ByteCursor<'code>, Output = i64, Error = ParsicombError<'code>> {
     parser_fn(|start: ByteCursor<'code>| {
         let (sign, cursor) = optional(sign()).parse(start)?;
-        let (value, cursor) = u64().parse(cursor)?;
-
-        let signed_value = if sign == Some(b'-') {
-            if value > i64::MAX as u64 + 1 {
-                return Err(
-                    start.syntax_error(format!("negative number too large: -{}", value).into())
-                );
-            }
-            // Wrapping is exact here: value <= 2^63, and 2^63 wraps to i64::MIN
-            (value as i64).wrapping_neg()
-        } else {
-            if value > i64::MAX as u64 {
-                return Err(
-                    start.syntax_error(format!("positive number too large: {}", value).into())
-                );
-            }
-            value as i64
-        };
-
-        Ok((signed_value, cursor))
+        let (magnitude, cursor) = u64().parse(cursor)?;
+        Ok((signed_value(start, sign, magnitude)?, cursor))
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Cursor;
 
     #[test]
     fn test_positive_integer() {

@@ -83,7 +83,7 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(
-            message.contains("expected a digit, found byte 0x78 ('x')"),
+            message.contains("expected a digit, found 'x'"),
             "got {message}"
         );
     }

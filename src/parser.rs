@@ -31,3 +31,38 @@ pub trait Parser {
     /// the two and panic otherwise.
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error>;
 }
+
+/// A reference to a parser is a parser, so one parser can be used in several
+/// places without building it again: `item.and(&separator).and(&separator)`
+impl<P: Parser + ?Sized> Parser for &P {
+    type Cursor = P::Cursor;
+    type Output = P::Output;
+    type Error = P::Error;
+
+    fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
+        (**self).parse(cursor)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::and::AndExt;
+    use crate::byte::is_byte;
+    use crate::{ByteCursor, many, separated_list};
+
+    #[test]
+    fn test_parser_used_by_reference_in_several_places() {
+        let comma = is_byte(b',');
+        let digit = crate::ascii::digit();
+        let pair = (&digit).and(&comma).and(&digit);
+        let ((a, _), b) = pair.parse(ByteCursor::new(b"1,2")).unwrap().0;
+        assert_eq!((a, b), (b'1', b'2'));
+        let list = separated_list(&digit, &comma);
+        assert_eq!(list.parse(ByteCursor::new(b"1,2,3")).unwrap().0.len(), 3);
+        assert_eq!(
+            many(&comma).parse(ByteCursor::new(b",,x")).unwrap().0.len(),
+            2
+        );
+    }
+}

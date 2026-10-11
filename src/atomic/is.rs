@@ -51,10 +51,7 @@ mod tests {
         let parser = is_atomic(b'a');
         let error = parser.parse(ByteCursor::new(b"b")).unwrap_err();
         let message = error.to_string();
-        assert!(
-            message.contains("expected byte 0x61 ('a'), found byte 0x62 ('b')"),
-            "got {message}"
-        );
+        assert!(message.contains("expected 'a', found 'b'"), "got {message}");
     }
 
     #[test]
@@ -93,7 +90,7 @@ mod tests {
         let error = is_atomic::<ByteCursor>(b',').parse(cursor).unwrap_err();
         let message = error.to_string();
         assert!(
-            message.contains("expected byte 0x2C (','), found end of input"),
+            message.contains("expected ',', found end of input"),
             "got {message}"
         );
     }
