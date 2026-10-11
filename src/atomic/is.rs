@@ -72,4 +72,18 @@ mod tests {
         assert!(message.contains("expected 8, found 7"), "got {message}");
         assert_eq!(error.position(), 0);
     }
+
+    #[test]
+    fn test_label_describes_found_element() {
+        use crate::error::Expected;
+        let data = [7u32];
+        let cursor = AtomicCursor::new(&data);
+        let message = cursor
+            .expected_error(Expected::Label("an even number"))
+            .to_string();
+        assert!(
+            message.contains("expected an even number, found 7"),
+            "got {message}"
+        );
+    }
 }

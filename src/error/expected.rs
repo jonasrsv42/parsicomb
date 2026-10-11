@@ -14,6 +14,8 @@ pub enum Expected<T: Atomic> {
     Element(T),
     /// An element in an inclusive range
     Range(T, T),
+    /// An element described by a label, e.g. "a non-reserved token"
+    Label(&'static str),
     /// A run of elements, of which the first `matched` matched before the
     /// element at the error location
     Sequence {
@@ -46,6 +48,7 @@ impl<T: Atomic> Expected<T> {
             Expected::Range(start, end) => {
                 write!(f, "expected {} to {}, ", Describe(start), Describe(end))?
             }
+            Expected::Label(label) => write!(f, "expected {}, ", label)?,
             Expected::Sequence { expected, matched } => {
                 write!(f, "expected {:?}, ", T::format_slice(expected))?;
 
