@@ -17,6 +17,8 @@ impl<'code> Parser for CharParser<'code> {
     type Output = char;
     type Error = ParsicombError<'code>;
 
+    // Large and non-generic, so it is only inlined across crates when asked to
+    #[inline]
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let byte_parser: ByteParser<'code> = ByteParser::new();
 
