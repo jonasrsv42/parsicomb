@@ -1,3 +1,5 @@
+//! Parsers written as closures
+
 use super::parser::Parser;
 use crate::cursor::Cursor;
 use crate::error::ErrorNode;
@@ -6,8 +8,8 @@ use std::marker::PhantomData;
 /// A parser defined by a closure from a cursor to a parse result
 ///
 /// For custom parsers that are easiest written by hand, e.g. picking a rule
-/// by the next element. The closure's signature names the cursor type, so no
-/// `PhantomData` is needed for its lifetime.
+/// by the next element. Write out the type of the closure's cursor argument
+/// (`|cursor: ByteCursor<'code>|`): the parser's cursor type is taken from it.
 ///
 /// ```
 /// use parsicomb::{ByteCursor, Cursor, Parser, ParsicombError, parser_fn};

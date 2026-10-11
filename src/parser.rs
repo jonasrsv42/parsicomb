@@ -1,3 +1,5 @@
+//! The [`Parser`] trait
+
 use crate::cursor::Cursor;
 use crate::error::ErrorNode;
 
@@ -10,6 +12,12 @@ pub trait Parser {
     type Output;
 
     /// The error type produced by failed parsing
+    ///
+    /// Combinators use the narrowest type that holds every failure they
+    /// produce: the cursor's error when they only fail on their own (`not`)
+    /// or never fail (`many`, `optional`), the inner parser's error when they
+    /// only pass it on (`some`, `separated_list`), and an enum of both when
+    /// they do both (`filter`, `all`, `max_depth`).
     type Error: ErrorNode<Element = <Self::Cursor as Cursor>::Element>;
 
     /// Attempt to parse from the given cursor position

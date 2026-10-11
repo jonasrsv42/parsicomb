@@ -1,55 +1,21 @@
-use crate::error::{ErrorLeaf, ErrorNode};
+//! Delimited, separated lists such as `(a, b, c)`
+
+use crate::cursor::Cursor;
 use crate::parser::Parser;
-use std::fmt;
 
-/// Error type for ArgumentList parser
-#[derive(Debug)]
-pub enum ArgumentListError<ErrOpen, ErrArg, ErrClose> {
-    /// Failed to parse opening delimiter
-    OpenDelimiter(ErrOpen),
-    /// Failed to parse first argument
-    FirstArgument(ErrArg),
-    /// Failed to parse argument after separator
-    ArgumentAfterSeparator(ErrArg),
-    /// Expected closing delimiter or separator
-    ExpectedClosingDelimiter(ErrClose),
-}
+use crate::error::composite_error;
 
-/// Displays the most likely underlying error
-impl<ErrOpen, ErrArg, ErrClose> fmt::Display for ArgumentListError<ErrOpen, ErrArg, ErrClose>
-where
-    ErrOpen: ErrorNode,
-    ErrArg: ErrorNode<Element = ErrOpen::Element>,
-    ErrClose: ErrorNode<Element = ErrOpen::Element>,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.likely_error())
-    }
-}
-
-impl<ErrOpen, ErrArg, ErrClose> std::error::Error for ArgumentListError<ErrOpen, ErrArg, ErrClose>
-where
-    ErrOpen: ErrorNode,
-    ErrArg: ErrorNode<Element = ErrOpen::Element>,
-    ErrClose: ErrorNode<Element = ErrOpen::Element>,
-{
-}
-
-impl<ErrOpen, ErrArg, ErrClose> ErrorNode for ArgumentListError<ErrOpen, ErrArg, ErrClose>
-where
-    ErrOpen: ErrorNode,
-    ErrArg: ErrorNode<Element = ErrOpen::Element>,
-    ErrClose: ErrorNode<Element = ErrOpen::Element>,
-{
-    type Element = ErrOpen::Element;
-
-    fn likely_error(&self) -> &dyn ErrorLeaf<Element = Self::Element> {
-        match self {
-            ArgumentListError::OpenDelimiter(e) => e.likely_error(),
-            ArgumentListError::FirstArgument(e) => e.likely_error(),
-            ArgumentListError::ArgumentAfterSeparator(e) => e.likely_error(),
-            ArgumentListError::ExpectedClosingDelimiter(e) => e.likely_error(),
-        }
+composite_error! {
+    /// Error type for ArgumentList parser
+    pub enum ArgumentListError<ErrOpen, ErrArg, ErrClose> {
+        /// Failed to parse opening delimiter
+        OpenDelimiter(ErrOpen),
+        /// Failed to parse first argument
+        FirstArgument(ErrArg),
+        /// Failed to parse argument after separator
+        ArgumentAfterSeparator(ErrArg),
+        /// Expected closing delimiter or separator
+        ExpectedClosingDelimiter(ErrClose),
     }
 }
 
@@ -73,6 +39,7 @@ pub struct ArgumentList<POpen, PArg, PSep, PClose> {
 }
 
 impl<POpen, PArg, PSep, PClose> ArgumentList<POpen, PArg, PSep, PClose> {
+    /// Same as [`argument_list`]
     pub fn new(open: POpen, parser: PArg, separator: PSep, close: PClose) -> Self {
         ArgumentList {
             open,
@@ -115,29 +82,28 @@ where
         let mut results = vec![first];
 
         // Parse remaining arguments preceded by separator
-        loop {
-            // Try to parse separator
-            let sep_cursor = match self.separator.parse(cursor) {
-                Ok((_, c)) => c,
-                Err(_) => {
-                    // No separator found, expect closing delimiter
-                    let (_, cursor) = self
-                        .close
-                        .parse(cursor)
-                        .map_err(ArgumentListError::ExpectedClosingDelimiter)?;
-                    return Ok((results, cursor));
-                }
-            };
-
+        while let Ok((_, sep_cursor)) = self.separator.parse(cursor) {
             // Found separator, must parse another argument
             let (arg, next_cursor) = self
                 .parser
                 .parse(sep_cursor)
                 .map_err(ArgumentListError::ArgumentAfterSeparator)?;
 
+            // Separator + argument consumed nothing: stop rather than loop forever
+            if next_cursor.position() == cursor.position() {
+                break;
+            }
+
             results.push(arg);
             cursor = next_cursor;
         }
+
+        // No further separator, expect closing delimiter
+        let (_, cursor) = self
+            .close
+            .parse(cursor)
+            .map_err(ArgumentListError::ExpectedClosingDelimiter)?;
+        Ok((results, cursor))
     }
 }
 
@@ -286,5 +252,26 @@ mod tests {
         let (results, cursor) = parser.parse(cursor).unwrap();
         assert_eq!(results, vec![1, 2, 3]);
         assert_eq!(cursor.value().unwrap(), b' ');
+    }
+
+    #[test]
+    fn test_stops_when_separator_and_argument_consume_nothing() {
+        use crate::optional::optional;
+
+        let data = b"(b)";
+        let cursor = ByteCursor::new(data);
+        let parser = argument_list(
+            is_byte(b'('),
+            optional(is_byte(b'a')),
+            optional(is_byte(b',')),
+            is_byte(b')'),
+        );
+
+        // `b` is neither an argument nor the closing delimiter
+        let result = parser.parse(cursor);
+        assert!(matches!(
+            result,
+            Err(ArgumentListError::ExpectedClosingDelimiter(_))
+        ));
     }
 }

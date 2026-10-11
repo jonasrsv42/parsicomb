@@ -1,3 +1,5 @@
+//! One specific element
+
 use crate::atomic::atomic;
 use crate::cursor::Cursor;
 use crate::error::Expected;
@@ -16,11 +18,9 @@ impl<Cur: Cursor> Parser for IsAtomic<Cur> {
     type Error = Cur::Error;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
-        let (value, next) = atomic().parse(cursor)?;
-        if value == self.expected {
-            Ok((value, next))
-        } else {
-            Err(cursor.expected_error(Expected::Element(self.expected)))
+        match atomic().parse(cursor) {
+            Ok((value, next)) if value == self.expected => Ok((value, next)),
+            _ => Err(cursor.expected_error(Expected::Element(self.expected))),
         }
     }
 }
@@ -83,6 +83,17 @@ mod tests {
             .to_string();
         assert!(
             message.contains("expected an even number, found 7"),
+            "got {message}"
+        );
+    }
+
+    #[test]
+    fn test_end_of_input_reports_what_was_expected() {
+        let cursor = ByteCursor::new(b"");
+        let error = is_atomic::<ByteCursor>(b',').parse(cursor).unwrap_err();
+        let message = error.to_string();
+        assert!(
+            message.contains("expected byte 0x2C (','), found end of input"),
             "got {message}"
         );
     }

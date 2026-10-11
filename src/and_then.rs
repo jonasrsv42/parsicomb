@@ -1,3 +1,5 @@
+//! Run a parser built from the previous parser's output
+
 use super::parser::Parser;
 use crate::and::AndError;
 
@@ -11,6 +13,7 @@ pub struct AndThen<P, F> {
 }
 
 impl<P, F> AndThen<P, F> {
+    /// Same as [`and_then`]
     pub fn new(parser: P, next: F) -> Self {
         AndThen { parser, next }
     }
@@ -71,7 +74,7 @@ mod tests {
             .map(|hashes| hashes.len())
             .and_then(|n| {
                 is_byte(b'x')
-                    .and_then(move |_| ntimes(n, is_byte(b'#')))
+                    .and_then(move |_| ntimes(is_byte(b'#'), n))
                     .map(move |_| n)
             })
     }

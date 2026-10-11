@@ -1,3 +1,5 @@
+//! [`AtomicCursor`]: a cursor over a slice of elements
+
 use crate::atomic::Atomic;
 use crate::cursor::Cursor;
 use crate::error::Expected;
@@ -8,11 +10,22 @@ use std::borrow::Cow;
 /// Cursor over a slice of atomic elements (bytes, tokens, ...)
 #[derive(Debug, Copy, Clone)]
 pub enum AtomicCursor<'code, T: Atomic> {
-    Valid { data: &'code [T], position: usize },
-    EndOfFile { data: &'code [T] },
+    /// At element `position` of `data`
+    Valid {
+        /// The full input
+        data: &'code [T],
+        /// Index of the current element, `< data.len()`
+        position: usize,
+    },
+    /// Past the last element of `data`
+    EndOfFile {
+        /// The full input
+        data: &'code [T],
+    },
 }
 
 impl<'code, T: Atomic> AtomicCursor<'code, T> {
+    /// Create a cursor at the start of `data`
     pub fn new(data: &'code [T]) -> Self {
         if data.is_empty() {
             return AtomicCursor::EndOfFile { data };
@@ -47,7 +60,7 @@ impl<'code, T: Atomic + 'code> Cursor for AtomicCursor<'code, T> {
     fn value(&self) -> Result<Self::Element, Self::Error> {
         match self {
             AtomicCursor::Valid { data, position } => Ok(data[*position]),
-            AtomicCursor::EndOfFile { .. } => Err(ParsicombError::CannotReadValueAtEof(self.loc())),
+            AtomicCursor::EndOfFile { .. } => Err(ParsicombError::EndOfInput(self.loc())),
         }
     }
 
@@ -64,21 +77,6 @@ impl<'code, T: Atomic + 'code> Cursor for AtomicCursor<'code, T> {
                 }
             }
             AtomicCursor::EndOfFile { data } => AtomicCursor::EndOfFile { data },
-        }
-    }
-
-    fn try_next(self) -> Result<Self, Self::Error> {
-        match self {
-            AtomicCursor::Valid { .. } => {
-                let next = self.next();
-                match next {
-                    AtomicCursor::Valid { .. } => Ok(next),
-                    AtomicCursor::EndOfFile { .. } => {
-                        Err(ParsicombError::UnexpectedEndOfFile(next.loc()))
-                    }
-                }
-            }
-            AtomicCursor::EndOfFile { .. } => Err(ParsicombError::AlreadyAtEndOfFile(self.loc())),
         }
     }
 
@@ -118,6 +116,10 @@ impl<'code, T: Atomic + 'code> Cursor for AtomicCursor<'code, T> {
     }
 
     fn span_to(&self, end: Self) -> Self::Span {
+        debug_assert!(
+            std::ptr::eq(self.source(), end.source()),
+            "span_to between cursors on different inputs"
+        );
         Span::new(self.source(), self.position(), end.position())
     }
 }
@@ -160,26 +162,17 @@ mod tests {
     }
 
     #[test]
-    fn test_try_next_success_u8() {
+    fn test_next_u8() {
         let data = b"abc";
         let cursor: AtomicCursor<u8> = AtomicCursor::new(data);
 
         assert_eq!(cursor.value().unwrap(), b'a');
 
-        let cursor = cursor.try_next().unwrap();
+        let cursor = cursor.next();
         assert_eq!(cursor.value().unwrap(), b'b');
 
-        let cursor = cursor.try_next().unwrap();
+        let cursor = cursor.next();
         assert_eq!(cursor.value().unwrap(), b'c');
-    }
-
-    #[test]
-    fn test_try_next_eof_error_u8() {
-        let data = b"x";
-        let cursor: AtomicCursor<u8> = AtomicCursor::new(data);
-
-        let result = cursor.try_next();
-        assert!(result.is_err());
     }
 
     #[test]
@@ -190,7 +183,7 @@ mod tests {
         let saved_at_a = cursor;
         let also_at_a = cursor;
 
-        let cursor = cursor.try_next().unwrap();
+        let cursor = cursor.next();
         assert_eq!(cursor.value().unwrap(), b'b');
 
         assert_eq!(saved_at_a.value().unwrap(), b'a');
@@ -198,16 +191,16 @@ mod tests {
 
         let saved_at_b = cursor;
 
-        let cursor = cursor.try_next().unwrap();
+        let cursor = cursor.next();
         assert_eq!(cursor.value().unwrap(), b'c');
 
         assert_eq!(saved_at_a.value().unwrap(), b'a');
         assert_eq!(saved_at_b.value().unwrap(), b'b');
 
-        let from_a = saved_at_a.try_next().unwrap();
+        let from_a = saved_at_a.next();
         assert_eq!(from_a.value().unwrap(), b'b');
 
-        let from_b = saved_at_b.try_next().unwrap();
+        let from_b = saved_at_b.next();
         assert_eq!(from_b.value().unwrap(), b'c');
     }
 
@@ -250,30 +243,17 @@ mod tests {
     }
 
     #[test]
-    fn test_try_next_success_u32() {
+    fn test_next_u32() {
         let data = [100u32, 200, 300];
         let cursor: AtomicCursor<u32> = AtomicCursor::new(&data);
 
         assert_eq!(cursor.value().unwrap(), 100);
 
-        let cursor = cursor.try_next().unwrap();
+        let cursor = cursor.next();
         assert_eq!(cursor.value().unwrap(), 200);
 
-        let cursor = cursor.try_next().unwrap();
+        let cursor = cursor.next();
         assert_eq!(cursor.value().unwrap(), 300);
-    }
-
-    #[test]
-    fn test_try_next_eof_error_u32() {
-        let data = [42u32];
-        let cursor: AtomicCursor<u32> = AtomicCursor::new(&data);
-
-        let result = cursor.try_next();
-        assert!(result.is_err());
-        match result {
-            Err(ParsicombError::UnexpectedEndOfFile(_)) => {}
-            _ => panic!("Expected UnexpectedEndOfFile error"),
-        }
     }
 
     #[test]
@@ -284,7 +264,7 @@ mod tests {
         let saved_at_5 = cursor;
         let also_at_5 = cursor;
 
-        let cursor = cursor.try_next().unwrap();
+        let cursor = cursor.next();
         assert_eq!(cursor.value().unwrap(), 10);
 
         assert_eq!(saved_at_5.value().unwrap(), 5);
@@ -292,16 +272,16 @@ mod tests {
 
         let saved_at_10 = cursor;
 
-        let cursor = cursor.try_next().unwrap();
+        let cursor = cursor.next();
         assert_eq!(cursor.value().unwrap(), 15);
 
         assert_eq!(saved_at_5.value().unwrap(), 5);
         assert_eq!(saved_at_10.value().unwrap(), 10);
 
-        let from_5 = saved_at_5.try_next().unwrap();
+        let from_5 = saved_at_5.next();
         assert_eq!(from_5.value().unwrap(), 10);
 
-        let from_10 = saved_at_10.try_next().unwrap();
+        let from_10 = saved_at_10.next();
         assert_eq!(from_10.value().unwrap(), 15);
     }
 

@@ -1,3 +1,5 @@
+//! Literal strings
+
 use crate::ByteCursor;
 use crate::ParsicombError;
 use crate::atomic::{IsSequence, is_sequence};
@@ -8,12 +10,13 @@ use std::borrow::Cow;
 ///
 /// Failures don't allocate for `&'static str`; an owned string is cloned
 /// into each error.
-pub struct IsStringParser<'code> {
+pub struct IsString<'code> {
     expected: Cow<'static, str>,
     bytes: IsSequence<ByteCursor<'code>>,
 }
 
-impl<'code> IsStringParser<'code> {
+impl<'code> IsString<'code> {
+    /// Same as [`is_string`]
     pub fn new(expected: impl Into<Cow<'static, str>>) -> Self {
         let expected = expected.into();
         let bytes: Cow<'static, [u8]> = match &expected {
@@ -28,7 +31,7 @@ impl<'code> IsStringParser<'code> {
     }
 }
 
-impl<'code> Parser for IsStringParser<'code> {
+impl<'code> Parser for IsString<'code> {
     type Cursor = ByteCursor<'code>;
     type Output = Cow<'static, str>;
     type Error = ParsicombError<'code>;
@@ -40,9 +43,9 @@ impl<'code> Parser for IsStringParser<'code> {
     }
 }
 
-/// Convenience function to create an IsStringParser
-pub fn is_string<'code>(expected: impl Into<Cow<'static, str>>) -> IsStringParser<'code> {
-    IsStringParser::new(expected)
+/// Convenience function to create an IsString
+pub fn is_string<'code>(expected: impl Into<Cow<'static, str>>) -> IsString<'code> {
+    IsString::new(expected)
 }
 
 #[cfg(test)]
@@ -250,5 +253,18 @@ mod tests {
         // Should have remaining emoji
         let (next_char, _) = char().parse(remaining_cursor).unwrap();
         assert_eq!(next_char, '🔥');
+    }
+
+    #[test]
+    fn test_mismatch_inside_a_character_shows_the_whole_character() {
+        // `€` is E2 82 AC and `–` is E2 80 93: they differ at the second byte
+        let error = is_string("€")
+            .parse(ByteCursor::new("–x".as_bytes()))
+            .unwrap_err();
+        let message = error.to_string();
+        assert!(
+            message.contains(r#"expected "€", found "–""#),
+            "got {message}"
+        );
     }
 }

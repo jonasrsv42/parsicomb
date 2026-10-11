@@ -1,3 +1,5 @@
+//! Type erasure for parsers with `.boxed()`
+
 use crate::cursor::Cursor;
 use crate::error::ErrorNode;
 use crate::parser::Parser;

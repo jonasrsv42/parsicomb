@@ -1,3 +1,5 @@
+//! Cursor implementations
+
 pub mod atomic;
 pub mod byte;
 

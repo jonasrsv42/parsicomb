@@ -1,56 +1,23 @@
+//! Sequencing: `a.and(b)` runs `a` then `b`
+
 use super::parser::Parser;
-use crate::error::{ErrorLeaf, ErrorNode};
-use std::fmt;
 
-/// Error type for And parser, holding the error of whichever parser failed
-#[derive(Debug)]
-pub enum AndError<Err1, Err2> {
-    /// Error from the first parser
-    FirstParser(Err1),
-    /// Error from the second parser
-    SecondParser(Err2),
-}
+use crate::error::composite_error;
 
-/// Displays the most likely underlying error
-impl<Err1, Err2> fmt::Display for AndError<Err1, Err2>
-where
-    Err1: ErrorNode,
-    Err2: ErrorNode<Element = Err1::Element>,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.likely_error())
-    }
-}
-
-impl<Err1, Err2> std::error::Error for AndError<Err1, Err2>
-where
-    Err1: ErrorNode,
-    Err2: ErrorNode<Element = Err1::Element>,
-{
-}
-
-impl<Err1, Err2> ErrorNode for AndError<Err1, Err2>
-where
-    Err1: ErrorNode,
-    Err2: ErrorNode<Element = Err1::Element>,
-{
-    type Element = Err1::Element;
-
-    fn likely_error(&self) -> &dyn ErrorLeaf<Element = Self::Element> {
-        match self {
-            AndError::FirstParser(e) => e.likely_error(),
-            AndError::SecondParser(e) => e.likely_error(),
-        }
+composite_error! {
+    /// Error type for And parser, holding the error of whichever parser failed
+    pub enum AndError<Err1, Err2> {
+        /// Error from the first parser
+        FirstParser(Err1),
+        /// Error from the second parser
+        SecondParser(Err2),
     }
 }
 
 /// Parser combinator that sequences two parsers and returns both results as a tuple
 ///
-/// Note: When chaining multiple `.and()` calls, this produces nested tuples like
-/// `(((a, b), c), d)` rather than flat tuples like `(a, b, c, d)`. This is due
-/// to Rust's lack of variadic generics. While we could use macros to work around
-/// this for specific arities, the nested tuple approach is more general and the
-/// destructuring pattern is explicit about the parsing order.
+/// Chained `.and()` calls nest their outputs: `a.and(b).and(c)` outputs
+/// `((a, b), c)`.
 ///
 /// Example:
 /// ```
@@ -75,6 +42,7 @@ pub struct And<P1, P2> {
 }
 
 impl<P1, P2> And<P1, P2> {
+    /// Same as [`and`]
     pub fn new(parser1: P1, parser2: P2) -> Self {
         And { parser1, parser2 }
     }
@@ -107,6 +75,7 @@ where
 
 /// Extension trait to add .and() method support for parsers
 pub trait AndExt: Parser + Sized {
+    /// Run `other` after `self`, outputting both results as a tuple
     fn and<P>(self, other: P) -> And<Self, P>
     where
         P: Parser<Cursor = Self::Cursor>,

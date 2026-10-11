@@ -1,11 +1,18 @@
+//! Unicode letters and digits
+
 use crate::ByteCursor;
+use crate::ParsicombError;
 use crate::filter::FilterExt;
+use crate::map_err::MapErrExt;
 use crate::parser::Parser;
 use crate::utf8::char::char;
 
-/// Convenience function to create a Unicode alphanumeric parser
-pub fn unicode_alphanumeric<'code>() -> impl Parser<Cursor = ByteCursor<'code>, Output = char> {
-    char().filter(|c| c.is_alphanumeric(), "expected Unicode letter or digit")
+/// Parser that matches one Unicode letter or digit ([`char::is_alphanumeric`])
+pub fn unicode_alphanumeric<'code>()
+-> impl Parser<Cursor = ByteCursor<'code>, Output = char, Error = ParsicombError<'code>> {
+    char()
+        .filter(|c| c.is_alphanumeric(), "a Unicode letter or digit")
+        .map_err(ParsicombError::from)
 }
 
 #[cfg(test)]
@@ -161,7 +168,7 @@ mod tests {
                 result
                     .unwrap_err()
                     .to_string()
-                    .contains("expected Unicode letter or digit"),
+                    .contains("expected a Unicode letter or digit"),
                 "Wrong error message for: {}",
                 input
             );

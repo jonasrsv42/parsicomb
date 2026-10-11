@@ -1,12 +1,18 @@
+//! One or more repetitions, collected into a `Vec`
+
 use super::parser::Parser;
 use crate::cursor::Cursor;
 
 /// Parser combinator that matches one or more occurrences of the given parser
+///
+/// A glob import of this module (`use parsicomb::some::*`) shadows
+/// [`Option::Some`]; import [`some`] by name instead.
 pub struct Some<P> {
     parser: P,
 }
 
 impl<P> Some<P> {
+    /// Same as [`some`]
     pub fn new(parser: P) -> Self {
         Some { parser }
     }
@@ -47,7 +53,7 @@ where
     }
 }
 
-/// Convenience function to create a Some parser
+/// Create a parser for one or more repetitions of `parser`
 pub fn some<P>(parser: P) -> Some<P>
 where
     P: Parser,

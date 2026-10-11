@@ -1,4 +1,7 @@
+//! Parsers over single elements of any [`Atomic`] type
+
 use crate::cursor::Cursor;
+use crate::error::Expected;
 use crate::parser::Parser;
 use std::fmt::{self, Debug, Display};
 use std::marker::PhantomData;
@@ -18,17 +21,24 @@ pub use skip_while::{SkipWhile, SkipWhile1, skip_while, skip_while1};
 ///
 /// Elements are plain values (bytes, tokens, ...) that do not borrow, so
 /// parsers can describe expected elements with `'static` data.
-pub trait Atomic: Copy + Clone + PartialEq + Debug + Display + 'static {
+pub trait Atomic: Copy + PartialEq + Debug + Display + Send + Sync + 'static {
     /// Check if this element represents a newline for this atomic type
+    ///
+    /// Error messages count lines and show the lines around an error with it.
     fn is_newline(&self) -> bool;
 
     /// Format a slice of elements for display in error messages
-    fn format_slice(slice: &[Self]) -> String;
-
-    /// Returns the display width (number of columns) this character takes when rendered
-    /// Default implementation returns 1 for most characters
-    fn display_width(&self) -> usize {
-        1
+    ///
+    /// Defaults to each element's `Display`, separated by spaces.
+    fn format_slice(slice: &[Self]) -> String {
+        let mut text = String::new();
+        for (i, element) in slice.iter().enumerate() {
+            if i > 0 {
+                text.push(' ');
+            }
+            text.push_str(&element.to_string());
+        }
+        text
     }
 
     /// Describe a single element in error messages (the `X` in "expected X")
@@ -36,6 +46,15 @@ pub trait Atomic: Copy + Clone + PartialEq + Debug + Display + 'static {
     /// Defaults to the element's `Display`.
     fn describe(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self)
+    }
+
+    /// How many elements of `code` (from `code[0]`, never empty) make up one
+    /// displayed unit, such as the bytes of a UTF-8 character
+    ///
+    /// Error messages show a whole unit as what was found. Defaults to 1.
+    fn unit_len(code: &[Self]) -> usize {
+        let _ = code;
+        1
     }
 }
 
@@ -46,6 +65,7 @@ pub struct AtomicParser<Cur> {
 }
 
 impl<Cur> AtomicParser<Cur> {
+    /// Same as [`atomic`]
     pub fn new() -> Self {
         Self {
             _cursor: PhantomData,
@@ -65,8 +85,10 @@ impl<Cur: Cursor> Parser for AtomicParser<Cur> {
     type Error = Cur::Error;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
-        let value = cursor.value()?;
-        Ok((value, cursor.next()))
+        match cursor.value() {
+            Ok(value) => Ok((value, cursor.next())),
+            Err(_) => Err(cursor.expected_error(Expected::Label("an element"))),
+        }
     }
 }
 
@@ -84,10 +106,15 @@ impl Atomic for u8 {
         String::from_utf8_lossy(slice).to_string()
     }
 
-    /// UTF-8 continuation bytes are zero-width so a multi-byte character
-    /// occupies a single column (its lead byte).
-    fn display_width(&self) -> usize {
-        if (0x80..0xC0).contains(self) { 0 } else { 1 }
+    /// The bytes of the UTF-8 character at the start of `code`, or 1 if no
+    /// valid character starts there
+    fn unit_len(code: &[Self]) -> usize {
+        let window = &code[..code.len().min(4)];
+        let valid = match std::str::from_utf8(window) {
+            Ok(text) => text,
+            Err(error) => std::str::from_utf8(&window[..error.valid_up_to()]).unwrap_or_default(),
+        };
+        valid.chars().next().map_or(1, char::len_utf8)
     }
 
     /// `byte 0x28 ('(')`, with non-printable bytes escaped (`'\n'`, `'\xff'`)
@@ -107,14 +134,6 @@ mod tests {
     impl Atomic for u32 {
         fn is_newline(&self) -> bool {
             *self == 10 // ASCII newline as u32
-        }
-
-        fn format_slice(slice: &[Self]) -> String {
-            slice
-                .iter()
-                .map(|&x| format!("{}", x))
-                .collect::<Vec<_>>()
-                .join(" ")
         }
     }
 
@@ -153,9 +172,9 @@ mod tests {
         fn value(&self) -> Result<Self::Element, Self::Error> {
             match self {
                 U32Cursor::Valid { data, position } => Ok(data[*position]),
-                U32Cursor::EndOfFile { data } => Err(ParsicombError::CannotReadValueAtEof(
-                    CodeLoc::new(data, data.len()),
-                )),
+                U32Cursor::EndOfFile { data } => {
+                    Err(ParsicombError::EndOfInput(CodeLoc::new(data, data.len())))
+                }
             }
         }
 
@@ -172,23 +191,6 @@ mod tests {
                     }
                 }
                 U32Cursor::EndOfFile { data } => U32Cursor::EndOfFile { data },
-            }
-        }
-
-        fn try_next(self) -> Result<Self, Self::Error> {
-            match self {
-                U32Cursor::Valid { .. } => {
-                    let next = self.next();
-                    match next {
-                        U32Cursor::Valid { .. } => Ok(next),
-                        U32Cursor::EndOfFile { data } => Err(ParsicombError::UnexpectedEndOfFile(
-                            CodeLoc::new(data, data.len()),
-                        )),
-                    }
-                }
-                U32Cursor::EndOfFile { data } => Err(ParsicombError::AlreadyAtEndOfFile(
-                    CodeLoc::new(data, data.len()),
-                )),
             }
         }
 
@@ -244,7 +246,7 @@ mod tests {
         let cursor = ByteCursor::new(data);
         let parser: AtomicParser<ByteCursor> = atomic();
 
-        let many_parser = many(parser.filter(|&b| b == b'a', "expected 'a'"));
+        let many_parser = many(parser.filter(|&b| b == b'a', "'a'"));
         let (results, _) = many_parser.parse(cursor).unwrap();
         assert_eq!(results, vec![b'a', b'a', b'a']);
     }
@@ -255,7 +257,7 @@ mod tests {
         let cursor = U32Cursor::new(&data);
         let parser: AtomicParser<U32Cursor> = atomic();
 
-        let many_parser = many(parser.filter(|&x| x == 5, "expected 5"));
+        let many_parser = many(parser.filter(|&x| x == 5, "5"));
         let (results, _) = many_parser.parse(cursor).unwrap();
         assert_eq!(results, vec![5u32, 5u32, 5u32]);
     }
@@ -266,7 +268,7 @@ mod tests {
         let cursor = ByteCursor::new(data);
         let parser: AtomicParser<ByteCursor> = atomic();
 
-        let filtered = parser.filter(|&b| b.is_ascii_uppercase(), "expected uppercase");
+        let filtered = parser.filter(|&b| b.is_ascii_uppercase(), "uppercase");
         let (result, _) = filtered.parse(cursor).unwrap();
         assert_eq!(result, b'A');
     }
@@ -277,7 +279,7 @@ mod tests {
         let cursor = U32Cursor::new(&data);
         let parser: AtomicParser<U32Cursor> = atomic();
 
-        let filtered = parser.filter(|&x| x > 40, "expected > 40");
+        let filtered = parser.filter(|&x| x > 40, "> 40");
         let (result, _) = filtered.parse(cursor).unwrap();
         assert_eq!(result, 42u32);
     }
@@ -288,7 +290,7 @@ mod tests {
         let cursor = U32Cursor::new(&data);
         let parser: AtomicParser<U32Cursor> = atomic();
 
-        let filtered = parser.filter(|&x| x > 40, "expected > 40");
+        let filtered = parser.filter(|&x| x > 40, "> 40");
         let result = filtered.parse(cursor);
         assert!(result.is_err());
     }
@@ -299,7 +301,7 @@ mod tests {
         let cursor = U32Cursor::new(&data);
         let parser: AtomicParser<U32Cursor> = atomic();
 
-        let filtered = parser.filter(|&x| x < 50, "expected value < 50");
+        let filtered = parser.filter(|&x| x < 50, "value < 50");
         let result = filtered.parse(cursor);
 
         assert!(result.is_err());

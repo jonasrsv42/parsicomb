@@ -1,5 +1,8 @@
+//! Byte parsers: the [`atomic`](mod@crate::atomic) parsers for `u8` input
+
+use crate::atomic::AtomicParser;
 use crate::atomic::{AtomicBetween, IsAtomic, atomic_between, is_atomic};
-use crate::{AtomicParser, ByteCursor, atomic};
+use crate::{ByteCursor, atomic};
 
 /// Parser that consumes and returns a single byte
 pub type ByteParser<'code> = AtomicParser<ByteCursor<'code>>;

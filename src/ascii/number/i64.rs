@@ -1,41 +1,29 @@
+//! Signed ASCII integers
+
 use super::sign;
 use super::u64::u64;
 use crate::ByteCursor;
 use crate::ParsicombError;
 use crate::cursor::Cursor;
-use crate::map_err::MapErrExt;
 use crate::optional::optional;
 use crate::parser::Parser;
-use std::marker::PhantomData;
+use crate::parser_fn::parser_fn;
 
 /// Parser that matches ASCII integer numbers (positive or negative)
+///
+/// Fails at the start of the number (its sign, if any) if it does not fit in
+/// an i64, except that a magnitude too large for a u64 is reported by
+/// [`u64`](super::u64()) at its first digit.
 pub fn i64<'code>()
 -> impl Parser<Cursor = ByteCursor<'code>, Output = i64, Error = ParsicombError<'code>> {
-    IntParser {
-        _input: PhantomData,
-    }
-}
-
-struct IntParser<'code> {
-    _input: PhantomData<&'code [u8]>,
-}
-
-impl<'code> Parser for IntParser<'code> {
-    type Cursor = ByteCursor<'code>;
-    type Output = i64;
-    type Error = ParsicombError<'code>;
-
-    fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
-        // `optional` never fails, so the wrap is never applied
-        let (sign, cursor) = optional(sign())
-            .map_err(ParsicombError::wrap)
-            .parse(cursor)?;
+    parser_fn(|start: ByteCursor<'code>| {
+        let (sign, cursor) = optional(sign()).parse(start)?;
         let (value, cursor) = u64().parse(cursor)?;
 
         let signed_value = if sign == Some(b'-') {
             if value > i64::MAX as u64 + 1 {
                 return Err(
-                    cursor.syntax_error(format!("negative number too large: -{}", value).into())
+                    start.syntax_error(format!("negative number too large: -{}", value).into())
                 );
             }
             // Wrapping is exact here: value <= 2^63, and 2^63 wraps to i64::MIN
@@ -43,14 +31,14 @@ impl<'code> Parser for IntParser<'code> {
         } else {
             if value > i64::MAX as u64 {
                 return Err(
-                    cursor.syntax_error(format!("positive number too large: {}", value).into())
+                    start.syntax_error(format!("positive number too large: {}", value).into())
                 );
             }
             value as i64
         };
 
         Ok((signed_value, cursor))
-    }
+    })
 }
 
 #[cfg(test)]

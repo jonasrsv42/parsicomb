@@ -1,3 +1,5 @@
+//! The [`Cursor`] trait: a position in the input
+
 use crate::atomic::Atomic;
 use crate::error::{ErrorNode, Expected};
 use std::borrow::Cow;
@@ -35,10 +37,6 @@ pub trait Cursor: Copy {
     /// If already at the end, returns a cursor still positioned at the end
     fn next(self) -> Self;
 
-    /// Advance the cursor, returning an error if the result would be at the
-    /// end of the sequence or if the cursor is already there
-    fn try_next(self) -> Result<Self, Self::Error>;
-
     /// Advance the cursor by `n` elements, stopping at the end of the sequence
     fn advance(self, n: usize) -> Self {
         (0..n).fold(self, |cursor, _| cursor.next())
@@ -59,6 +57,11 @@ pub trait Cursor: Copy {
 
     /// Create an error located at this cursor for a leaf parser that found
     /// something other than `expected`
+    ///
+    /// The error's [`likely_error`](crate::ErrorNode::likely_error) must
+    /// report [`is_expectation`](crate::ErrorLeaf::is_expectation) as true, so
+    /// that `label`, `filter` and `or` can tell it apart from errors that
+    /// describe a real problem.
     fn expected_error(&self, expected: Expected<Self::Element>) -> Self::Error;
 
     /// The span of input from this cursor up to (not including) `end`

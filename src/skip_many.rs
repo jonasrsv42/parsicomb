@@ -1,3 +1,5 @@
+//! Zero or more repetitions without collecting outputs
+
 use super::parser::Parser;
 use crate::cursor::Cursor;
 
@@ -11,6 +13,7 @@ pub struct SkipMany<P> {
 }
 
 impl<P> SkipMany<P> {
+    /// Same as [`skip_many`]
     pub fn new(parser: P) -> Self {
         SkipMany { parser }
     }
@@ -19,7 +22,7 @@ impl<P> SkipMany<P> {
 impl<P: Parser> Parser for SkipMany<P> {
     type Cursor = P::Cursor;
     type Output = ();
-    type Error = P::Error;
+    type Error = <P::Cursor as Cursor>::Error;
 
     fn parse(&self, mut cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         while let Ok((_, next_cursor)) = self.parser.parse(cursor) {

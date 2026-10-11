@@ -1,14 +1,18 @@
+//! ASCII whitespace
+
 use crate::ByteCursor;
-use crate::byte::is_byte;
-use crate::or::OrExt;
+use crate::ParsicombError;
+use crate::byte::byte;
+use crate::filter::FilterExt;
+use crate::map_err::MapErrExt;
 use crate::parser::Parser;
 
 /// Parser that matches a single ASCII whitespace character (space, tab, newline, carriage return)
-pub fn whitespace<'code>() -> impl Parser<Cursor = ByteCursor<'code>, Output = u8> {
-    is_byte(b' ')
-        .or(is_byte(b'\t'))
-        .or(is_byte(b'\n'))
-        .or(is_byte(b'\r'))
+pub fn whitespace<'code>()
+-> impl Parser<Cursor = ByteCursor<'code>, Output = u8, Error = ParsicombError<'code>> {
+    byte()
+        .filter(|b| matches!(b, b' ' | b'\t' | b'\n' | b'\r'), "whitespace")
+        .map_err(ParsicombError::from)
 }
 
 #[cfg(test)]
@@ -70,7 +74,12 @@ mod tests {
 
         let result = parser.parse(cursor);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("expected byte"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("expected whitespace, found byte 0x61 ('a')")
+        );
     }
 
     #[test]

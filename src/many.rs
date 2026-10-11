@@ -1,3 +1,5 @@
+//! Zero or more repetitions, collected into a `Vec`
+
 use super::parser::Parser;
 use crate::cursor::Cursor;
 
@@ -7,6 +9,7 @@ pub struct Many<P> {
 }
 
 impl<P> Many<P> {
+    /// Same as [`many`]
     pub fn new(parser: P) -> Self {
         Many { parser }
     }
@@ -18,7 +21,7 @@ where
 {
     type Cursor = P::Cursor;
     type Output = Vec<P::Output>;
-    type Error = P::Error;
+    type Error = <P::Cursor as Cursor>::Error;
 
     fn parse(&self, mut cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let mut results = Vec::new();

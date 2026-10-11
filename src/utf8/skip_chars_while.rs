@@ -1,3 +1,5 @@
+//! Skip runs of characters matching a predicate
+
 use crate::ByteCursor;
 use crate::ParsicombError;
 use crate::cursor::Cursor;
@@ -62,7 +64,7 @@ pub fn skip_chars_while<'code, F: Fn(char) -> bool>(pred: F) -> SkipCharsWhile<'
 
 /// Parser that skips one or more UTF-8 characters matching a predicate
 ///
-/// Fails with "expected `<label>`, found ..." when the first character
+/// Fails with `expected <label>, found …` when the first character
 /// doesn't match.
 pub struct SkipCharsWhile1<'code, F> {
     pred: F,

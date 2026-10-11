@@ -1,8 +1,15 @@
+//! ASCII numbers
+
 use crate::ByteCursor;
+use crate::ParsicombError;
+use crate::and::AndExt;
 use crate::byte::is_byte;
 use crate::map::MapExt;
+use crate::optional::optional;
 use crate::or::OrExt;
 use crate::parser::Parser;
+use crate::parser_fn::parser_fn;
+use crate::skip_some::skip_some;
 
 pub mod digit;
 pub mod f64;
@@ -17,13 +24,27 @@ pub use u64::u64;
 /// A parsed number literal
 #[derive(Debug, PartialEq)]
 pub enum Number {
+    /// An integer, from [`i64()`]
     I64(i64),
+    /// A number with a fraction, from [`f64()`]
     F64(f64),
 }
 
-/// Parser that matches either an integer or a float and returns a Number enum
-pub fn number<'code>() -> impl Parser<Cursor = ByteCursor<'code>, Output = Number> {
-    f64().map(Number::F64).or(i64().map(Number::I64))
+/// Parser that matches an integer or a float and returns a [`Number`]
+///
+/// A number is a float when its digits are followed by `.` and a digit, and
+/// an integer otherwise; it then fails as [`f64()`] or [`i64()`] would, e.g. with
+/// "number too large" for an integer that does not fit in an i64.
+pub fn number<'code>()
+-> impl Parser<Cursor = ByteCursor<'code>, Output = Number, Error = ParsicombError<'code>> {
+    parser_fn(|start: ByteCursor<'code>| {
+        let (_, integer_end) = optional(sign()).and(skip_some(digit())).parse(start)?;
+        if is_byte(b'.').and(digit()).parse(integer_end).is_ok() {
+            f64().map(Number::F64).parse(start)
+        } else {
+            i64().map(Number::I64).parse(start)
+        }
+    })
 }
 
 /// Parser for a leading `-` or `+` sign
@@ -91,5 +112,27 @@ mod tests {
             Number::F64(_) => panic!("Expected int, got float"),
         }
         assert_eq!(cursor.value().unwrap(), b'x');
+    }
+
+    #[test]
+    fn test_number_integer_overflow_says_too_large() {
+        for input in [
+            &b"99999999999999999999999"[..],
+            b"-99999999999999999999999",
+            b"9223372036854775808",
+        ] {
+            let message = number()
+                .parse(ByteCursor::new(input))
+                .unwrap_err()
+                .to_string();
+            assert!(message.contains("too large"), "got {message}");
+        }
+    }
+
+    #[test]
+    fn test_number_dot_without_fraction_is_an_integer() {
+        let (num, cursor) = number().parse(ByteCursor::new(b"1.x")).unwrap();
+        assert_eq!(num, Number::I64(1));
+        assert_eq!(cursor.position(), 1);
     }
 }

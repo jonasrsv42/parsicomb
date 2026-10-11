@@ -1,51 +1,51 @@
+//! Alternatives: `a.or(b)` tries `b` if `a` fails
+
 use super::parser::Parser;
-use crate::error::{ErrorLeaf, ErrorNode};
-use std::fmt;
+use crate::error::ErrorNode;
+use std::cmp::Ordering;
 
-/// Error type for Or parser, holding the errors of both alternatives
-#[derive(Debug)]
-pub enum OrError<Err1, Err2> {
-    /// Both parsers failed
-    BothFailed { first: Err1, second: Err2 },
-}
+use crate::error::composite_error;
 
-/// Displays the alternative that got furthest into the input
-impl<Err1, Err2> fmt::Display for OrError<Err1, Err2>
-where
-    Err1: ErrorNode,
-    Err2: ErrorNode<Element = Err1::Element>,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.likely_error())
+composite_error! {
+    /// Error type for Or parser: the error of whichever alternative got furthest
+    /// into the input
+    ///
+    /// Only the furthest error is kept, so the error of a long `.or()` chain is
+    /// no larger than its largest alternative's.
+    pub enum OrError<Err1, Err2> {
+        /// The first alternative got furthest (or both got equally far, see
+        /// [`OrError::furthest`])
+        First(Err1),
+        /// The second alternative got furthest
+        Second(Err2),
     }
 }
 
-impl<Err1, Err2> std::error::Error for OrError<Err1, Err2>
+impl<Err1, Err2> OrError<Err1, Err2>
 where
     Err1: ErrorNode,
     Err2: ErrorNode<Element = Err1::Element>,
 {
-}
-
-impl<Err1, Err2> ErrorNode for OrError<Err1, Err2>
-where
-    Err1: ErrorNode,
-    Err2: ErrorNode<Element = Err1::Element>,
-{
-    type Element = Err1::Element;
-
-    fn likely_error(&self) -> &dyn ErrorLeaf<Element = Self::Element> {
-        match self {
-            OrError::BothFailed { first, second } => {
-                let first = first.likely_error();
-                let second = second.likely_error();
-
-                if first.loc().position() >= second.loc().position() {
-                    first
-                } else {
-                    second
-                }
-            }
+    /// Keep the error that got furthest
+    ///
+    /// On a tie `first` is kept, unless it only says what was expected and
+    /// `second` describes a real problem (see [`ErrorLeaf::is_expectation`]),
+    /// such as an overflowing number.
+    ///
+    /// [`ErrorLeaf::is_expectation`]: crate::ErrorLeaf::is_expectation
+    pub fn furthest(first: Err1, second: Err2) -> Self {
+        let first_rank = first.rank();
+        let second_rank = second.rank();
+        let second_is_more_informative = first_rank.is_expectation && !second_rank.is_expectation;
+        let keep_first = match first_rank.position.cmp(&second_rank.position) {
+            Ordering::Greater => true,
+            Ordering::Equal => !second_is_more_informative,
+            Ordering::Less => false,
+        };
+        if keep_first {
+            OrError::First(first)
+        } else {
+            OrError::Second(second)
         }
     }
 }
@@ -57,6 +57,7 @@ pub struct Or<P1, P2> {
 }
 
 impl<P1, P2> Or<P1, P2> {
+    /// Same as [`or`]
     pub fn new(parser1: P1, parser2: P2) -> Self {
         Or { parser1, parser2 }
     }
@@ -76,7 +77,7 @@ where
             Ok(result) => Ok(result),
             Err(first) => match self.parser2.parse(cursor) {
                 Ok(result) => Ok(result),
-                Err(second) => Err(OrError::BothFailed { first, second }),
+                Err(second) => Err(OrError::furthest(first, second)),
             },
         }
     }
@@ -84,6 +85,7 @@ where
 
 /// Extension trait to add .or() method support for parsers
 pub trait OrExt: Parser + Sized {
+    /// Try `other` if `self` fails; the error is the alternative that got furthest
     fn or<P>(self, other: P) -> Or<Self, P>
     where
         P: Parser<Cursor = Self::Cursor, Output = Self::Output>,
@@ -200,10 +202,7 @@ mod tests {
             loc: CodeLoc::new(data, 2), // position 2 (further)
         };
 
-        let or_error = OrError::BothFailed {
-            first: error1,
-            second: error2,
-        };
+        let or_error = OrError::furthest(error1, error2);
         let furthest = or_error.likely_error();
 
         assert_eq!(furthest.loc().position(), 2);
@@ -222,10 +221,7 @@ mod tests {
             loc: CodeLoc::new(data, 1), // position 1
         };
 
-        let or_error = OrError::BothFailed {
-            first: error1,
-            second: error2,
-        };
+        let or_error = OrError::furthest(error1, error2);
         let furthest = or_error.likely_error();
 
         assert_eq!(furthest.loc().position(), 3);
@@ -251,14 +247,8 @@ mod tests {
         };
 
         // Build the nested structure
-        let inner_or = OrError::BothFailed {
-            first: error1,
-            second: error2,
-        };
-        let outer_or = OrError::BothFailed {
-            first: inner_or,
-            second: error3,
-        };
+        let inner_or = OrError::furthest(error1, error2);
+        let outer_or = OrError::furthest(inner_or, error3);
 
         // likely_error() recurses through the nested OrErrors
         let furthest = outer_or.likely_error();
@@ -311,13 +301,13 @@ mod tests {
         // Structure: Or<Filter<And<byte, byte>>, Filter<And<And<byte, byte>, byte>>>
         let branch1 = is_byte(b'h')
             .and(is_byte(b'X')) // fails at pos 1
-            .filter(|(_, b)| *b == b'e', "expected 'e' as second byte")
+            .filter(|(_, b)| *b == b'e', "'e' as second byte")
             .map(|(a, _)| a);
 
         let branch2 = is_byte(b'h')
             .and(is_byte(b'e'))
             .and(is_byte(b'Z')) // fails at pos 2
-            .filter(|((_, _), c)| *c == b'l', "expected 'l' as third byte")
+            .filter(|((_, _), c)| *c == b'l', "'l' as third byte")
             .map(|((a, _), _)| a);
 
         let parser = branch1.or(branch2);
@@ -336,5 +326,26 @@ mod tests {
             2,
             "likely_error() should traverse complex Or<Filter<And<...>>> structures"
         );
+    }
+
+    #[test]
+    fn test_tie_keeps_a_real_problem_over_an_expectation() {
+        use crate::ascii::u64;
+        use crate::label::LabelExt;
+        use crate::utf8::string::is_string;
+
+        let parser = is_string("null").map(|_| 0).or(u64()).label("a value");
+        let message = parser
+            .parse(ByteCursor::new(b"99999999999999999999999"))
+            .unwrap_err()
+            .to_string();
+        assert!(message.contains("number too large"), "got {message}");
+    }
+
+    #[test]
+    fn test_tie_between_expectations_keeps_first() {
+        let parser = is_byte(b'a').or(is_byte(b'b'));
+        let message = parser.parse(ByteCursor::new(b"x")).unwrap_err().to_string();
+        assert!(message.contains("expected byte 0x61"), "got {message}");
     }
 }

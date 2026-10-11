@@ -1,44 +1,18 @@
+//! Repeat a parser up to the end of the input
+
 use super::cursor::Cursor;
 use super::parser::Parser;
-use crate::error::{ErrorLeaf, ErrorNode};
-use std::fmt;
 
-/// Error type for the All parser
-#[derive(Debug)]
-pub enum AllError<PErr, CurErr> {
-    /// Error from the child parser
-    ParserError(PErr),
-    /// The child parser succeeded without consuming input before end-of-stream,
-    /// so repeating it would never terminate
-    NoProgress(CurErr),
-}
+use crate::error::composite_error;
 
-impl<PErr: fmt::Display, CurErr: fmt::Display> fmt::Display for AllError<PErr, CurErr> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            AllError::ParserError(e) => write!(f, "{}", e),
-            AllError::NoProgress(e) => write!(f, "{}", e),
-        }
-    }
-}
-
-impl<PErr: std::error::Error, CurErr: std::error::Error> std::error::Error
-    for AllError<PErr, CurErr>
-{
-}
-
-impl<PErr, CurErr> ErrorNode for AllError<PErr, CurErr>
-where
-    PErr: ErrorNode,
-    CurErr: ErrorNode<Element = PErr::Element>,
-{
-    type Element = PErr::Element;
-
-    fn likely_error(&self) -> &dyn ErrorLeaf<Element = Self::Element> {
-        match self {
-            AllError::ParserError(e) => e.likely_error(),
-            AllError::NoProgress(e) => e.likely_error(),
-        }
+composite_error! {
+    /// Error type for the All parser
+    pub enum AllError<PErr, CurErr> {
+        /// Error from the child parser
+        ParserError(PErr),
+        /// The child parser succeeded without consuming input before end-of-stream,
+        /// so repeating it would never terminate
+        NoProgress(CurErr),
     }
 }
 
@@ -55,6 +29,7 @@ pub struct All<P> {
 }
 
 impl<P> All<P> {
+    /// Same as [`all`]
     pub fn new(parser: P) -> Self {
         All { parser }
     }

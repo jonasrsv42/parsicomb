@@ -1,53 +1,18 @@
-use crate::error::{ErrorLeaf, ErrorNode};
+//! A parser surrounded by opening and closing delimiters
+
 use crate::parser::Parser;
-use std::fmt;
 
-/// Error type for Between parser that can wrap errors from all constituent parsers
-#[derive(Debug)]
-pub enum BetweenError<ErrOpen, ErrContent, ErrClose> {
-    /// Error from the opening delimiter parser
-    OpenDelimiter(ErrOpen),
-    /// Error from the content parser
-    Content(ErrContent),
-    /// Error from the closing delimiter parser
-    CloseDelimiter(ErrClose),
-}
+use crate::error::composite_error;
 
-/// Displays the most likely underlying error
-impl<ErrOpen, ErrContent, ErrClose> fmt::Display for BetweenError<ErrOpen, ErrContent, ErrClose>
-where
-    ErrOpen: ErrorNode,
-    ErrContent: ErrorNode<Element = ErrOpen::Element>,
-    ErrClose: ErrorNode<Element = ErrOpen::Element>,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.likely_error())
-    }
-}
-
-impl<ErrOpen, ErrContent, ErrClose> std::error::Error
-    for BetweenError<ErrOpen, ErrContent, ErrClose>
-where
-    ErrOpen: ErrorNode,
-    ErrContent: ErrorNode<Element = ErrOpen::Element>,
-    ErrClose: ErrorNode<Element = ErrOpen::Element>,
-{
-}
-
-impl<ErrOpen, ErrContent, ErrClose> ErrorNode for BetweenError<ErrOpen, ErrContent, ErrClose>
-where
-    ErrOpen: ErrorNode,
-    ErrContent: ErrorNode<Element = ErrOpen::Element>,
-    ErrClose: ErrorNode<Element = ErrOpen::Element>,
-{
-    type Element = ErrOpen::Element;
-
-    fn likely_error(&self) -> &dyn ErrorLeaf<Element = Self::Element> {
-        match self {
-            BetweenError::OpenDelimiter(e) => e.likely_error(),
-            BetweenError::Content(e) => e.likely_error(),
-            BetweenError::CloseDelimiter(e) => e.likely_error(),
-        }
+composite_error! {
+    /// Error type for Between parser that can wrap errors from all constituent parsers
+    pub enum BetweenError<ErrOpen, ErrContent, ErrClose> {
+        /// Error from the opening delimiter parser
+        OpenDelimiter(ErrOpen),
+        /// Error from the content parser
+        Content(ErrContent),
+        /// Error from the closing delimiter parser
+        CloseDelimiter(ErrClose),
     }
 }
 
@@ -68,6 +33,7 @@ pub struct Between<POpen, PContent, PClose> {
 }
 
 impl<POpen, PContent, PClose> Between<POpen, PContent, PClose> {
+    /// Same as [`between`]
     pub fn new(open: POpen, content: PContent, close: PClose) -> Self {
         Between {
             open,

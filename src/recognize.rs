@@ -1,3 +1,5 @@
+//! Output the span a parser matched instead of its output
+
 use super::parser::Parser;
 use crate::cursor::Cursor;
 
@@ -11,6 +13,7 @@ pub struct Recognize<P> {
 }
 
 impl<P> Recognize<P> {
+    /// Same as [`recognize`]
     pub fn new(parser: P) -> Self {
         Recognize { parser }
     }

@@ -1,11 +1,18 @@
+//! Unicode letters
+
 use crate::ByteCursor;
+use crate::ParsicombError;
 use crate::filter::FilterExt;
+use crate::map_err::MapErrExt;
 use crate::parser::Parser;
 use crate::utf8::char::char;
 
-/// Convenience function to create a Unicode letter parser
-pub fn unicode_letter<'code>() -> impl Parser<Cursor = ByteCursor<'code>, Output = char> {
-    char().filter(|c| c.is_alphabetic(), "expected Unicode letter")
+/// Parser that matches one Unicode letter ([`char::is_alphabetic`])
+pub fn unicode_letter<'code>()
+-> impl Parser<Cursor = ByteCursor<'code>, Output = char, Error = ParsicombError<'code>> {
+    char()
+        .filter(|c| c.is_alphabetic(), "a Unicode letter")
+        .map_err(ParsicombError::from)
 }
 
 #[cfg(test)]
@@ -323,7 +330,7 @@ mod tests {
                 result
                     .unwrap_err()
                     .to_string()
-                    .contains("expected Unicode letter"),
+                    .contains("expected a Unicode letter"),
                 "Wrong error message for: {}",
                 input
             );

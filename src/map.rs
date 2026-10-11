@@ -1,3 +1,5 @@
+//! Transform a parser's output
+
 use super::parser::Parser;
 
 /// Parser combinator that transforms the output of a parser using a mapping function
@@ -7,6 +9,7 @@ pub struct Map<P, F> {
 }
 
 impl<P, F> Map<P, F> {
+    /// Same as [`map`]
     pub fn new(parser: P, mapper: F) -> Self {
         Map { parser, mapper }
     }
@@ -39,6 +42,7 @@ where
 
 /// Extension trait to add .map() method support for parsers
 pub trait MapExt: Parser + Sized {
+    /// Transform the output with `mapper`
     fn map<F, Out>(self, mapper: F) -> Map<Self, F>
     where
         F: Fn(Self::Output) -> Out,

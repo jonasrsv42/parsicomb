@@ -1,11 +1,18 @@
+//! Unicode digits
+
 use crate::ByteCursor;
+use crate::ParsicombError;
 use crate::filter::FilterExt;
+use crate::map_err::MapErrExt;
 use crate::parser::Parser;
 use crate::utf8::char::char;
 
-/// Convenience function to create a Unicode digit parser
-pub fn unicode_digit<'code>() -> impl Parser<Cursor = ByteCursor<'code>, Output = char> {
-    char().filter(|c| c.is_numeric(), "expected Unicode digit")
+/// Parser that matches one Unicode numeric character ([`char::is_numeric`])
+pub fn unicode_digit<'code>()
+-> impl Parser<Cursor = ByteCursor<'code>, Output = char, Error = ParsicombError<'code>> {
+    char()
+        .filter(|c| c.is_numeric(), "a Unicode digit")
+        .map_err(ParsicombError::from)
 }
 
 #[cfg(test)]
@@ -72,7 +79,7 @@ mod tests {
                 result
                     .unwrap_err()
                     .to_string()
-                    .contains("expected Unicode digit"),
+                    .contains("expected a Unicode digit"),
                 "Wrong error message for: {}",
                 input
             );

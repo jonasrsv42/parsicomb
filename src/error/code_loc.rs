@@ -11,10 +11,12 @@ pub struct CodeLoc<'code, T: Atomic = u8> {
 }
 
 impl<'code, T: Atomic> CodeLoc<'code, T> {
+    /// A location at index `loc` of `code`
     pub fn new(code: &'code [T], loc: usize) -> Self {
         Self { code, loc }
     }
 
+    /// Index into the input
     pub fn position(&self) -> usize {
         self.loc
     }
@@ -34,37 +36,42 @@ impl<'code, T: Atomic> CodeLoc<'code, T> {
         super::render::readable_position(self.code, self.loc)
     }
 
-    /// Get lines of context around the error position.
-    ///
-    /// Returns up to 2 lines before and after the error line. Only a bounded
-    /// window around the error is materialized, so this stays cheap even when
-    /// `code` is a large binary buffer. See [`super::render`].
-    fn context_lines(&self) -> Vec<String> {
-        super::render::context_lines(self.code, self.loc)
-    }
-
     /// Write the location as `line L, column C (offset N)`, or just `offset N`
-    /// when the line is too far in to resolve.
+    /// when the line is too far in to resolve, and return the resolved
+    /// position for [`write_context`](Self::write_context).
     ///
-    /// `column` is in display widths of the rendered line (it matches the
-    /// `^--- here` pointer); `offset` is the absolute index into the input
-    /// (bytes for a byte cursor, elements for any other cursor).
-    pub(super) fn write_location(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.readable_position() {
+    /// `column` counts characters of the rendered line from its start (it
+    /// matches the `^--- here` pointer unless the snippet had to cut a very
+    /// long line); `offset` is the absolute index into the input (bytes for a
+    /// byte cursor, elements for any other cursor).
+    pub(super) fn write_location(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> Result<Option<ReadablePosition>, fmt::Error> {
+        let position = self.readable_position();
+        match position {
             Some(pos) => write!(
                 f,
                 "line {}, column {} (offset {})",
                 pos.line, pos.column, self.loc
-            ),
-            None => write!(f, "offset {}", self.loc),
+            )?,
+            None => write!(f, "offset {}", self.loc)?,
         }
+        Ok(position)
     }
 
-    /// Write the blank separator line and the context snippet
-    pub(super) fn write_context(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    /// Write the blank separator line and the context snippet around the
+    /// position [`write_location`](Self::write_location) resolved
+    pub(super) fn write_context(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+        position: Option<ReadablePosition>,
+    ) -> fmt::Result {
         writeln!(f)?;
-        for line in self.context_lines() {
-            writeln!(f, "{}", line)?;
+        if let Some(pos) = position {
+            for line in super::render::context_lines_at(self.code, self.loc, pos) {
+                writeln!(f, "{}", line)?;
+            }
         }
         Ok(())
     }
@@ -90,7 +97,7 @@ mod tests {
         let loc = CodeLoc::new(data, 11); // Position 11 = past end
 
         // Should not panic when generating context lines
-        let context = loc.context_lines();
+        let context = super::super::render::context_lines(loc.code(), loc.position());
         assert!(!context.is_empty());
 
         // Should contain the line content
@@ -103,7 +110,7 @@ mod tests {
         let loc = CodeLoc::new(data, 0);
 
         // Should not panic even with empty data
-        let _context = loc.context_lines();
+        let _context = super::super::render::context_lines(loc.code(), loc.position());
         // May be empty or contain minimal context, but shouldn't panic
     }
 }

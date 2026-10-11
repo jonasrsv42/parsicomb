@@ -1,66 +1,41 @@
+//! Reject parser outputs that fail a predicate
+
 use crate::Cursor;
-use crate::error::{ErrorLeaf, ErrorNode};
+use crate::error::Expected;
+use crate::label::{LabelError, relabel};
 use crate::parser::Parser;
-use std::borrow::Cow;
-use std::fmt;
 
-/// Error type for filter parser that can wrap either the child parser's error
-/// or a filter-specific error
-#[derive(Debug)]
-pub enum FilterError<PErr, CurErr> {
-    /// Error from the child parser
-    ParserError(PErr),
-    /// Filter predicate failed
-    FilterFailed(CurErr),
-}
+/// Error type for [`Filter`]: [`LabelError::Labeled`] when the predicate
+/// rejects the output or the inner parser fails with an expectation at the
+/// start, [`LabelError::Inner`] for other inner errors
+pub type FilterError<PErr, CurErr> = LabelError<PErr, CurErr>;
 
-impl<PErr: fmt::Display, CurErr: fmt::Display> fmt::Display for FilterError<PErr, CurErr> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            FilterError::ParserError(e) => write!(f, "{}", e),
-            FilterError::FilterFailed(e) => write!(f, "{}", e),
-        }
-    }
-}
-
-impl<PErr: std::error::Error, CurErr: std::error::Error> std::error::Error
-    for FilterError<PErr, CurErr>
-{
-}
-
-impl<PErr, CurErr> ErrorNode for FilterError<PErr, CurErr>
-where
-    PErr: ErrorNode,
-    CurErr: ErrorNode<Element = PErr::Element>,
-{
-    type Element = PErr::Element;
-
-    fn likely_error(&self) -> &dyn ErrorLeaf<Element = Self::Element> {
-        match self {
-            FilterError::ParserError(e) => e.likely_error(),
-            FilterError::FilterFailed(e) => e.likely_error(),
-        }
-    }
-}
-
-/// Parser that applies a predicate function to filter the output of another parser
-pub struct FilterParser<P, F> {
+/// Parser combinator whose output must satisfy a predicate, described by a
+/// label
+///
+/// Fails with `expected <label>, found …` at its start when the predicate
+/// rejects the output, or when the inner parser fails at its start with an
+/// expectation (as [`Label`](crate::label::Label) does). Other inner errors,
+/// such as invalid UTF-8 under `char()`, are kept. When filters are chained,
+/// the outermost label is the one reported.
+pub struct Filter<P, F> {
     parser: P,
     predicate: F,
-    error_message: Cow<'static, str>,
+    label: &'static str,
 }
 
-impl<P, F> FilterParser<P, F> {
-    pub fn new(parser: P, predicate: F, error_message: Cow<'static, str>) -> Self {
-        Self {
+impl<P, F> Filter<P, F> {
+    /// Same as [`filter`]
+    pub fn new(parser: P, predicate: F, label: &'static str) -> Self {
+        Filter {
             parser,
             predicate,
-            error_message,
+            label,
         }
     }
 }
 
-impl<P, F> Parser for FilterParser<P, F>
+impl<P, F> Parser for Filter<P, F>
 where
     P: Parser,
     F: Fn(&P::Output) -> bool,
@@ -70,49 +45,39 @@ where
     type Error = FilterError<P::Error, <P::Cursor as Cursor>::Error>;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
-        let (value, new_cursor) = self
-            .parser
-            .parse(cursor)
-            .map_err(FilterError::ParserError)?;
-
-        if (self.predicate)(&value) {
-            Ok((value, new_cursor))
-        } else {
-            Err(FilterError::FilterFailed(
-                cursor.syntax_error(self.error_message.clone()),
-            ))
+        match self.parser.parse(cursor) {
+            Ok((value, next)) if (self.predicate)(&value) => Ok((value, next)),
+            Ok(_) => Err(LabelError::Labeled(
+                cursor.expected_error(Expected::Label(self.label)),
+            )),
+            Err(error) => Err(relabel(error, cursor, self.label)),
         }
     }
 }
 
 /// Extension trait to add filter method to all parsers
 pub trait FilterExt: Parser {
-    fn filter<F>(
-        self,
-        predicate: F,
-        error_message: impl Into<Cow<'static, str>>,
-    ) -> FilterParser<Self, F>
+    /// Keep only outputs matching `predicate`; `label` names what was expected,
+    /// e.g. `"a letter"` gives `expected a letter, found …`
+    fn filter<F>(self, predicate: F, label: &'static str) -> Filter<Self, F>
     where
         Self: Sized,
         F: Fn(&Self::Output) -> bool,
     {
-        FilterParser::new(self, predicate, error_message.into())
+        Filter::new(self, predicate, label)
     }
 }
 
 impl<P: Parser> FilterExt for P {}
 
-/// Convenience function to create a filtered parser
-pub fn filter<P, F>(
-    parser: P,
-    predicate: F,
-    error_message: impl Into<Cow<'static, str>>,
-) -> FilterParser<P, F>
+/// Create a parser whose output must satisfy `predicate`, described by
+/// `label` in errors
+pub fn filter<P, F>(parser: P, predicate: F, label: &'static str) -> Filter<P, F>
 where
     P: Parser,
     F: Fn(&P::Output) -> bool,
 {
-    FilterParser::new(parser, predicate, error_message.into())
+    Filter::new(parser, predicate, label)
 }
 
 #[cfg(test)]
@@ -127,7 +92,7 @@ mod tests {
         let data = input.as_bytes();
         let cursor = ByteCursor::new(data);
 
-        let parser = char().filter(|c| c.is_alphabetic(), "expected alphabetic character");
+        let parser = char().filter(|c| c.is_alphabetic(), "alphabetic character");
         let (result, _) = parser.parse(cursor).unwrap();
         assert_eq!(result, 'a');
     }
@@ -138,7 +103,7 @@ mod tests {
         let data = input.as_bytes();
         let cursor = ByteCursor::new(data);
 
-        let parser = char().filter(|c| c.is_alphabetic(), "expected alphabetic character");
+        let parser = char().filter(|c| c.is_alphabetic(), "alphabetic character");
         let result = parser.parse(cursor);
         assert!(result.is_err());
         assert!(
@@ -165,7 +130,7 @@ mod tests {
             let data = input.as_bytes();
             let cursor = ByteCursor::new(data);
 
-            let parser = char().filter(|c| c.is_alphabetic(), "expected letter");
+            let parser = char().filter(|c| c.is_alphabetic(), "letter");
             let result = parser.parse(cursor);
 
             if should_succeed {
@@ -193,7 +158,7 @@ mod tests {
             let data = input.as_bytes();
             let cursor = ByteCursor::new(data);
 
-            let parser = char().filter(|c| c.is_numeric(), "expected digit");
+            let parser = char().filter(|c| c.is_numeric(), "digit");
             let result = parser.parse(cursor);
 
             if should_succeed {
@@ -222,7 +187,7 @@ mod tests {
             let data = input.as_bytes();
             let cursor = ByteCursor::new(data);
 
-            let parser = char().filter(|c| c.is_alphanumeric(), "expected alphanumeric");
+            let parser = char().filter(|c| c.is_alphanumeric(), "alphanumeric");
             let result = parser.parse(cursor);
 
             if should_succeed {
@@ -251,7 +216,7 @@ mod tests {
             let data = input.as_bytes();
             let cursor = ByteCursor::new(data);
 
-            let parser = char().filter(|c| c.is_whitespace(), "expected whitespace");
+            let parser = char().filter(|c| c.is_whitespace(), "whitespace");
             let result = parser.parse(cursor);
 
             if should_succeed {
@@ -270,8 +235,8 @@ mod tests {
 
         // Filter for alphabetic AND uppercase
         let parser = char()
-            .filter(|c| c.is_alphabetic(), "expected letter")
-            .filter(|c| c.is_uppercase(), "expected uppercase");
+            .filter(|c| c.is_alphabetic(), "letter")
+            .filter(|c| c.is_uppercase(), "uppercase");
 
         let (result, _) = parser.parse(cursor).unwrap();
         assert_eq!(result, 'A');
@@ -285,8 +250,8 @@ mod tests {
 
         // Filter for alphabetic AND uppercase - should fail on uppercase check
         let parser = char()
-            .filter(|c| c.is_alphabetic(), "expected letter")
-            .filter(|c| c.is_uppercase(), "expected uppercase");
+            .filter(|c| c.is_alphabetic(), "letter")
+            .filter(|c| c.is_uppercase(), "uppercase");
 
         let result = parser.parse(cursor);
         assert!(result.is_err());
@@ -295,6 +260,47 @@ mod tests {
                 .unwrap_err()
                 .to_string()
                 .contains("expected uppercase")
+        );
+    }
+
+    #[test]
+    fn test_filter_error_names_label_and_found_character() {
+        let parser = char().filter(|c| c.is_alphabetic(), "a letter");
+
+        let error = parser.parse(ByteCursor::new("🚀".as_bytes())).unwrap_err();
+        let message = error.to_string();
+        assert!(
+            message.contains("expected a letter, found \"🚀\""),
+            "got {message}"
+        );
+
+        let error = parser.parse(ByteCursor::new(b"")).unwrap_err();
+        let message = error.to_string();
+        assert!(
+            message.contains("expected a letter, found end of input"),
+            "got {message}"
+        );
+    }
+
+    #[test]
+    fn test_filter_keeps_inner_errors_that_describe_a_problem() {
+        use crate::ascii::u64;
+
+        let parser = u64().filter(|v| *v < 256, "a byte value");
+        let message = parser
+            .parse(ByteCursor::new(b"99999999999999999999999"))
+            .unwrap_err()
+            .to_string();
+        assert!(message.contains("number too large"), "got {message}");
+
+        let parser = char().filter(|c| c.is_alphabetic(), "a letter");
+        let message = parser
+            .parse(ByteCursor::new(b"\xC3("))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            message.contains("invalid UTF-8 continuation byte"),
+            "got {message}"
         );
     }
 }

@@ -1,57 +1,44 @@
+//! ASCII floats in `int.frac` form
+
 use super::digit::digit;
 use super::sign;
 use crate::ByteCursor;
 use crate::ParsicombError;
 use crate::byte::is_byte;
 use crate::cursor::Cursor;
-use crate::map_err::MapErrExt;
 use crate::optional::optional;
 use crate::parser::Parser;
-use crate::some::some;
-use std::marker::PhantomData;
+use crate::parser_fn::parser_fn;
+use crate::skip_some::skip_some;
 
 /// Parser that matches ASCII floating point numbers in `int.uint` form
 /// (e.g. `123.456`, `-42.789`, `+0.5`)
+///
+/// Fails at the start of the number if it overflows an f64.
 pub fn f64<'code>()
 -> impl Parser<Cursor = ByteCursor<'code>, Output = f64, Error = ParsicombError<'code>> {
-    FloatParser {
-        _input: PhantomData,
-    }
-}
-
-struct FloatParser<'code> {
-    _input: PhantomData<&'code [u8]>,
-}
-
-impl<'code> Parser for FloatParser<'code> {
-    type Cursor = ByteCursor<'code>;
-    type Output = f64;
-    type Error = ParsicombError<'code>;
-
-    fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
-        // Match [+-]digits.digits; `optional` never fails, so its wrap is never applied
-        let (_, end) = optional(sign())
-            .map_err(ParsicombError::wrap)
-            .parse(cursor)?;
-        let (_, end) = some(digit()).parse(end)?;
+    parser_fn(|start: ByteCursor<'code>| {
+        // Match [+-]digits.digits
+        let (_, end) = optional(sign()).parse(start)?;
+        let (_, end) = skip_some(digit()).parse(end)?;
         let (_, end) = is_byte(b'.').parse(end)?;
-        let (_, end) = some(digit()).parse(end)?;
+        let (_, end) = skip_some(digit()).parse(end)?;
 
         // The standard library does the correctly rounded conversion. The
         // matched slice is ASCII, so the conversions cannot fail in practice;
         // map them to errors anyway rather than panic.
-        let span = cursor.span_to(end);
+        let span = start.span_to(end);
         let value: f64 = std::str::from_utf8(span.slice())
             .ok()
             .and_then(|text| text.parse().ok())
-            .ok_or_else(|| cursor.syntax_error("invalid float literal".into()))?;
+            .ok_or_else(|| start.syntax_error("invalid float literal".into()))?;
 
         if !value.is_finite() {
-            return Err(cursor.syntax_error("floating point overflow".into()));
+            return Err(start.syntax_error("floating point overflow".into()));
         }
 
         Ok((value, end))
-    }
+    })
 }
 
 #[cfg(test)]

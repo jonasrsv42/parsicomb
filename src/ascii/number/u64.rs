@@ -1,42 +1,32 @@
+//! Unsigned ASCII integers
+
 use super::digit::digit;
 use crate::ByteCursor;
 use crate::ParsicombError;
 use crate::cursor::Cursor;
 use crate::parser::Parser;
-use crate::position::PositionExt;
-use crate::some::some;
-use std::marker::PhantomData;
+use crate::parser_fn::parser_fn;
+use crate::recognize::recognize;
+use crate::skip_some::skip_some;
 
 /// Parser that matches one or more ASCII digits and returns them as a u64
+///
+/// Fails at the first digit if the number does not fit in a u64.
 pub fn u64<'code>()
 -> impl Parser<Cursor = ByteCursor<'code>, Output = u64, Error = ParsicombError<'code>> {
-    UIntParser {
-        _input: PhantomData,
-    }
-}
+    parser_fn(|start: ByteCursor<'code>| {
+        let (digits, end) = recognize(skip_some(digit())).parse(start)?;
 
-struct UIntParser<'code> {
-    _input: PhantomData<&'code [u8]>,
-}
-
-impl<'code> Parser for UIntParser<'code> {
-    type Cursor = ByteCursor<'code>;
-    type Output = u64;
-    type Error = ParsicombError<'code>;
-
-    fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
-        let ((_, digits), end) = some(digit()).with_position().parse(cursor)?;
-
-        // ASCII digits only, so both conversions fail only on overflow
-        let value = std::str::from_utf8(digits.slice())
-            .ok()
-            .and_then(|text| text.parse::<u64>().ok())
-            .ok_or_else(|| {
-                end.syntax_error(format!("number too large: {}", digits.as_string()).into())
-            })?;
-
-        Ok((value, end))
-    }
+        let value = digits.slice().iter().try_fold(0u64, |value, digit| {
+            value.checked_mul(10)?.checked_add(u64::from(digit - b'0'))
+        });
+        match value {
+            Some(value) => Ok((value, end)),
+            None => {
+                Err(start.syntax_error(format!("number too large: {}", digits.as_string()).into()))
+            }
+        }
+    })
 }
 
 #[cfg(test)]

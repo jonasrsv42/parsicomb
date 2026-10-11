@@ -1,3 +1,5 @@
+//! One or more repetitions without collecting outputs
+
 use super::parser::Parser;
 use crate::cursor::Cursor;
 
@@ -10,6 +12,7 @@ pub struct SkipSome<P> {
 }
 
 impl<P> SkipSome<P> {
+    /// Same as [`skip_some`]
     pub fn new(parser: P) -> Self {
         SkipSome { parser }
     }

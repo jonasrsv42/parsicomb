@@ -1,3 +1,5 @@
+//! Parsers for ASCII text: numbers, digits and whitespace
+
 pub mod number;
 pub mod whitespace;
 

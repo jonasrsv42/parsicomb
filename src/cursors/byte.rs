@@ -1,3 +1,5 @@
+//! [`ByteCursor`]: a cursor over bytes
+
 use crate::AtomicCursor;
 
 /// Cursor over a byte slice; an alias for [`AtomicCursor<u8>`](AtomicCursor)
@@ -110,33 +112,17 @@ mod tests {
     }
 
     #[test]
-    fn test_try_next_success() {
+    fn test_next() {
         let data = b"abc";
         let cursor = ByteCursor::new(data);
 
         assert_eq!(cursor.value().unwrap(), b'a');
 
-        let cursor = cursor.try_next().unwrap();
+        let cursor = cursor.next();
         assert_eq!(cursor.value().unwrap(), b'b');
 
-        let cursor = cursor.try_next().unwrap();
+        let cursor = cursor.next();
         assert_eq!(cursor.value().unwrap(), b'c');
-    }
-
-    #[test]
-    fn test_try_next_eof_error() {
-        let data = b"x";
-        let cursor = ByteCursor::new(data);
-
-        // try_next should return error at EOF
-        let result = cursor.try_next();
-        assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("Unexpected end of file")
-        );
     }
 
     #[test]
@@ -149,7 +135,7 @@ mod tests {
         let also_at_a = cursor;
 
         // Advance original cursor
-        let cursor = cursor.try_next().unwrap();
+        let cursor = cursor.next();
         assert_eq!(cursor.value().unwrap(), b'b');
 
         // Saved copies are unaffected
@@ -160,7 +146,7 @@ mod tests {
         let saved_at_b = cursor;
 
         // Continue advancing
-        let cursor = cursor.try_next().unwrap();
+        let cursor = cursor.next();
         assert_eq!(cursor.value().unwrap(), b'c');
 
         // All saved positions remain valid
@@ -168,10 +154,10 @@ mod tests {
         assert_eq!(saved_at_b.value().unwrap(), b'b');
 
         // Can use saved copies to create new paths
-        let from_a = saved_at_a.try_next().unwrap();
+        let from_a = saved_at_a.next();
         assert_eq!(from_a.value().unwrap(), b'b');
 
-        let from_b = saved_at_b.try_next().unwrap();
+        let from_b = saved_at_b.next();
         assert_eq!(from_b.value().unwrap(), b'c');
     }
 }

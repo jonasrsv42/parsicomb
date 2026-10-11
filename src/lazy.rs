@@ -1,3 +1,5 @@
+//! Deferred parser construction for recursive grammars
+
 use crate::parser::Parser;
 use std::cell::OnceCell;
 
@@ -30,7 +32,7 @@ use std::cell::OnceCell;
 ///             .and(lazy(|| nested().boxed()))
 ///             .and(is_byte(b')'))
 ///             .map(|((_, depth), _)| depth + 1))
-///         .map_err(ParsicombError::wrap)
+///         .map_err(ParsicombError::from)
 /// }
 ///
 /// let (depth, _) = nested().parse(ByteCursor::new(b"(((x)))")).unwrap();

@@ -4,10 +4,11 @@
 //! output: computing a human-readable line/column and a small context snippet
 //! around an error position.
 //!
-//! The important property here is that **rendering is bounded** — it scans and
-//! materializes at most 512 elements on each side of the error position, never
-//! the whole input, so a parse failure on a multi-megabyte binary blob does not
-//! stringify the entire buffer.
+//! The important property here is that **rendering is bounded**: the snippet
+//! materializes at most 512 elements on each side of the error position, and
+//! line/column (which formats the error line up to the error) is only resolved
+//! within the first [`MAX_POSITION_SCAN`] elements, so a parse failure on a
+//! multi-megabyte binary blob does not stringify the entire buffer.
 //!
 //! For normal source-sized inputs the window comfortably covers the full ±2
 //! lines of context, so the output matches a full-input rendering; the unit
@@ -33,22 +34,20 @@ pub(crate) const CONTEXT_RADIUS: usize = 512;
 /// early in a huge buffer is still cheap to resolve and gets full line/column.
 pub(crate) const MAX_POSITION_SCAN: usize = 1 << 20; // 1 MiB
 
-/// A human-readable position: 1-based line and a column expressed in display
-/// widths (see [`Atomic::display_width`]) from the start of that line.
+/// A human-readable position: 1-based line and 0-based column
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ReadablePosition {
+pub(crate) struct ReadablePosition {
     pub line: usize,
-    /// Column within the line (0-based), in display widths.
+    /// Characters before the error in its rendered line (see [`text_before`]),
+    /// so the column matches the snippet's `^` pointer
     pub column: usize,
 }
 
-/// Calculate the line number and display-width column of `loc` within `code`,
-/// or `None` if `loc` is beyond [`MAX_POSITION_SCAN`] (too far in to scan).
+/// Calculate the line and column of `loc` within `code`, or `None` if `loc` is
+/// beyond [`MAX_POSITION_SCAN`] (too far in to scan).
 ///
-/// When it does run it counts newlines from the start of the input (O(loc)), but
-/// allocation-free and in a *single* pass: the column is accumulated in the same
-/// loop that counts newlines (reset at each line break), rather than a second
-/// scan over the error line. Only runs when an error is rendered.
+/// Counts newlines from the start of the input (O(loc)) and formats the error
+/// line up to `loc`. Only runs when an error is rendered.
 pub(crate) fn readable_position<T: Atomic>(code: &[T], loc: usize) -> Option<ReadablePosition> {
     let loc = loc.min(code.len());
     if loc > MAX_POSITION_SCAN {
@@ -56,18 +55,36 @@ pub(crate) fn readable_position<T: Atomic>(code: &[T], loc: usize) -> Option<Rea
     }
 
     let mut line = 1;
-    let mut column = 0;
-
-    for element in &code[..loc] {
+    let mut line_start = 0;
+    for (i, element) in code[..loc].iter().enumerate() {
         if element.is_newline() {
             line += 1;
-            column = 0;
-        } else {
-            column += element.display_width();
+            line_start = i + 1;
         }
     }
+    let (_, column) = text_before(code, line_start, loc);
 
     Some(ReadablePosition { line, column })
+}
+
+/// The rendered text of the line starting at `line_start` through the
+/// element at `loc`, and how many of its characters come before that element
+///
+/// The line is formatted through the element at `loc` and that element's own
+/// text excluded, which accounts for separators `format_slice` puts between
+/// elements and, for an error inside a multi-byte character, ends at the
+/// start of that character.
+fn text_before<T: Atomic>(code: &[T], line_start: usize, loc: usize) -> (String, usize) {
+    if loc < code.len() && !code[loc].is_newline() {
+        let through = T::format_slice(&code[line_start..=loc]);
+        let own = T::format_slice(&code[loc..=loc]).chars().count();
+        let before = through.chars().count().saturating_sub(own);
+        (through, before)
+    } else {
+        let text = T::format_slice(&code[line_start..loc]);
+        let before = text.chars().count();
+        (text, before)
+    }
 }
 
 /// Compute the byte window of `code` to materialize for the context snippet,
@@ -94,12 +111,7 @@ fn context_window<T: Atomic>(code: &[T], loc: usize, err_line: usize) -> (usize,
         }
         i -= 1;
     }
-    let mut win_start = if nb == 3 { nl_back[2] + 1 } else { i };
-    // If the radius cap cut a line, don't start on a zero-width element (e.g. a
-    // UTF-8 continuation byte), which would render as a stray glyph.
-    while win_start < loc && code[win_start].display_width() == 0 {
-        win_start += 1;
-    }
+    let win_start = if nb == 3 { nl_back[2] + 1 } else { i };
     // Newlines remaining strictly inside [win_start, loc) tell us how many lines
     // below `first_line` the error line sits.
     let inside = (0..nb).filter(|&k| nl_back[k] >= win_start).count();
@@ -120,6 +132,17 @@ fn context_window<T: Atomic>(code: &[T], loc: usize, err_line: usize) -> (usize,
     (win_start, j, first_line)
 }
 
+/// [`context_lines_at`], resolving the position first
+#[cfg(test)]
+pub(crate) fn context_lines<T: Atomic>(code: &[T], loc: usize) -> Vec<String> {
+    // Past the scan threshold we don't resolve line structure, so there is no
+    // snippet to render — the offset alone is the location.
+    match readable_position(code, loc) {
+        Some(pos) => context_lines_at(code, loc, pos),
+        None => Vec::new(),
+    }
+}
+
 /// Get lines of context around the error position. Returns up to 2 lines before
 /// and after the error line, each prefixed with its line number, plus a
 /// `^--- here` pointer under the error line.
@@ -131,15 +154,14 @@ fn context_window<T: Atomic>(code: &[T], loc: usize, err_line: usize) -> (usize,
 /// own. Offsets are never carried over from formatted text back into `code`:
 /// `format_slice` may change length (e.g. lossy UTF-8 turns one invalid byte
 /// into a 3-byte U+FFFD), so mixing the two coordinate systems is unsound.
-pub(crate) fn context_lines<T: Atomic>(code: &[T], loc: usize) -> Vec<String> {
-    let len = code.len();
-    let loc = loc.min(len);
-    // Past the scan threshold we don't resolve line structure, so there is no
-    // snippet to render — the offset alone is the location.
-    let pos = match readable_position(code, loc) {
-        Some(pos) => pos,
-        None => return Vec::new(),
-    };
+///
+/// `pos` is `loc`'s position from [`readable_position`].
+pub(crate) fn context_lines_at<T: Atomic>(
+    code: &[T],
+    loc: usize,
+    pos: ReadablePosition,
+) -> Vec<String> {
+    let loc = loc.min(code.len());
     let (win_start, win_end, first_line) = context_window(code, loc, pos.line);
 
     let mut lines = Vec::new();
@@ -163,12 +185,16 @@ pub(crate) fn context_lines<T: Atomic>(code: &[T], loc: usize) -> Vec<String> {
         ));
 
         if is_err {
-            // Column of the error within the (windowed) line, in display widths.
-            let col: usize = code[line_start..loc]
-                .iter()
-                .map(|e| e.display_width())
-                .sum();
-            lines.push(format!("{}^--- here", " ".repeat(prefix.len() + col)));
+            // Pad with the text before the error, blanked out but keeping its
+            // tabs, so the pointer lines up however the terminal renders tabs
+            // and replacement characters
+            let (text, before) = text_before(code, line_start, loc);
+            let padding: String = text
+                .chars()
+                .take(before)
+                .map(|c| if c == '\t' { '\t' } else { ' ' })
+                .collect();
+            lines.push(format!("{}{}^--- here", " ".repeat(prefix.len()), padding));
         }
     };
 
@@ -407,8 +433,8 @@ mod tests {
     }
 
     #[test]
-    fn window_does_not_start_mid_character() {
-        // A long line of 2-byte chars, cut by the radius at an odd offset
+    fn window_cut_at_a_character_boundary_shows_whole_characters() {
+        // A long line of 2-byte chars, cut by the radius between characters
         let mut code = "é".repeat(CONTEXT_RADIUS).into_bytes();
         code.push(b'!');
         let loc = code.len() - 1;
@@ -444,5 +470,54 @@ mod tests {
             let _ = readable_position(&code, loc);
             let _ = context_lines(&code, loc);
         }
+    }
+
+    #[test]
+    fn test_pointer_keeps_tabs_and_counts_replacement_characters() {
+        let code = b"\tab\x80cd";
+        // Error at `d`: tab, `a`, `b`, U+FFFD for the stray byte, `c`
+        let out = context_lines(code, 5);
+        let source = out.iter().position(|l| l.starts_with("  > 1 | ")).unwrap();
+        assert_eq!(out[source], "  > 1 | \tab\u{FFFD}cd");
+        assert_eq!(out[source + 1], "        \t    ^--- here");
+    }
+
+    #[test]
+    fn test_pointer_accounts_for_separators_between_elements() {
+        // `u32` formats as numbers joined by spaces (see the tests in `atomic`)
+        let code: [u32; 4] = [1, 22, 333, 4444];
+        let out = context_lines(&code, 3);
+        let source = out.iter().position(|l| l.starts_with("  > 1 | ")).unwrap();
+        assert_eq!(out[source], "  > 1 | 1 22 333 4444");
+        assert_eq!(out[source + 1], "                 ^--- here");
+    }
+
+    #[test]
+    fn test_pointer_at_continuation_byte_points_at_its_character() {
+        // `è` is C3 A8; an error at the A8 points at the `è`
+        let code = "xè".as_bytes();
+        let out = context_lines(code, 2);
+        let source = out.iter().position(|l| l.starts_with("  > 1 | ")).unwrap();
+        assert_eq!(out[source + 1], "         ^--- here");
+    }
+
+    #[test]
+    fn test_stray_continuation_bytes_at_input_start_are_shown() {
+        let code = b"\x80\x80x";
+        let out = context_lines(code, 2);
+        let source = out.iter().position(|l| l.starts_with("  > 1 | ")).unwrap();
+        assert_eq!(out[source], "  > 1 | \u{FFFD}\u{FFFD}x");
+        assert_eq!(out[source + 1], "          ^--- here");
+    }
+
+    #[test]
+    fn test_column_matches_pointer() {
+        // Inside `è` (C3 A8): the character's column
+        assert_eq!(readable_position("xè".as_bytes(), 2).unwrap().column, 1);
+        // Stray continuation bytes render as one replacement character each
+        assert_eq!(readable_position(b"\x80\x80x", 2).unwrap().column, 2);
+        // Separators between token-like elements count
+        let code: [u32; 4] = [1, 22, 333, 4444];
+        assert_eq!(readable_position(&code, 3).unwrap().column, 9);
     }
 }

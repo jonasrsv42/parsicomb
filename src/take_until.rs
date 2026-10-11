@@ -1,19 +1,28 @@
+//! Repeat a parser until its output satisfies a predicate
+
 use crate::Cursor;
 use crate::parser::Parser;
 
 /// Parser that repeatedly applies another parser until a predicate is satisfied
-pub struct TakeUntilParser<P, F> {
+///
+/// Collects the outputs before the first one that satisfies `predicate`, and
+/// stops *before* that item, leaving it unconsumed. It also stops, successfully,
+/// at the end of input (whether or not a terminator was found) and when an
+/// item consumes nothing. Unlike [`many`](crate::many()), a failure of
+/// `parser` fails the whole `take_until`.
+pub struct TakeUntil<P, F> {
     parser: P,
     predicate: F,
 }
 
-impl<P, F> TakeUntilParser<P, F> {
+impl<P, F> TakeUntil<P, F> {
+    /// Same as [`take_until`]
     pub fn new(parser: P, predicate: F) -> Self {
         Self { parser, predicate }
     }
 }
 
-impl<P, F> Parser for TakeUntilParser<P, F>
+impl<P, F> Parser for TakeUntil<P, F>
 where
     P: Parser,
     F: Fn(&P::Output) -> bool,
@@ -39,6 +48,9 @@ where
                     if (self.predicate)(&item) {
                         // Don't consume the item that satisfied the predicate
                         return Ok((result, current_cursor));
+                    } else if new_cursor.position() == current_cursor.position() {
+                        // An iteration that consumes nothing would repeat forever
+                        return Ok((result, current_cursor));
                     } else {
                         // Add item to result and continue
                         result.push(item);
@@ -54,13 +66,14 @@ where
     }
 }
 
-/// Convenience function to create a TakeUntilParser
-pub fn take_until<P, F>(parser: P, predicate: F) -> TakeUntilParser<P, F>
+/// Create a parser that collects outputs of `parser` until one satisfies
+/// `predicate`; see [`TakeUntil`]
+pub fn take_until<P, F>(parser: P, predicate: F) -> TakeUntil<P, F>
 where
     P: Parser,
     F: Fn(&P::Output) -> bool,
 {
-    TakeUntilParser::new(parser, predicate)
+    TakeUntil::new(parser, predicate)
 }
 
 #[cfg(test)]
@@ -217,5 +230,19 @@ mod tests {
         // Should be positioned at the first digit
         let (next_char, _) = char().parse(remaining_cursor).unwrap();
         assert_eq!(next_char, '1');
+    }
+
+    #[test]
+    fn test_take_until_stops_when_parser_consumes_nothing() {
+        use crate::byte::is_byte;
+        use crate::optional::optional;
+
+        let data = b"b";
+        let cursor = ByteCursor::new(data);
+        let parser = take_until(optional(is_byte(b'a')), |o| *o == Some(b'z'));
+
+        let (result, cursor) = parser.parse(cursor).unwrap();
+        assert!(result.is_empty());
+        assert_eq!(cursor.value().unwrap(), b'b');
     }
 }

@@ -9,6 +9,7 @@ pub struct NTimes<P> {
 }
 
 impl<P> NTimes<P> {
+    /// Same as [`ntimes`]
     pub fn new(parser: P, count: usize) -> Self {
         NTimes { parser, count }
     }
@@ -23,7 +24,8 @@ where
     type Error = P::Error;
 
     fn parse(&self, mut cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
-        let mut results = Vec::with_capacity(self.count);
+        // `count` may come from the input, so it is not trusted as a capacity
+        let mut results = Vec::new();
 
         for _ in 0..self.count {
             let (value, next_cursor) = self.parser.parse(cursor)?;
@@ -36,7 +38,7 @@ where
 }
 
 /// Convenience function to create an NTimes parser
-pub fn ntimes<P>(count: usize, parser: P) -> NTimes<P>
+pub fn ntimes<P>(parser: P, count: usize) -> NTimes<P>
 where
     P: Parser,
 {
@@ -54,7 +56,7 @@ mod tests {
     fn test_ntimes_zero() {
         let data = b"abc";
         let cursor = ByteCursor::new(data);
-        let parser = ntimes(0, is_byte(b'a'));
+        let parser = ntimes(is_byte(b'a'), 0);
 
         let (results, cursor) = parser.parse(cursor).unwrap();
         assert_eq!(results, Vec::<u8>::new());
@@ -65,7 +67,7 @@ mod tests {
     fn test_ntimes_one() {
         let data = b"abc";
         let cursor = ByteCursor::new(data);
-        let parser = ntimes(1, is_byte(b'a'));
+        let parser = ntimes(is_byte(b'a'), 1);
 
         let (results, cursor) = parser.parse(cursor).unwrap();
         assert_eq!(results, vec![b'a']);
@@ -76,7 +78,7 @@ mod tests {
     fn test_ntimes_multiple() {
         let data = b"aaabcd";
         let cursor = ByteCursor::new(data);
-        let parser = ntimes(3, is_byte(b'a'));
+        let parser = ntimes(is_byte(b'a'), 3);
 
         let (results, cursor) = parser.parse(cursor).unwrap();
         assert_eq!(results, vec![b'a', b'a', b'a']);
@@ -87,7 +89,7 @@ mod tests {
     fn test_ntimes_exact_count() {
         let data = b"aaa";
         let cursor = ByteCursor::new(data);
-        let parser = ntimes(3, is_byte(b'a'));
+        let parser = ntimes(is_byte(b'a'), 3);
 
         let (results, cursor) = parser.parse(cursor).unwrap();
         assert_eq!(results, vec![b'a', b'a', b'a']);
@@ -98,7 +100,7 @@ mod tests {
     fn test_ntimes_not_enough() {
         let data = b"aa";
         let cursor = ByteCursor::new(data);
-        let parser = ntimes(3, is_byte(b'a'));
+        let parser = ntimes(is_byte(b'a'), 3);
 
         let result = parser.parse(cursor);
         assert!(result.is_err());
@@ -108,7 +110,7 @@ mod tests {
     fn test_ntimes_wrong_byte() {
         let data = b"aab";
         let cursor = ByteCursor::new(data);
-        let parser = ntimes(3, is_byte(b'a'));
+        let parser = ntimes(is_byte(b'a'), 3);
 
         let result = parser.parse(cursor);
         assert!(result.is_err());
@@ -118,7 +120,7 @@ mod tests {
     fn test_ntimes_empty_input() {
         let data = b"";
         let cursor = ByteCursor::new(data);
-        let parser = ntimes(1, is_byte(b'a'));
+        let parser = ntimes(is_byte(b'a'), 1);
 
         let result = parser.parse(cursor);
         assert!(result.is_err());
@@ -128,9 +130,18 @@ mod tests {
     fn test_ntimes_empty_input_zero_count() {
         let data = b"";
         let cursor = ByteCursor::new(data);
-        let parser = ntimes(0, is_byte(b'a'));
+        let parser = ntimes(is_byte(b'a'), 0);
 
         let (results, _) = parser.parse(cursor).unwrap();
         assert_eq!(results, Vec::<u8>::new());
+    }
+
+    #[test]
+    fn test_ntimes_huge_count_fails_without_allocating_it() {
+        let data = b"aaa";
+        let cursor = ByteCursor::new(data);
+        let parser = ntimes(is_byte(b'a'), usize::MAX);
+
+        assert!(parser.parse(cursor).is_err());
     }
 }

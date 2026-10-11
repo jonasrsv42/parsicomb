@@ -1,52 +1,18 @@
-use crate::error::{ErrorLeaf, ErrorNode};
+//! Two parsers separated by a third
+
 use crate::parser::Parser;
-use std::fmt;
 
-/// Error type for SeparatedPair parser that can wrap errors from all constituent parsers
-#[derive(Debug)]
-pub enum SeparatedPairError<Err1, ErrSep, Err2> {
-    /// Error from the left parser
-    LeftParser(Err1),
-    /// Error from the separator parser
-    Separator(ErrSep),
-    /// Error from the right parser
-    RightParser(Err2),
-}
+use crate::error::composite_error;
 
-/// Displays the most likely underlying error
-impl<Err1, ErrSep, Err2> fmt::Display for SeparatedPairError<Err1, ErrSep, Err2>
-where
-    Err1: ErrorNode,
-    ErrSep: ErrorNode<Element = Err1::Element>,
-    Err2: ErrorNode<Element = Err1::Element>,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.likely_error())
-    }
-}
-
-impl<Err1, ErrSep, Err2> std::error::Error for SeparatedPairError<Err1, ErrSep, Err2>
-where
-    Err1: ErrorNode,
-    ErrSep: ErrorNode<Element = Err1::Element>,
-    Err2: ErrorNode<Element = Err1::Element>,
-{
-}
-
-impl<Err1, ErrSep, Err2> ErrorNode for SeparatedPairError<Err1, ErrSep, Err2>
-where
-    Err1: ErrorNode,
-    ErrSep: ErrorNode<Element = Err1::Element>,
-    Err2: ErrorNode<Element = Err1::Element>,
-{
-    type Element = Err1::Element;
-
-    fn likely_error(&self) -> &dyn ErrorLeaf<Element = Self::Element> {
-        match self {
-            SeparatedPairError::LeftParser(e) => e.likely_error(),
-            SeparatedPairError::Separator(e) => e.likely_error(),
-            SeparatedPairError::RightParser(e) => e.likely_error(),
-        }
+composite_error! {
+    /// Error type for SeparatedPair parser that can wrap errors from all constituent parsers
+    pub enum SeparatedPairError<Err1, ErrSep, Err2> {
+        /// Error from the left parser
+        LeftParser(Err1),
+        /// Error from the separator parser
+        Separator(ErrSep),
+        /// Error from the right parser
+        RightParser(Err2),
     }
 }
 
@@ -68,6 +34,7 @@ pub struct SeparatedPair<P1, PSep, P2> {
 }
 
 impl<P1, PSep, P2> SeparatedPair<P1, PSep, P2> {
+    /// Same as [`separated_pair`]
     pub fn new(left: P1, separator: PSep, right: P2) -> Self {
         SeparatedPair {
             left,

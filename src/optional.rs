@@ -1,4 +1,7 @@
+//! Zero or one occurrence
+
 use super::parser::Parser;
+use crate::cursor::Cursor;
 
 /// Parser combinator that optionally matches the given parser.
 /// Returns Some(value) if the parser succeeds, None if it fails.
@@ -8,6 +11,7 @@ pub struct Optional<P> {
 }
 
 impl<P> Optional<P> {
+    /// Same as [`optional`]
     pub fn new(parser: P) -> Self {
         Optional { parser }
     }
@@ -19,7 +23,7 @@ where
 {
     type Cursor = P::Cursor;
     type Output = Option<P::Output>;
-    type Error = P::Error;
+    type Error = <P::Cursor as Cursor>::Error;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         match self.parser.parse(cursor) {

@@ -1,18 +1,19 @@
+//! Single UTF-8 characters
+
 use crate::ByteCursor;
 use crate::Cursor;
 use crate::ParsicombError;
-use crate::atomic::{IsSequence, is_sequence};
-use crate::byte::ByteParser;
+use crate::error::Expected;
 use crate::parser::Parser;
 use std::borrow::Cow;
 use std::marker::PhantomData;
 
 /// Parser that consumes and returns a single UTF-8 character
-pub struct CharParser<'code> {
+pub struct Char<'code> {
     _input: PhantomData<&'code [u8]>,
 }
 
-impl<'code> Parser for CharParser<'code> {
+impl<'code> Parser for Char<'code> {
     type Cursor = ByteCursor<'code>;
     type Output = char;
     type Error = ParsicombError<'code>;
@@ -20,101 +21,53 @@ impl<'code> Parser for CharParser<'code> {
     // Large and non-generic, so it is only inlined across crates when asked to
     #[inline]
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
-        let byte_parser: ByteParser<'code> = ByteParser::new();
+        let Ok(lead) = cursor.value() else {
+            return Err(cursor.expected_error(Expected::Label("a character")));
+        };
+        if lead < 0x80 {
+            return Ok((lead as char, cursor.next()));
+        }
 
-        // 1. Read the first byte
-        let (b1, mut current_cursor) = byte_parser.parse(cursor)?;
+        // Invalid UTF-8 is reported at the start of the character
+        let invalid = |message: &'static str| cursor.syntax_error(message.into());
 
-        // 2. Decode based on the first byte
-        let codepoint = if b1 < 0x80 {
-            // ASCII fast path
-            return Ok((b1 as char, current_cursor));
-        } else if b1 < 0xC0 {
-            // Continuation byte used as start byte (0x80-0xBF)
-            return Err(cursor.syntax_error("invalid UTF-8 start byte".into()));
-        } else if b1 < 0xE0 {
-            // 2-byte sequence: 110xxxxx 10xxxxxx
-            let (b2, new_cursor) = byte_parser
-                .parse(current_cursor)
-                .map_err(|_| current_cursor.syntax_error("incomplete UTF-8 sequence".into()))?;
-            current_cursor = new_cursor;
-
-            if (b2 & 0xC0) != 0x80 {
-                return Err(current_cursor.syntax_error("invalid UTF-8 continuation byte".into()));
-            }
-
-            let cp = ((b1 as u32 & 0x1F) << 6) | (b2 as u32 & 0x3F);
-            if cp < 0x80 {
-                return Err(cursor.syntax_error("overlong UTF-8 encoding".into()));
-            }
-            cp
-        } else if b1 < 0xF0 {
-            // 3-byte sequence: 1110xxxx 10xxxxxx 10xxxxxx
-            let (b2, c2) = byte_parser
-                .parse(current_cursor)
-                .map_err(|_| current_cursor.syntax_error("incomplete UTF-8 sequence".into()))?;
-            let (b3, c3) = byte_parser
-                .parse(c2)
-                .map_err(|_| c2.syntax_error("incomplete UTF-8 sequence".into()))?;
-            current_cursor = c3;
-
-            if (b2 & 0xC0) != 0x80 || (b3 & 0xC0) != 0x80 {
-                return Err(current_cursor.syntax_error("invalid UTF-8 continuation byte".into()));
-            }
-
-            let cp = ((b1 as u32 & 0x0F) << 12) | ((b2 as u32 & 0x3F) << 6) | (b3 as u32 & 0x3F);
-            if cp < 0x800 {
-                return Err(cursor.syntax_error("overlong UTF-8 encoding".into()));
-            }
-            if (0xD800..=0xDFFF).contains(&cp) {
-                return Err(cursor.syntax_error("UTF-16 surrogate in UTF-8".into()));
-            }
-            cp
-        } else if b1 < 0xF8 {
-            // 4-byte sequence: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
-            let (b2, c2) = byte_parser
-                .parse(current_cursor)
-                .map_err(|_| current_cursor.syntax_error("incomplete UTF-8 sequence".into()))?;
-            let (b3, c3) = byte_parser
-                .parse(c2)
-                .map_err(|_| c2.syntax_error("incomplete UTF-8 sequence".into()))?;
-            let (b4, c4) = byte_parser
-                .parse(c3)
-                .map_err(|_| c3.syntax_error("incomplete UTF-8 sequence".into()))?;
-            current_cursor = c4;
-
-            if (b2 & 0xC0) != 0x80 || (b3 & 0xC0) != 0x80 || (b4 & 0xC0) != 0x80 {
-                return Err(current_cursor.syntax_error("invalid UTF-8 continuation byte".into()));
-            }
-
-            let cp = ((b1 as u32 & 0x07) << 18)
-                | ((b2 as u32 & 0x3F) << 12)
-                | ((b3 as u32 & 0x3F) << 6)
-                | (b4 as u32 & 0x3F);
-            if cp < 0x10000 {
-                return Err(cursor.syntax_error("overlong UTF-8 encoding".into()));
-            }
-            if cp > 0x10FFFF {
-                return Err(cursor.syntax_error("codepoint beyond Unicode range".into()));
-            }
-            cp
-        } else {
-            // Invalid start byte
-            return Err(cursor.syntax_error("invalid UTF-8 start byte".into()));
+        // Sequence width and the smallest codepoint that needs that width
+        let (width, min_codepoint) = match lead {
+            0xC0..=0xDF => (2, 0x80),
+            0xE0..=0xEF => (3, 0x800),
+            0xF0..=0xF7 => (4, 0x10000),
+            _ => return Err(invalid("invalid UTF-8 start byte")),
         };
 
-        // 3. Convert final codepoint to char
-        let ch = char::from_u32(codepoint).ok_or_else(|| {
-            cursor.syntax_error(format!("invalid Unicode codepoint: U+{:04X}", codepoint).into())
-        })?;
+        let mut codepoint = (lead & (0x7F >> width)) as u32;
+        let mut next = cursor.next();
+        for _ in 1..width {
+            let byte = next
+                .value()
+                .map_err(|_| invalid("incomplete UTF-8 sequence"))?;
+            if byte & 0xC0 != 0x80 {
+                return Err(invalid("invalid UTF-8 continuation byte"));
+            }
+            codepoint = (codepoint << 6) | (byte & 0x3F) as u32;
+            next = next.next();
+        }
 
-        Ok((ch, current_cursor))
+        if codepoint < min_codepoint {
+            return Err(invalid("overlong UTF-8 encoding"));
+        }
+        match char::from_u32(codepoint) {
+            Some(ch) => Ok((ch, next)),
+            None if (0xD800..=0xDFFF).contains(&codepoint) => {
+                Err(invalid("UTF-16 surrogate in UTF-8"))
+            }
+            None => Err(invalid("codepoint beyond Unicode range")),
+        }
     }
 }
 
-/// Convenience function to create a CharParser
-pub fn char<'code>() -> CharParser<'code> {
-    CharParser {
+/// Convenience function to create a Char
+pub fn char<'code>() -> Char<'code> {
+    Char {
         _input: PhantomData,
     }
 }
@@ -131,9 +84,13 @@ static ASCII: [u8; 128] = {
 };
 
 /// Parser that matches a specific character by its UTF-8 encoding
+///
+/// A mismatch is reported at the start of the character, even when some of
+/// its bytes matched (`é` and `è` share their first byte).
 pub struct IsChar<'code> {
     expected: char,
-    encoding: IsSequence<ByteCursor<'code>>,
+    encoding: Cow<'static, [u8]>,
+    _input: PhantomData<&'code [u8]>,
 }
 
 impl<'code> Parser for IsChar<'code> {
@@ -142,8 +99,15 @@ impl<'code> Parser for IsChar<'code> {
     type Error = ParsicombError<'code>;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
-        let (_, next_cursor) = self.encoding.parse(cursor)?;
-        Ok((self.expected, next_cursor))
+        let (source, position) = cursor.inner();
+        if source[position..].starts_with(&self.encoding) {
+            Ok((self.expected, cursor.advance(self.encoding.len())))
+        } else {
+            Err(cursor.expected_error(Expected::Sequence {
+                expected: self.encoding.clone(),
+                matched: 0,
+            }))
+        }
     }
 }
 
@@ -160,13 +124,46 @@ pub fn is_char<'code>(expected: char) -> IsChar<'code> {
 
     IsChar {
         expected,
-        encoding: is_sequence(encoding),
+        encoding,
+        _input: PhantomData,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_decodes_like_std_for_every_two_byte_prefix() {
+        let tails: [&[u8]; 5] = [
+            &[],
+            &[0x80, 0x80],
+            &[0xBF, 0xBF],
+            &[0x41, 0x80],
+            &[0x80, 0x41],
+        ];
+        for b1 in 0..=255u8 {
+            for b2 in 0..=255u8 {
+                for tail in tails {
+                    let input = [&[b1, b2], tail].concat();
+                    let expected = std::str::from_utf8(&input[..input.len().min(4)])
+                        .or_else(|e| std::str::from_utf8(&input[..e.valid_up_to()]))
+                        .ok()
+                        .and_then(|s| s.chars().next());
+
+                    let parsed = char()
+                        .parse(ByteCursor::new(&input))
+                        .ok()
+                        .map(|(ch, rest)| (ch, rest.position()));
+                    assert_eq!(
+                        parsed,
+                        expected.map(|ch| (ch, ch.len_utf8())),
+                        "input {input:02X?}"
+                    );
+                }
+            }
+        }
+    }
 
     #[test]
     fn test_ascii_char() {
@@ -681,5 +678,33 @@ mod tests {
                 byte_val
             );
         }
+    }
+
+    #[test]
+    fn test_is_char_mismatch_is_at_the_character_start() {
+        use crate::label::LabelExt;
+        use crate::or::OrExt;
+
+        let error = is_char('é')
+            .parse(ByteCursor::new("è".as_bytes()))
+            .unwrap_err();
+        assert_eq!(error.position(), 0);
+        assert!(
+            error.to_string().contains(r#"expected "é", found "è""#),
+            "got {error}"
+        );
+
+        let vowel = is_char('a')
+            .or(is_char('o'))
+            .or(is_char('é'))
+            .label("a vowel");
+        let message = vowel
+            .parse(ByteCursor::new("ü".as_bytes()))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            message.contains(r#"expected a vowel, found "ü""#),
+            "got {message}"
+        );
     }
 }

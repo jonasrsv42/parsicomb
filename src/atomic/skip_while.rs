@@ -1,10 +1,12 @@
+//! Skip runs of elements matching a predicate
+
 use crate::cursor::Cursor;
 use crate::error::Expected;
 use crate::parser::Parser;
 use std::marker::PhantomData;
 
-/// Advance past elements while `pred` holds; the cursor and the first element
-/// that doesn't match
+/// Advance past elements while `pred` holds, returning the cursor at the
+/// first element that doesn't match (or at the end of input)
 #[inline]
 fn advance_while<Cur: Cursor>(mut cursor: Cur, pred: impl Fn(Cur::Element) -> bool) -> Cur {
     while let Ok(element) = cursor.value() {
@@ -54,7 +56,7 @@ where
 
 /// Parser that skips one or more elements matching a predicate
 ///
-/// Fails with "expected `<label>`, found ..." when the first element doesn't
+/// Fails with `expected <label>, found …` when the first element doesn't
 /// match.
 pub struct SkipWhile1<Cur, F> {
     pred: F,

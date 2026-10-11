@@ -1,3 +1,5 @@
+//! A parser that succeeds with a value without consuming input
+
 use super::parser::Parser;
 use crate::Cursor;
 
@@ -8,6 +10,7 @@ pub struct DefaultParser<Out, Cur> {
 }
 
 impl<Out, Cur> DefaultParser<Out, Cur> {
+    /// Same as [`default`]
     pub fn new(default: Out) -> Self {
         DefaultParser {
             default,

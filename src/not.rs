@@ -1,16 +1,21 @@
+//! Negative lookahead
+
 use super::parser::Parser;
 use crate::cursor::Cursor;
+use crate::error::Expected;
 
 /// Parser combinator that performs negative lookahead
 ///
 /// Succeeds with () if the given parser fails at the current position.
-/// Fails if the given parser succeeds.
-/// Never consumes any input regardless of outcome.
+/// Fails with `expected something else, found …` if the given parser
+/// succeeds; wrap it in [`label`](crate::label()) to say what was expected
+/// instead. Never consumes any input regardless of outcome.
 pub struct Not<P> {
     parser: P,
 }
 
 impl<P> Not<P> {
+    /// Same as [`not`]
     pub fn new(parser: P) -> Self {
         Not { parser }
     }
@@ -23,7 +28,7 @@ impl<P: Parser> Parser for Not<P> {
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         match self.parser.parse(cursor) {
-            Ok(_) => Err(cursor.syntax_error("negative lookahead failed: unexpected match".into())),
+            Ok(_) => Err(cursor.expected_error(Expected::Label("something else"))),
             Err(_) => Ok(((), cursor)),
         }
     }
@@ -36,6 +41,7 @@ pub fn not<P: Parser>(parser: P) -> Not<P> {
 
 /// Extension trait to add .not() method support for parsers
 pub trait NotExt: Parser + Sized {
+    /// Succeed without consuming input where `self` fails, and fail where it succeeds
     fn not(self) -> Not<Self> {
         Not::new(self)
     }
@@ -59,8 +65,26 @@ mod tests {
         let cursor = ByteCursor::new(data);
         let parser = not(is_string("hello"));
 
-        let result = parser.parse(cursor);
-        assert!(result.is_err());
+        let message = parser.parse(cursor).unwrap_err().to_string();
+        assert!(
+            message.contains("expected something else, found byte 0x68 ('h')"),
+            "got {message}"
+        );
+    }
+
+    #[test]
+    fn test_not_failure_can_be_labeled() {
+        use crate::label::LabelExt;
+
+        let parser = not(is_string("if")).label("an identifier");
+        let message = parser
+            .parse(ByteCursor::new(b"if"))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            message.contains("expected an identifier, found byte 0x69 ('i')"),
+            "got {message}"
+        );
     }
 
     #[test]

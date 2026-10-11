@@ -1,7 +1,8 @@
+//! Transform a parser's error
+
 use super::parser::Parser;
 use crate::cursor::Cursor;
 use crate::error::ErrorNode;
-use std::fmt;
 
 /// Parser combinator that transforms the error of a parser using a mapping function
 pub struct MapErr<P, F> {
@@ -10,20 +11,9 @@ pub struct MapErr<P, F> {
 }
 
 impl<P, F> MapErr<P, F> {
+    /// Same as [`map_err`]
     pub fn new(parser: P, mapper: F) -> Self {
         MapErr { parser, mapper }
-    }
-}
-
-impl<P, F> fmt::Debug for MapErr<P, F>
-where
-    P: fmt::Debug,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("MapErr")
-            .field("parser", &self.parser)
-            .field("mapper", &"<function>")
-            .finish()
     }
 }
 
@@ -44,6 +34,7 @@ where
 
 /// Extension trait to add .map_err() method support for parsers
 pub trait MapErrExt: Parser + Sized {
+    /// Transform the error with `mapper`, e.g. `ParsicombError::wrap`
     fn map_err<F, NewErr>(self, mapper: F) -> MapErr<Self, F>
     where
         F: Fn(Self::Error) -> NewErr,
@@ -96,6 +87,10 @@ mod tests {
 
         fn loc(&self) -> CodeLoc<'_, Self::Element> {
             CodeLoc::new(&[], 0) // Default position for test error
+        }
+
+        fn is_expectation(&self) -> bool {
+            false
         }
     }
 

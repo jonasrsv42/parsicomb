@@ -1,3 +1,5 @@
+//! Spans of matched input, and `with_position` to capture them
+
 use crate::atomic::Atomic;
 use crate::cursor::Cursor;
 use crate::parser::Parser;
@@ -6,18 +8,39 @@ use crate::parser::Parser;
 /// and a reference to the source code
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Span<'code, T: Atomic = u8> {
-    /// Reference to the source code
-    pub source: &'code [T],
-    /// Start position (inclusive)
-    pub start: usize,
-    /// End position (exclusive)
-    pub end: usize,
+    source: &'code [T],
+    start: usize,
+    end: usize,
 }
 
 impl<'code, T: Atomic> Span<'code, T> {
-    /// Create a new span
+    /// Create a new span of `source[start..end]`
+    ///
+    /// # Panics
+    ///
+    /// If `start > end` or `end > source.len()`.
     pub fn new(source: &'code [T], start: usize, end: usize) -> Self {
+        assert!(
+            start <= end && end <= source.len(),
+            "invalid span {start}..{end} of {} elements",
+            source.len()
+        );
         Span { source, start, end }
+    }
+
+    /// The full input this span points into
+    pub fn source(&self) -> &'code [T] {
+        self.source
+    }
+
+    /// Start position (inclusive)
+    pub fn start(&self) -> usize {
+        self.start
+    }
+
+    /// End position (exclusive)
+    pub fn end(&self) -> usize {
+        self.end
     }
 
     /// Get the length of the span
@@ -47,6 +70,7 @@ pub struct Position<P> {
 }
 
 impl<P> Position<P> {
+    /// Same as [`position`]
     pub fn new(parser: P) -> Self {
         Position { parser }
     }

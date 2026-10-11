@@ -1,3 +1,5 @@
+//! A specific run of elements
+
 use crate::atomic::atomic;
 use crate::cursor::Cursor;
 use crate::error::Expected;
@@ -111,5 +113,19 @@ mod tests {
         let error = parser.parse(AtomicCursor::new(&data)).unwrap_err();
         assert_eq!(error.position(), 1);
         assert!(error.to_string().contains(r#"expected "1 2", found "1 3""#));
+    }
+
+    #[test]
+    fn test_found_stops_at_the_end_of_the_character() {
+        // `C3 80` is `À`; the stray continuation bytes after it are not part of it
+        let data = b"a\xC3\x80\x80\x80\x80";
+        let error = is_sequence::<ByteCursor>(&b"ab"[..])
+            .parse(ByteCursor::new(data))
+            .unwrap_err();
+        let message = error.to_string();
+        assert!(
+            message.contains(r#"expected "ab", found "aÀ""#),
+            "got {message}"
+        );
     }
 }

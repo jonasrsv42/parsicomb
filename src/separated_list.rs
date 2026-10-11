@@ -1,3 +1,5 @@
+//! One or more items separated by a separator
+
 use crate::cursor::Cursor;
 use crate::parser::Parser;
 
@@ -21,6 +23,7 @@ pub struct SeparatedList<P, PSep> {
 }
 
 impl<P, PSep> SeparatedList<P, PSep> {
+    /// Same as [`separated_list`]
     pub fn new(parser: P, separator: PSep) -> Self {
         SeparatedList { parser, separator }
     }

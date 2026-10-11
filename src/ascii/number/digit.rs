@@ -1,3 +1,5 @@
+//! ASCII digits
+
 use crate::ByteCursor;
 use crate::ParsicombError;
 use crate::byte::between_bytes;

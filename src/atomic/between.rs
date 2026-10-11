@@ -1,3 +1,5 @@
+//! An element within an inclusive range
+
 use crate::atomic::atomic;
 use crate::cursor::Cursor;
 use crate::error::Expected;
@@ -20,11 +22,9 @@ where
     type Error = Cur::Error;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
-        let (value, next) = atomic().parse(cursor)?;
-        if self.start <= value && value <= self.end {
-            Ok((value, next))
-        } else {
-            Err(cursor.expected_error(Expected::Range(self.start, self.end)))
+        match atomic().parse(cursor) {
+            Ok((value, next)) if self.start <= value && value <= self.end => Ok((value, next)),
+            _ => Err(cursor.expected_error(Expected::Range(self.start, self.end))),
         }
     }
 }
