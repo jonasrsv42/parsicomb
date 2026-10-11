@@ -1,8 +1,10 @@
 use super::digit::digit;
 use crate::ByteCursor;
+use crate::ParsicombError;
+use crate::cursor::Cursor;
 use crate::parser::Parser;
+use crate::position::PositionExt;
 use crate::some::some;
-use crate::{CodeLoc, ParsicombError};
 use std::marker::PhantomData;
 
 /// Parser that matches one or more ASCII digits and returns them as a u64
@@ -23,33 +25,17 @@ impl<'code> Parser for UIntParser<'code> {
     type Error = ParsicombError<'code>;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
-        let (digit_bytes, cursor) = some(digit()).parse(cursor)?;
+        let ((_, digits), end) = some(digit()).with_position().parse(cursor)?;
 
-        // Convert digits to string
-        let num_str = match std::str::from_utf8(&digit_bytes) {
-            Ok(s) => s,
-            Err(_) => {
-                let (data, position) = cursor.inner();
-                return Err(ParsicombError::SyntaxError {
-                    message: "invalid UTF-8 in digits".into(),
-                    loc: CodeLoc::new(data, position),
-                });
-            }
-        };
+        // ASCII digits only, so both conversions fail only on overflow
+        let value = std::str::from_utf8(digits.slice())
+            .ok()
+            .and_then(|text| text.parse::<u64>().ok())
+            .ok_or_else(|| {
+                end.syntax_error(format!("number too large: {}", digits.as_string()).into())
+            })?;
 
-        // Parse the number
-        let value = match num_str.parse::<u64>() {
-            Ok(v) => v,
-            Err(_) => {
-                let (data, position) = cursor.inner();
-                return Err(ParsicombError::SyntaxError {
-                    message: format!("number too large: {}", num_str).into(),
-                    loc: CodeLoc::new(data, position),
-                });
-            }
-        };
-
-        Ok((value, cursor))
+        Ok((value, end))
     }
 }
 

@@ -13,13 +13,13 @@ impl<P, F> TakeUntilParser<P, F> {
     }
 }
 
-impl<P, F, T> Parser for TakeUntilParser<P, F>
+impl<P, F> Parser for TakeUntilParser<P, F>
 where
-    P: Parser<Output = T>,
-    F: Fn(&T) -> bool,
+    P: Parser,
+    F: Fn(&P::Output) -> bool,
 {
     type Cursor = P::Cursor;
-    type Output = Vec<T>;
+    type Output = Vec<P::Output>;
     type Error = P::Error;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
@@ -55,7 +55,11 @@ where
 }
 
 /// Convenience function to create a TakeUntilParser
-pub fn take_until<P, F>(parser: P, predicate: F) -> TakeUntilParser<P, F> {
+pub fn take_until<P, F>(parser: P, predicate: F) -> TakeUntilParser<P, F>
+where
+    P: Parser,
+    F: Fn(&P::Output) -> bool,
+{
     TakeUntilParser::new(parser, predicate)
 }
 

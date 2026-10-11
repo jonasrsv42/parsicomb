@@ -41,7 +41,6 @@ pub trait NotExt: Parser + Sized {
     }
 }
 
-/// Implement NotExt for all parsers
 impl<P: Parser> NotExt for P {}
 
 #[cfg(test)]

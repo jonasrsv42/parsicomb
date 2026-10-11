@@ -56,17 +56,12 @@
 //! - Full control over whitespace handling for your specific syntax
 
 use crate::ByteCursor;
-use crate::ParsicombError;
-use crate::filter::{FilterError, FilterExt};
+use crate::filter::FilterExt;
 use crate::parser::Parser;
 use crate::utf8::char::char;
 
 /// Convenience function to create a Unicode whitespace parser
-pub fn unicode_whitespace<'code>() -> impl Parser<
-    Cursor = ByteCursor<'code>,
-    Output = char,
-    Error = FilterError<ParsicombError<'code>, ParsicombError<'code>>,
-> {
+pub fn unicode_whitespace<'code>() -> impl Parser<Cursor = ByteCursor<'code>, Output = char> {
     char().filter(|c| c.is_whitespace(), "expected Unicode whitespace")
 }
 

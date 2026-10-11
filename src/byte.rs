@@ -1,100 +1,34 @@
-use crate::cursor::Cursor;
-use crate::error::Expected;
-use crate::{AtomicParser, ByteCursor, Parser, ParsicombError, atomic};
-use std::marker::PhantomData;
+use crate::atomic::{AtomicBetween, IsAtomic, atomic_between, is_atomic};
+use crate::{AtomicParser, ByteCursor, atomic};
 
-/// Type alias for a parser that consumes and returns a single byte
+/// Parser that consumes and returns a single byte
 pub type ByteParser<'code> = AtomicParser<ByteCursor<'code>>;
 
-/// Convenience function to create a ByteParser
+/// Parser that matches a specific byte
+pub type IsByteParser<'code> = IsAtomic<ByteCursor<'code>>;
+
+/// Parser that matches a byte within an inclusive range
+pub type BetweenBytesParser<'code> = AtomicBetween<ByteCursor<'code>>;
+
+/// Create a parser that consumes and returns a single byte
 pub fn byte<'code>() -> ByteParser<'code> {
     atomic()
 }
 
-/// Parser that matches a specific byte
-pub struct IsByteParser<'code> {
-    expected: u8,
-    _input: PhantomData<&'code [u8]>,
-}
-
-impl<'code> IsByteParser<'code> {
-    pub fn new(expected: u8) -> Self {
-        IsByteParser {
-            expected,
-            _input: PhantomData,
-        }
-    }
-}
-
-impl<'code> Parser for IsByteParser<'code> {
-    type Cursor = ByteCursor<'code>;
-    type Output = u8;
-    type Error = ParsicombError<'code>;
-
-    fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
-        match cursor.value()? {
-            byte if byte == self.expected => Ok((byte, cursor.next())),
-            found => Err(ParsicombError::Expected {
-                expected: Expected::Byte {
-                    expected: self.expected,
-                    found,
-                },
-                loc: cursor.loc(),
-            }),
-        }
-    }
-}
-
-/// Parser that matches a byte within a range (inclusive)
-pub struct BetweenBytesParser<'code> {
-    start: u8,
-    end: u8,
-    _input: PhantomData<&'code [u8]>,
-}
-
-impl<'code> BetweenBytesParser<'code> {
-    pub fn new(start: u8, end: u8) -> Self {
-        BetweenBytesParser {
-            start,
-            end,
-            _input: PhantomData,
-        }
-    }
-}
-
-impl<'code> Parser for BetweenBytesParser<'code> {
-    type Cursor = ByteCursor<'code>;
-    type Output = u8;
-    type Error = ParsicombError<'code>;
-
-    fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
-        match cursor.value()? {
-            byte if (self.start..=self.end).contains(&byte) => Ok((byte, cursor.next())),
-            found => Err(ParsicombError::Expected {
-                expected: Expected::ByteInRange {
-                    start: self.start,
-                    end: self.end,
-                    found,
-                },
-                loc: cursor.loc(),
-            }),
-        }
-    }
-}
-
-/// Convenience function to create an IsByteParser
+/// Create a parser that matches a specific byte
 pub fn is_byte<'code>(expected: u8) -> IsByteParser<'code> {
-    IsByteParser::new(expected)
+    is_atomic(expected)
 }
 
-/// Convenience function to create a BetweenBytesParser
+/// Create a parser that matches a byte within an inclusive range
 pub fn between_bytes<'code>(start: u8, end: u8) -> BetweenBytesParser<'code> {
-    BetweenBytesParser::new(start, end)
+    atomic_between(start, end)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Parser;
     use crate::cursor::Cursor;
     use crate::cursors::atomic::AtomicCursor;
 
@@ -169,7 +103,7 @@ mod tests {
         assert!(
             error
                 .to_string()
-                .contains("expected byte 0x68 ('h'), found 0x77 ('w')")
+                .contains("expected byte 0x68 ('h'), found byte 0x77 ('w')")
         );
     }
 
@@ -184,7 +118,7 @@ mod tests {
         let error = result.unwrap_err();
         let msg = error.to_string();
         assert!(
-            msg.contains(r"expected byte 0xAA ('\xaa'), found 0xFF ('\xff')"),
+            msg.contains(r"expected byte 0xAA ('\xaa'), found byte 0xFF ('\xff')"),
             "got {msg}"
         );
     }
@@ -212,7 +146,7 @@ mod tests {
         assert!(
             error
                 .to_string()
-                .contains("expected byte in range 0x30-0x39 ('0'-'9'), found 0x2F ('/')")
+                .contains("expected byte 0x30 ('0') to byte 0x39 ('9'), found byte 0x2F ('/')")
         );
     }
 
@@ -228,7 +162,7 @@ mod tests {
         assert!(
             error
                 .to_string()
-                .contains("expected byte in range 0x30-0x39 ('0'-'9'), found 0x3A (':')")
+                .contains("expected byte 0x30 ('0') to byte 0x39 ('9'), found byte 0x3A (':')")
         );
     }
 
@@ -248,7 +182,7 @@ mod tests {
         let err = is_byte(b'\t').parse(ByteCursor::new(data)).unwrap_err();
         let msg = err.to_string();
         assert!(
-            msg.contains(r"expected byte 0x09 ('\t'), found 0x0A ('\n')"),
+            msg.contains(r"expected byte 0x09 ('\t'), found byte 0x0A ('\n')"),
             "got {msg}"
         );
     }

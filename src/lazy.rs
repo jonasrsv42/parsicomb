@@ -9,22 +9,28 @@ use std::cell::OnceCell;
 /// recursive grammar each nesting level holds its own `Lazy`, so the cached tree
 /// only grows as deep as the deepest input seen.
 ///
-/// A parser that refers to itself through `lazy` must erase its type at that
-/// point with `.boxed()`, otherwise its type would contain itself:
+/// A parser that refers to itself through `lazy` must erase its parser type
+/// at that point with `.boxed()`, and must have a concrete error type, since
+/// both would otherwise contain themselves:
 ///
 /// ```
-/// use parsicomb::{ByteCursor, Parser, BoxedExt, lazy};
+/// use parsicomb::{BoxedExt, ByteCursor, Parser, ParsicombError, lazy};
 /// use parsicomb::and::AndExt;
 /// use parsicomb::byte::is_byte;
 /// use parsicomb::map::MapExt;
+/// use parsicomb::map_err::MapErrExt;
 /// use parsicomb::or::OrExt;
 ///
 /// /// Nesting depth of balanced parentheses around an `x`, e.g. `((x))` → 2
-/// fn nested<'code>() -> impl Parser<Cursor = ByteCursor<'code>, Output = usize> {
-///     is_byte(b'x').map(|_| 0).or(is_byte(b'(')
-///         .and(lazy(|| nested().boxed()))
-///         .and(is_byte(b')'))
-///         .map(|((_, depth), _)| depth + 1))
+/// fn nested<'code>()
+/// -> impl Parser<Cursor = ByteCursor<'code>, Output = usize, Error = ParsicombError<'code>> {
+///     is_byte(b'x')
+///         .map(|_| 0)
+///         .or(is_byte(b'(')
+///             .and(lazy(|| nested().boxed()))
+///             .and(is_byte(b')'))
+///             .map(|((_, depth), _)| depth + 1))
+///         .map_err(ParsicombError::wrap)
 /// }
 ///
 /// let (depth, _) = nested().parse(ByteCursor::new(b"(((x)))")).unwrap();

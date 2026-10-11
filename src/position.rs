@@ -74,7 +74,7 @@ pub trait PositionExt: Parser + Sized {
 impl<P: Parser> PositionExt for P {}
 
 /// Convenience function to create a Position combinator
-pub fn position<P>(parser: P) -> Position<P> {
+pub fn position<P: Parser>(parser: P) -> Position<P> {
     Position::new(parser)
 }
 

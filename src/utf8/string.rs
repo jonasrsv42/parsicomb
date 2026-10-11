@@ -7,7 +7,7 @@ use crate::utf8::char::char;
 use std::borrow::Cow;
 use std::marker::PhantomData;
 
-/// Parser that matches an exact UTF-8 string
+/// Parser that matches an exact UTF-8 string character by character
 pub struct IsStringParser<'code> {
     expected: Cow<'static, str>,
     _input: PhantomData<&'code [u8]>,
@@ -20,18 +20,6 @@ impl<'code> IsStringParser<'code> {
             _input: PhantomData,
         }
     }
-
-    /// Build the mismatch error at `cursor`, decoding the character found there
-    fn mismatch(&self, cursor: ByteCursor<'code>, expected: char) -> ParsicombError<'code> {
-        ParsicombError::Expected {
-            expected: Expected::CharInString {
-                expected,
-                found: char().parse(cursor).ok().map(|(found, _)| found),
-                string: self.expected.clone(),
-            },
-            loc: cursor.loc(),
-        }
-    }
 }
 
 impl<'code> Parser for IsStringParser<'code> {
@@ -40,30 +28,26 @@ impl<'code> Parser for IsStringParser<'code> {
     type Error = ParsicombError<'code>;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
-        let (source, start) = cursor.inner();
-        let expected = self.expected.as_bytes();
+        let mut current_cursor = cursor;
 
-        if source[start..].starts_with(expected) {
-            // Advance past the match; `expected` is valid UTF-8, so this lands
-            // on a character boundary
-            let mut end = cursor;
-            for _ in 0..expected.len() {
-                end = end.next();
-            }
-            return Ok((self.expected.clone(), end));
-        }
-
-        // Report the first character that differs
-        let mut current = cursor;
         for expected_char in self.expected.chars() {
-            match char().parse(current) {
-                Ok((found, next)) if found == expected_char => current = next,
-                _ => return Err(self.mismatch(current, expected_char)),
+            let parsed = char().parse(current_cursor).ok();
+            match parsed {
+                Some((found, next_cursor)) if found == expected_char => {
+                    current_cursor = next_cursor;
+                }
+                _ => {
+                    return Err(current_cursor.expected_error(Expected::CharInString {
+                        expected: expected_char,
+                        found: parsed.map(|(found, _)| found),
+                        string: self.expected.clone(),
+                    }));
+                }
             }
         }
 
-        // Unreachable when the prefix check failed, but fail rather than panic
-        Err(self.mismatch(current, self.expected.chars().next().unwrap_or_default()))
+        // Cheap for `&'static str` (the common case): clones the reference
+        Ok((self.expected.clone(), current_cursor))
     }
 }
 
@@ -179,7 +163,7 @@ mod tests {
             result
                 .unwrap_err()
                 .to_string()
-                .contains("reached end of input")
+                .contains("found end of input")
         );
     }
 
@@ -195,7 +179,7 @@ mod tests {
             result
                 .unwrap_err()
                 .to_string()
-                .contains("reached end of input")
+                .contains("found end of input")
         );
     }
 

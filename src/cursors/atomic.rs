@@ -1,9 +1,11 @@
 use crate::atomic::Atomic;
 use crate::cursor::Cursor;
+use crate::error::Expected;
 use crate::position::Span;
 use crate::{CodeLoc, ParsicombError};
 use std::borrow::Cow;
 
+/// Cursor over a slice of atomic elements (bytes, tokens, ...)
 #[derive(Debug, Copy, Clone)]
 pub enum AtomicCursor<'code, T: Atomic> {
     Valid { data: &'code [T], position: usize },
@@ -94,6 +96,13 @@ impl<'code, T: Atomic + 'code> Cursor for AtomicCursor<'code, T> {
     fn syntax_error(&self, message: Cow<'static, str>) -> Self::Error {
         ParsicombError::SyntaxError {
             message,
+            loc: self.loc(),
+        }
+    }
+
+    fn expected_error(&self, expected: Expected<T>) -> Self::Error {
+        ParsicombError::Expected {
+            expected,
             loc: self.loc(),
         }
     }

@@ -7,14 +7,14 @@ use std::fmt;
 /// Error type for filter parser that can wrap either the child parser's error
 /// or a filter-specific error
 #[derive(Debug)]
-pub enum FilterError<E, CursorErr> {
+pub enum FilterError<PErr, CurErr> {
     /// Error from the child parser
-    ParserError(E),
+    ParserError(PErr),
     /// Filter predicate failed
-    FilterFailed(CursorErr),
+    FilterFailed(CurErr),
 }
 
-impl<E: fmt::Display, CursorErr: fmt::Display> fmt::Display for FilterError<E, CursorErr> {
+impl<PErr: fmt::Display, CurErr: fmt::Display> fmt::Display for FilterError<PErr, CurErr> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             FilterError::ParserError(e) => write!(f, "{}", e),
@@ -23,17 +23,17 @@ impl<E: fmt::Display, CursorErr: fmt::Display> fmt::Display for FilterError<E, C
     }
 }
 
-impl<E: std::error::Error, CursorErr: std::error::Error> std::error::Error
-    for FilterError<E, CursorErr>
+impl<PErr: std::error::Error, CurErr: std::error::Error> std::error::Error
+    for FilterError<PErr, CurErr>
 {
 }
 
-impl<E, CursorErr> ErrorNode for FilterError<E, CursorErr>
+impl<PErr, CurErr> ErrorNode for FilterError<PErr, CurErr>
 where
-    E: ErrorNode,
-    CursorErr: ErrorNode<Element = E::Element>,
+    PErr: ErrorNode,
+    CurErr: ErrorNode<Element = PErr::Element>,
 {
-    type Element = E::Element;
+    type Element = PErr::Element;
 
     fn likely_error(&self) -> &dyn ErrorLeaf<Element = Self::Element> {
         match self {

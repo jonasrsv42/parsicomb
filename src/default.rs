@@ -1,25 +1,25 @@
 use super::parser::Parser;
 use crate::Cursor;
 
-/// Parser that always succeeds without consuming input and returns the default value of T
-pub struct DefaultParser<T, C> {
-    default: T,
-    _phantom_cursor: std::marker::PhantomData<C>,
+/// Parser that always succeeds without consuming input, returning a clone of the given value
+pub struct DefaultParser<Out, Cur> {
+    default: Out,
+    _cursor: std::marker::PhantomData<Cur>,
 }
 
-impl<T, C> DefaultParser<T, C> {
-    pub fn new(default: T) -> Self {
+impl<Out, Cur> DefaultParser<Out, Cur> {
+    pub fn new(default: Out) -> Self {
         DefaultParser {
             default,
-            _phantom_cursor: std::marker::PhantomData,
+            _cursor: std::marker::PhantomData,
         }
     }
 }
 
-impl<T: Clone, C: Cursor> Parser for DefaultParser<T, C> {
-    type Cursor = C;
-    type Output = T;
-    type Error = C::Error;
+impl<Out: Clone, Cur: Cursor> Parser for DefaultParser<Out, Cur> {
+    type Cursor = Cur;
+    type Output = Out;
+    type Error = Cur::Error;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         Ok((self.default.clone(), cursor))
@@ -27,7 +27,7 @@ impl<T: Clone, C: Cursor> Parser for DefaultParser<T, C> {
 }
 
 /// Convenience function to create a default parser
-pub fn default<T: Clone, C: Cursor>(default: T) -> DefaultParser<T, C> {
+pub fn default<Out: Clone, Cur: Cursor>(default: Out) -> DefaultParser<Out, Cur> {
     DefaultParser::new(default)
 }
 

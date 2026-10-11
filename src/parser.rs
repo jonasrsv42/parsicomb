@@ -15,6 +15,6 @@ pub trait Parser {
     /// Attempt to parse from the given cursor position
     ///
     /// Returns Ok with the parsed value and updated cursor on success,
-    /// or Err if the parse fails. Failures should not consume input.
+    /// or Err if the parse fails; on failure the caller keeps its original cursor.
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error>;
 }

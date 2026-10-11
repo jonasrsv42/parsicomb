@@ -12,13 +12,13 @@ impl<P, F> Map<P, F> {
     }
 }
 
-impl<P, F, T, U> Parser for Map<P, F>
+impl<P, F, Out> Parser for Map<P, F>
 where
-    P: Parser<Output = T>,
-    F: Fn(T) -> U,
+    P: Parser,
+    F: Fn(P::Output) -> Out,
 {
     type Cursor = P::Cursor;
-    type Output = U;
+    type Output = Out;
     type Error = P::Error;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
@@ -29,25 +29,24 @@ where
 }
 
 /// Convenience function to create a Map parser
-pub fn map<P, F, T, U>(parser: P, mapper: F) -> Map<P, F>
+pub fn map<P, F, Out>(parser: P, mapper: F) -> Map<P, F>
 where
-    P: Parser<Output = T>,
-    F: Fn(T) -> U,
+    P: Parser,
+    F: Fn(P::Output) -> Out,
 {
     Map::new(parser, mapper)
 }
 
 /// Extension trait to add .map() method support for parsers
 pub trait MapExt: Parser + Sized {
-    fn map<F, U>(self, mapper: F) -> Map<Self, F>
+    fn map<F, Out>(self, mapper: F) -> Map<Self, F>
     where
-        F: Fn(Self::Output) -> U,
+        F: Fn(Self::Output) -> Out,
     {
         Map::new(self, mapper)
     }
 }
 
-/// Implement MapExt for all parsers
 impl<P: Parser> MapExt for P {}
 
 #[cfg(test)]
@@ -119,7 +118,7 @@ mod tests {
 
         // Create parsers that map to a common enum type
         let letter_parser = is_byte(b'A').map(|byte| Token::Letter(byte as char));
-        let number_parser = i64().map(|num| Token::Number(num));
+        let number_parser = i64().map(Token::Number);
         let special_parser = is_byte(b'!').map(|byte| Token::Special(byte as char));
 
         // Now we can use or() since they all return Token

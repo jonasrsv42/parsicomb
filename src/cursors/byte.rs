@@ -1,7 +1,6 @@
 use crate::AtomicCursor;
 
-/// A specialized cursor for byte data (u8)
-/// This is now just a type alias for AtomicCursor<u8>
+/// Cursor over a byte slice; an alias for [`AtomicCursor<u8>`](AtomicCursor)
 pub type ByteCursor<'code> = AtomicCursor<'code, u8>;
 
 #[cfg(test)]

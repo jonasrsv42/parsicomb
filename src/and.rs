@@ -11,19 +11,21 @@ pub enum AndError<Err1, Err2> {
     SecondParser(Err2),
 }
 
-impl<Err1: fmt::Display, Err2: fmt::Display> fmt::Display for AndError<Err1, Err2> {
+/// Displays the most likely underlying error
+impl<Err1, Err2> fmt::Display for AndError<Err1, Err2>
+where
+    Err1: ErrorNode,
+    Err2: ErrorNode<Element = Err1::Element>,
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            AndError::FirstParser(e) => write!(f, "First parser failed: {}", e),
-            AndError::SecondParser(e) => write!(f, "Second parser failed: {}", e),
-        }
+        write!(f, "{}", self.likely_error())
     }
 }
 
 impl<Err1, Err2> std::error::Error for AndError<Err1, Err2>
 where
-    Err1: std::error::Error,
-    Err2: std::error::Error,
+    Err1: ErrorNode,
+    Err2: ErrorNode<Element = Err1::Element>,
 {
 }
 
@@ -113,7 +115,6 @@ pub trait AndExt: Parser + Sized {
     }
 }
 
-/// Implement AndExt for all parsers
 impl<P: Parser> AndExt for P {}
 
 #[cfg(test)]

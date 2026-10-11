@@ -1,6 +1,13 @@
 use crate::cursor::Cursor;
 use crate::parser::Parser;
-use std::fmt::{Debug, Display};
+use std::fmt::{self, Debug, Display};
+use std::marker::PhantomData;
+
+pub mod between;
+pub mod is;
+
+pub use between::{AtomicBetween, atomic_between};
+pub use is::{IsAtomic, is_atomic};
 
 /// Trait for atomic elements that can be used in parsing
 /// This enables generic error formatting and position calculation
@@ -16,42 +23,48 @@ pub trait Atomic: Copy + Clone + PartialEq + Debug + Display {
     fn display_width(&self) -> usize {
         1
     }
+
+    /// Describe a single element in error messages (the `X` in "expected X")
+    ///
+    /// Defaults to the element's `Display`.
+    fn describe(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self)
+    }
 }
 
 /// A parser that reads one atomic element from the cursor and advances it
 /// This is the generic equivalent of a byte parser
-pub struct AtomicParser<C> {
-    _phantom: std::marker::PhantomData<C>,
+pub struct AtomicParser<Cur> {
+    _cursor: PhantomData<Cur>,
 }
 
-impl<C> AtomicParser<C> {
+impl<Cur> AtomicParser<Cur> {
     pub fn new() -> Self {
         Self {
-            _phantom: std::marker::PhantomData,
+            _cursor: PhantomData,
         }
     }
 }
 
-impl<C: Cursor> Default for AtomicParser<C> {
+impl<Cur: Cursor> Default for AtomicParser<Cur> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<C: Cursor> Parser for AtomicParser<C> {
-    type Cursor = C;
-    type Output = C::Element;
-    type Error = C::Error;
+impl<Cur: Cursor> Parser for AtomicParser<Cur> {
+    type Cursor = Cur;
+    type Output = Cur::Element;
+    type Error = Cur::Error;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let value = cursor.value()?;
-        let next_cursor = cursor.next();
-        Ok((value, next_cursor))
+        Ok((value, cursor.next()))
     }
 }
 
 /// Convenience function to create an atomic parser for a specific cursor type
-pub fn atomic<C>() -> AtomicParser<C> {
+pub fn atomic<Cur>() -> AtomicParser<Cur> {
     AtomicParser::new()
 }
 
@@ -68,6 +81,11 @@ impl Atomic for u8 {
     /// occupies a single column (its lead byte).
     fn display_width(&self) -> usize {
         if (0x80..0xC0).contains(self) { 0 } else { 1 }
+    }
+
+    /// `byte 0x28 ('(')`, with non-printable bytes escaped (`'\n'`, `'\xff'`)
+    fn describe(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "byte 0x{:02X} ('{}')", self, self.escape_ascii())
     }
 }
 
@@ -177,6 +195,13 @@ mod tests {
         fn syntax_error(&self, message: std::borrow::Cow<'static, str>) -> Self::Error {
             ParsicombError::SyntaxError {
                 message,
+                loc: CodeLoc::new(self.source(), self.position()),
+            }
+        }
+
+        fn expected_error(&self, expected: crate::Expected<u32>) -> Self::Error {
+            ParsicombError::Expected {
+                expected,
                 loc: CodeLoc::new(self.source(), self.position()),
             }
         }

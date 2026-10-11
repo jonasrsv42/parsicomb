@@ -92,7 +92,6 @@ pub trait OrExt: Parser + Sized {
     }
 }
 
-/// Implement OrExt for all parsers
 impl<P: Parser> OrExt for P {}
 
 /// Convenience function to create an Or parser
@@ -261,7 +260,7 @@ mod tests {
             second: error3,
         };
 
-        // Use the new ErrorBranch system - this automatically handles recursion!
+        // likely_error() recurses through the nested OrErrors
         let furthest = outer_or.likely_error();
 
         assert_eq!(furthest.loc().position(), 8);
@@ -291,7 +290,7 @@ mod tests {
         let result = parser.parse(cursor);
         assert!(result.is_err());
 
-        // The furthest() should automatically flatten all the nested Or and And structures
+        // The likely_error() should automatically flatten all the nested Or and And structures
         // and find the error that made it furthest (position 3)
         let error = result.unwrap_err();
         let furthest_error = error.likely_error();
@@ -299,7 +298,7 @@ mod tests {
         assert_eq!(
             furthest_error.loc().position(),
             3,
-            "furthest() should traverse nested Or<Or<Or<...>>> and And structures to find the deepest error"
+            "likely_error() should traverse nested Or<Or<Or<...>>> and And structures to find the deepest error"
         );
     }
 
@@ -326,7 +325,7 @@ mod tests {
         let result = parser.parse(cursor);
         assert!(result.is_err());
 
-        // The furthest() should recursively traverse:
+        // The likely_error() should recursively traverse:
         // OrError -> FilterError -> AndError -> ParsicombError
         // and find the error that got furthest (position 2)
         let error = result.unwrap_err();
@@ -335,7 +334,7 @@ mod tests {
         assert_eq!(
             furthest_error.loc().position(),
             2,
-            "furthest() should traverse complex Or<Filter<And<...>>> structures"
+            "likely_error() should traverse complex Or<Filter<And<...>>> structures"
         );
     }
 }

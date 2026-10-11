@@ -5,15 +5,15 @@ use std::fmt;
 
 /// Error type for the All parser
 #[derive(Debug)]
-pub enum AllError<E, CursorErr> {
+pub enum AllError<PErr, CurErr> {
     /// Error from the child parser
-    ParserError(E),
+    ParserError(PErr),
     /// The child parser succeeded without consuming input before end-of-stream,
     /// so repeating it would never terminate
-    NoProgress(CursorErr),
+    NoProgress(CurErr),
 }
 
-impl<E: fmt::Display, CursorErr: fmt::Display> fmt::Display for AllError<E, CursorErr> {
+impl<PErr: fmt::Display, CurErr: fmt::Display> fmt::Display for AllError<PErr, CurErr> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             AllError::ParserError(e) => write!(f, "{}", e),
@@ -22,17 +22,17 @@ impl<E: fmt::Display, CursorErr: fmt::Display> fmt::Display for AllError<E, Curs
     }
 }
 
-impl<E: std::error::Error, CursorErr: std::error::Error> std::error::Error
-    for AllError<E, CursorErr>
+impl<PErr: std::error::Error, CurErr: std::error::Error> std::error::Error
+    for AllError<PErr, CurErr>
 {
 }
 
-impl<E, CursorErr> ErrorNode for AllError<E, CursorErr>
+impl<PErr, CurErr> ErrorNode for AllError<PErr, CurErr>
 where
-    E: ErrorNode,
-    CursorErr: ErrorNode<Element = E::Element>,
+    PErr: ErrorNode,
+    CurErr: ErrorNode<Element = PErr::Element>,
 {
-    type Element = E::Element;
+    type Element = PErr::Element;
 
     fn likely_error(&self) -> &dyn ErrorLeaf<Element = Self::Element> {
         match self {
@@ -69,15 +69,12 @@ impl<P: Parser> Parser for All<P> {
         let mut results = Vec::new();
 
         while !cursor.eos() {
-            let (value, next_cursor) = self
-                .parser
-                .parse(cursor)
-                .map_err(AllError::ParserError)?;
+            let (value, next_cursor) = self.parser.parse(cursor).map_err(AllError::ParserError)?;
 
             if next_cursor.position() == cursor.position() {
-                return Err(AllError::NoProgress(cursor.syntax_error(
-                    "parser succeeded without consuming input".into(),
-                )));
+                return Err(AllError::NoProgress(
+                    cursor.syntax_error("parser succeeded without consuming input".into()),
+                ));
             }
 
             results.push(value);

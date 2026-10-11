@@ -1,75 +1,54 @@
-use crate::atomic::Atomic;
 use crate::error::{ErrorLeaf, ErrorNode};
 use crate::parser::Parser;
 use std::fmt;
 
 /// Error type for ArgumentList parser
 #[derive(Debug)]
-pub enum ArgumentListError<EOpen, EArg, ESep, EClose> {
+pub enum ArgumentListError<ErrOpen, ErrArg, ErrClose> {
     /// Failed to parse opening delimiter
-    OpenDelimiter(EOpen),
+    OpenDelimiter(ErrOpen),
     /// Failed to parse first argument
-    FirstArgument(EArg),
+    FirstArgument(ErrArg),
     /// Failed to parse argument after separator
-    ArgumentAfterSeparator(EArg),
+    ArgumentAfterSeparator(ErrArg),
     /// Expected closing delimiter or separator
-    ExpectedClosingDelimiter(EClose),
-    /// Separator error (internal use)
-    Separator(ESep),
+    ExpectedClosingDelimiter(ErrClose),
 }
 
-impl<EOpen, EArg, ESep, EClose> fmt::Display for ArgumentListError<EOpen, EArg, ESep, EClose>
+/// Displays the most likely underlying error
+impl<ErrOpen, ErrArg, ErrClose> fmt::Display for ArgumentListError<ErrOpen, ErrArg, ErrClose>
 where
-    EOpen: fmt::Display,
-    EArg: fmt::Display,
-    ESep: fmt::Display,
-    EClose: fmt::Display,
+    ErrOpen: ErrorNode,
+    ErrArg: ErrorNode<Element = ErrOpen::Element>,
+    ErrClose: ErrorNode<Element = ErrOpen::Element>,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ArgumentListError::OpenDelimiter(e) => {
-                write!(f, "Failed to parse opening delimiter: {}", e)
-            }
-            ArgumentListError::FirstArgument(e) => {
-                write!(f, "Failed to parse first argument: {}", e)
-            }
-            ArgumentListError::ArgumentAfterSeparator(e) => {
-                write!(f, "Failed to parse argument after separator: {}", e)
-            }
-            ArgumentListError::ExpectedClosingDelimiter(e) => {
-                write!(f, "Expected closing delimiter: {}", e)
-            }
-            ArgumentListError::Separator(e) => write!(f, "Separator error: {}", e),
-        }
+        write!(f, "{}", self.likely_error())
     }
 }
 
-impl<EOpen, EArg, ESep, EClose> std::error::Error for ArgumentListError<EOpen, EArg, ESep, EClose>
+impl<ErrOpen, ErrArg, ErrClose> std::error::Error for ArgumentListError<ErrOpen, ErrArg, ErrClose>
 where
-    EOpen: std::error::Error,
-    EArg: std::error::Error,
-    ESep: std::error::Error,
-    EClose: std::error::Error,
+    ErrOpen: ErrorNode,
+    ErrArg: ErrorNode<Element = ErrOpen::Element>,
+    ErrClose: ErrorNode<Element = ErrOpen::Element>,
 {
 }
 
-impl<EOpen, EArg, ESep, EClose, T: Atomic> ErrorNode
-    for ArgumentListError<EOpen, EArg, ESep, EClose>
+impl<ErrOpen, ErrArg, ErrClose> ErrorNode for ArgumentListError<ErrOpen, ErrArg, ErrClose>
 where
-    EOpen: ErrorNode<Element = T>,
-    EArg: ErrorNode<Element = T>,
-    ESep: ErrorNode<Element = T>,
-    EClose: ErrorNode<Element = T>,
+    ErrOpen: ErrorNode,
+    ErrArg: ErrorNode<Element = ErrOpen::Element>,
+    ErrClose: ErrorNode<Element = ErrOpen::Element>,
 {
-    type Element = T;
+    type Element = ErrOpen::Element;
 
-    fn likely_error(&self) -> &dyn ErrorLeaf<Element = T> {
+    fn likely_error(&self) -> &dyn ErrorLeaf<Element = Self::Element> {
         match self {
             ArgumentListError::OpenDelimiter(e) => e.likely_error(),
             ArgumentListError::FirstArgument(e) => e.likely_error(),
             ArgumentListError::ArgumentAfterSeparator(e) => e.likely_error(),
             ArgumentListError::ExpectedClosingDelimiter(e) => e.likely_error(),
-            ArgumentListError::Separator(e) => e.likely_error(),
         }
     }
 }
@@ -85,7 +64,6 @@ where
 ///
 /// # Features
 /// - Allows empty argument lists
-/// - Provides context-specific error messages
 /// - Distinguishes between missing delimiters and failed argument parsing
 pub struct ArgumentList<POpen, PArg, PSep, PClose> {
     open: POpen,
@@ -114,7 +92,7 @@ where
 {
     type Cursor = POpen::Cursor;
     type Output = Vec<PArg::Output>;
-    type Error = ArgumentListError<POpen::Error, PArg::Error, PSep::Error, PClose::Error>;
+    type Error = ArgumentListError<POpen::Error, PArg::Error, PClose::Error>;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         // Parse opening delimiter
@@ -167,7 +145,7 @@ where
 ///
 /// Parses: `open (arg (sep arg)*)? close`
 ///
-/// Allows empty lists and provides detailed error context.
+/// Allows empty lists.
 pub fn argument_list<POpen, PArg, PSep, PClose>(
     open: POpen,
     parser: PArg,
@@ -186,10 +164,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cursor::Cursor;
     use crate::ByteCursor;
     use crate::ascii::number::i64;
     use crate::byte::is_byte;
+    use crate::cursor::Cursor;
 
     #[test]
     fn test_empty_list() {

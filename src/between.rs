@@ -13,27 +13,24 @@ pub enum BetweenError<ErrOpen, ErrContent, ErrClose> {
     CloseDelimiter(ErrClose),
 }
 
+/// Displays the most likely underlying error
 impl<ErrOpen, ErrContent, ErrClose> fmt::Display for BetweenError<ErrOpen, ErrContent, ErrClose>
 where
-    ErrOpen: fmt::Display,
-    ErrContent: fmt::Display,
-    ErrClose: fmt::Display,
+    ErrOpen: ErrorNode,
+    ErrContent: ErrorNode<Element = ErrOpen::Element>,
+    ErrClose: ErrorNode<Element = ErrOpen::Element>,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            BetweenError::OpenDelimiter(e) => write!(f, "Open delimiter failed: {}", e),
-            BetweenError::Content(e) => write!(f, "Content failed: {}", e),
-            BetweenError::CloseDelimiter(e) => write!(f, "Close delimiter failed: {}", e),
-        }
+        write!(f, "{}", self.likely_error())
     }
 }
 
 impl<ErrOpen, ErrContent, ErrClose> std::error::Error
     for BetweenError<ErrOpen, ErrContent, ErrClose>
 where
-    ErrOpen: std::error::Error,
-    ErrContent: std::error::Error,
-    ErrClose: std::error::Error,
+    ErrOpen: ErrorNode,
+    ErrContent: ErrorNode<Element = ErrOpen::Element>,
+    ErrClose: ErrorNode<Element = ErrOpen::Element>,
 {
 }
 
@@ -95,10 +92,7 @@ where
             .open
             .parse(cursor)
             .map_err(BetweenError::OpenDelimiter)?;
-        let (content, cursor) = self
-            .content
-            .parse(cursor)
-            .map_err(BetweenError::Content)?;
+        let (content, cursor) = self.content.parse(cursor).map_err(BetweenError::Content)?;
         let (_, cursor) = self
             .close
             .parse(cursor)

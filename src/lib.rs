@@ -1,14 +1,4 @@
-//! # ParsiComb - Parser Combinator Library
-//!
-//! A parser combinator library for areamy, designed for building the mao/lang parser.
-//!
-//! ParsiComb provides composable, type-safe parsers that can be combined to build
-//! complex parsing logic from simple building blocks. The library emphasizes:
-//!
-//! - **Zero panics**: All parsing errors are handled through `Result` types
-//! - **Rich error reporting**: Provides line numbers, context, and detailed error messages
-//! - **Composability**: Small parsers combine into larger ones using combinators
-//! - **Performance**: Efficient byte-level parsing with minimal allocations
+#![doc = include_str!("../README.md")]
 
 pub mod all;
 pub mod and;
@@ -42,7 +32,9 @@ pub mod utf8;
 
 pub use all::all;
 pub use argument_list::argument_list;
-pub use atomic::{Atomic, AtomicParser, atomic};
+pub use atomic::{
+    Atomic, AtomicBetween, AtomicParser, IsAtomic, atomic, atomic_between, is_atomic,
+};
 pub use between::between;
 pub use boxed::{BoxedExt, BoxedParser};
 pub use cursor::Cursor;

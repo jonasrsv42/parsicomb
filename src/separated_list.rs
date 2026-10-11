@@ -1,53 +1,11 @@
-use crate::atomic::Atomic;
 use crate::cursor::Cursor;
-use crate::error::{ErrorLeaf, ErrorNode};
 use crate::parser::Parser;
-use std::fmt;
-
-/// Error type for SeparatedList parser
-#[derive(Debug)]
-pub enum SeparatedListError<E1, E2> {
-    /// Error from the element parser
-    Element(E1),
-    /// Error from the separator parser (only used internally, not returned)
-    Separator(E2),
-}
-
-impl<E1: fmt::Display, E2: fmt::Display> fmt::Display for SeparatedListError<E1, E2> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            SeparatedListError::Element(e) => write!(f, "Element failed: {}", e),
-            SeparatedListError::Separator(e) => write!(f, "Separator failed: {}", e),
-        }
-    }
-}
-
-impl<E1, E2> std::error::Error for SeparatedListError<E1, E2>
-where
-    E1: std::error::Error,
-    E2: std::error::Error,
-{
-}
-
-impl<E1, E2, T: Atomic> ErrorNode for SeparatedListError<E1, E2>
-where
-    E1: ErrorNode<Element = T>,
-    E2: ErrorNode<Element = T>,
-{
-    type Element = T;
-
-    fn likely_error(&self) -> &dyn ErrorLeaf<Element = T> {
-        match self {
-            SeparatedListError::Element(e) => e.likely_error(),
-            SeparatedListError::Separator(e) => e.likely_error(),
-        }
-    }
-}
 
 /// Parser combinator that matches a list of items separated by a parser
 ///
 /// This combinator parses at least one item, followed by zero or more
 /// occurrences of (separator + item). It returns a vector of all items.
+/// Its error is the element parser's error.
 ///
 /// # Examples
 /// - `"a,b,c"` with separator `,` → `vec!["a", "b", "c"]`
@@ -57,25 +15,25 @@ where
 /// - Requires at least one element
 /// - Trailing separators cause an error
 /// - Does not handle whitespace automatically
-pub struct SeparatedList<P, PS> {
+pub struct SeparatedList<P, PSep> {
     parser: P,
-    separator: PS,
+    separator: PSep,
 }
 
-impl<P, PS> SeparatedList<P, PS> {
-    pub fn new(parser: P, separator: PS) -> Self {
+impl<P, PSep> SeparatedList<P, PSep> {
+    pub fn new(parser: P, separator: PSep) -> Self {
         SeparatedList { parser, separator }
     }
 }
 
-impl<P, PS> Parser for SeparatedList<P, PS>
+impl<P, PSep> Parser for SeparatedList<P, PSep>
 where
     P: Parser,
-    PS: Parser<Cursor = P::Cursor>,
+    PSep: Parser<Cursor = P::Cursor>,
 {
     type Cursor = P::Cursor;
     type Output = Vec<P::Output>;
-    type Error = P::Error; // Return element parser error directly
+    type Error = P::Error;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let mut results = Vec::new();
@@ -86,14 +44,13 @@ where
 
         // Parse remaining elements preceded by separator
         loop {
-            // Try to parse separator
-            let temp_cursor = match self.separator.parse(cursor) {
-                Ok((_, new_cursor)) => new_cursor,
-                Err(_) => break, // No more separators, we're done
+            let after_separator = match self.separator.parse(cursor) {
+                Ok((_, next_cursor)) => next_cursor,
+                Err(_) => break,
             };
 
-            // Parse the next element (required after separator)
-            let (value, next_cursor) = self.parser.parse(temp_cursor)?;
+            // An element is required after a separator
+            let (value, next_cursor) = self.parser.parse(after_separator)?;
 
             // Separator + element consumed nothing: stop rather than loop forever
             if next_cursor.position() == cursor.position() {
@@ -109,14 +66,10 @@ where
 }
 
 /// Creates a parser that matches a list of items separated by the given parser
-///
-/// Constraints:
-/// - Both parsers must use the same cursor type
-/// - Both parsers must have errors with the same element type
-pub fn separated_list<P, PS>(parser: P, separator: PS) -> SeparatedList<P, PS>
+pub fn separated_list<P, PSep>(parser: P, separator: PSep) -> SeparatedList<P, PSep>
 where
     P: Parser,
-    PS: Parser<Cursor = P::Cursor>,
+    PSep: Parser<Cursor = P::Cursor>,
 {
     SeparatedList::new(parser, separator)
 }

@@ -1,52 +1,51 @@
-use crate::atomic::Atomic;
 use crate::error::{ErrorLeaf, ErrorNode};
 use crate::parser::Parser;
 use std::fmt;
 
 /// Error type for SeparatedPair parser that can wrap errors from all constituent parsers
 #[derive(Debug)]
-pub enum SeparatedPairError<E1, ES, E2> {
+pub enum SeparatedPairError<Err1, ErrSep, Err2> {
     /// Error from the left parser
-    LeftParser(E1),
+    LeftParser(Err1),
     /// Error from the separator parser
-    Separator(ES),
+    Separator(ErrSep),
     /// Error from the right parser
-    RightParser(E2),
+    RightParser(Err2),
 }
 
-impl<E1: fmt::Display, ES: fmt::Display, E2: fmt::Display> fmt::Display
-    for SeparatedPairError<E1, ES, E2>
+/// Displays the most likely underlying error
+impl<Err1, ErrSep, Err2> fmt::Display for SeparatedPairError<Err1, ErrSep, Err2>
+where
+    Err1: ErrorNode,
+    ErrSep: ErrorNode<Element = Err1::Element>,
+    Err2: ErrorNode<Element = Err1::Element>,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            SeparatedPairError::LeftParser(e) => write!(f, "Left parser failed: {}", e),
-            SeparatedPairError::Separator(e) => write!(f, "Separator failed: {}", e),
-            SeparatedPairError::RightParser(e) => write!(f, "Right parser failed: {}", e),
-        }
+        write!(f, "{}", self.likely_error())
     }
 }
 
-impl<E1, ES, E2> std::error::Error for SeparatedPairError<E1, ES, E2>
+impl<Err1, ErrSep, Err2> std::error::Error for SeparatedPairError<Err1, ErrSep, Err2>
 where
-    E1: std::error::Error,
-    ES: std::error::Error,
-    E2: std::error::Error,
+    Err1: ErrorNode,
+    ErrSep: ErrorNode<Element = Err1::Element>,
+    Err2: ErrorNode<Element = Err1::Element>,
 {
 }
 
-impl<E1, ES, E2, T: Atomic> ErrorNode for SeparatedPairError<E1, ES, E2>
+impl<Err1, ErrSep, Err2> ErrorNode for SeparatedPairError<Err1, ErrSep, Err2>
 where
-    E1: ErrorNode<Element = T>,
-    ES: ErrorNode<Element = T>,
-    E2: ErrorNode<Element = T>,
+    Err1: ErrorNode,
+    ErrSep: ErrorNode<Element = Err1::Element>,
+    Err2: ErrorNode<Element = Err1::Element>,
 {
-    type Element = T;
+    type Element = Err1::Element;
 
-    fn likely_error(&self) -> &dyn ErrorLeaf<Element = T> {
+    fn likely_error(&self) -> &dyn ErrorLeaf<Element = Self::Element> {
         match self {
-            SeparatedPairError::LeftParser(e1) => e1.likely_error(),
+            SeparatedPairError::LeftParser(e) => e.likely_error(),
             SeparatedPairError::Separator(e) => e.likely_error(),
-            SeparatedPairError::RightParser(e2) => e2.likely_error(),
+            SeparatedPairError::RightParser(e) => e.likely_error(),
         }
     }
 }
@@ -62,14 +61,14 @@ where
 /// - `"1.0,2.0"` with separator `,` → `(1.0, 2.0)`
 /// - `"hello->world"` with separator `->` → `("hello", "world")`
 /// - `"A:B"` with separator `:` → `("A", "B")`
-pub struct SeparatedPair<P1, PS, P2> {
+pub struct SeparatedPair<P1, PSep, P2> {
     left: P1,
-    separator: PS,
+    separator: PSep,
     right: P2,
 }
 
-impl<P1, PS, P2> SeparatedPair<P1, PS, P2> {
-    pub fn new(left: P1, separator: PS, right: P2) -> Self {
+impl<P1, PSep, P2> SeparatedPair<P1, PSep, P2> {
+    pub fn new(left: P1, separator: PSep, right: P2) -> Self {
         SeparatedPair {
             left,
             separator,
@@ -78,18 +77,17 @@ impl<P1, PS, P2> SeparatedPair<P1, PS, P2> {
     }
 }
 
-impl<P1, PS, P2> Parser for SeparatedPair<P1, PS, P2>
+impl<P1, PSep, P2> Parser for SeparatedPair<P1, PSep, P2>
 where
     P1: Parser,
-    PS: Parser<Cursor = P1::Cursor>,
+    PSep: Parser<Cursor = P1::Cursor>,
     P2: Parser<Cursor = P1::Cursor>,
 {
     type Cursor = P1::Cursor;
     type Output = (P1::Output, P2::Output);
-    type Error = SeparatedPairError<P1::Error, PS::Error, P2::Error>;
+    type Error = SeparatedPairError<P1::Error, PSep::Error, P2::Error>;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
-        // Parse: left + separator + right
         let (left_val, cursor) = self
             .left
             .parse(cursor)
@@ -109,17 +107,14 @@ where
 
 /// Creates a parser that matches two values separated by the given parser
 ///
-/// Constraints:
-/// - All three parsers must use the same cursor type
-/// - All three parsers must have errors with the same element type
-pub fn separated_pair<P1, PS, P2>(
+pub fn separated_pair<P1, PSep, P2>(
     left: P1,
-    separator: PS,
+    separator: PSep,
     right: P2,
-) -> SeparatedPair<P1, PS, P2>
+) -> SeparatedPair<P1, PSep, P2>
 where
     P1: Parser,
-    PS: Parser<Cursor = P1::Cursor>,
+    PSep: Parser<Cursor = P1::Cursor>,
     P2: Parser<Cursor = P1::Cursor>,
 {
     SeparatedPair::new(left, separator, right)

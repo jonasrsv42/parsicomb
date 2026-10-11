@@ -5,14 +5,13 @@
 //! around an error position.
 //!
 //! The important property here is that **rendering is bounded** — it scans and
-//! materializes at most [`CONTEXT_RADIUS`] elements on each side of the error
-//! position, never the whole input. A parse failure on a multi-megabyte binary
-//! blob therefore does not stringify the entire buffer (which previously made
-//! formatting a one-line error O(input size) with a full-buffer allocation).
+//! materializes at most 512 elements on each side of the error position, never
+//! the whole input, so a parse failure on a multi-megabyte binary blob does not
+//! stringify the entire buffer.
 //!
 //! For normal source-sized inputs the window comfortably covers the full ±2
-//! lines of context, so the rendered output is identical to the unwindowed
-//! version. The unit tests below pin that against a brute-force reference.
+//! lines of context, so the output matches a full-input rendering; the unit
+//! tests below check this against a brute-force reference.
 
 use crate::atomic::Atomic;
 
@@ -26,8 +25,8 @@ pub(crate) const CONTEXT_RADIUS: usize = 512;
 /// Resolving line/column is inherently O(loc) — it must count newlines before
 /// the error. Past this distance we don't try: an input this large is far
 /// bigger than any normal source file (most likely a binary blob), line/column
-/// would be meaningless, and the absolute byte offset is the useful location.
-/// Error rendering is best-effort, so degrading to "byte offset only" here keeps
+/// would be meaningless, and the absolute offset is the useful location.
+/// Error rendering is best-effort, so degrading to "offset only" here keeps
 /// it O(1) without losing anything that matters.
 ///
 /// Note this gates on the error *position*, not total input size: an error
@@ -136,7 +135,7 @@ pub(crate) fn context_lines<T: Atomic>(code: &[T], loc: usize) -> Vec<String> {
     let len = code.len();
     let loc = loc.min(len);
     // Past the scan threshold we don't resolve line structure, so there is no
-    // snippet to render — the byte offset alone is the location.
+    // snippet to render — the offset alone is the location.
     let pos = match readable_position(code, loc) {
         Some(pos) => pos,
         None => return Vec::new(),
@@ -341,7 +340,7 @@ mod tests {
     fn past_scan_threshold_skips_line_resolution() {
         // An error far into a large buffer: we don't scan for line structure.
         // readable_position is None and no context snippet is produced — the
-        // byte offset alone is the location.
+        // offset alone is the location.
         let code = vec![0xABu8; MAX_POSITION_SCAN + 16];
         let loc = code.len() - 1;
         assert!(readable_position(&code, loc).is_none());

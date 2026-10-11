@@ -1,8 +1,11 @@
+use super::sign;
 use super::u64::u64;
 use crate::ByteCursor;
-use crate::Cursor;
+use crate::ParsicombError;
+use crate::cursor::Cursor;
+use crate::map_err::MapErrExt;
+use crate::optional::optional;
 use crate::parser::Parser;
-use crate::{CodeLoc, ParsicombError};
 use std::marker::PhantomData;
 
 /// Parser that matches ASCII integer numbers (positive or negative)
@@ -23,45 +26,25 @@ impl<'code> Parser for IntParser<'code> {
     type Error = ParsicombError<'code>;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
-        let mut cursor = cursor;
-        let mut is_negative = false;
-
-        // Check for optional sign
-        match cursor.value() {
-            Ok(b'-') => {
-                is_negative = true;
-                cursor = cursor.next();
-            }
-            Ok(b'+') => {
-                // Skip optional plus sign
-                cursor = cursor.next();
-            }
-            _ => {}
-        }
-
-        // Parse the unsigned integer part
+        // `optional` never fails, so the wrap is never applied
+        let (sign, cursor) = optional(sign())
+            .map_err(ParsicombError::wrap)
+            .parse(cursor)?;
         let (value, cursor) = u64().parse(cursor)?;
 
-        // Convert to signed and apply sign
-        let signed_value = if is_negative {
-            // Check for overflow when negating
+        let signed_value = if sign == Some(b'-') {
             if value > i64::MAX as u64 + 1 {
-                let (data, position) = cursor.inner();
-                return Err(ParsicombError::SyntaxError {
-                    message: format!("negative number too large: -{}", value).into(),
-                    loc: CodeLoc::new(data, position),
-                });
+                return Err(
+                    cursor.syntax_error(format!("negative number too large: -{}", value).into())
+                );
             }
             // Wrapping is exact here: value <= 2^63, and 2^63 wraps to i64::MIN
             (value as i64).wrapping_neg()
         } else {
-            // Check for positive overflow
             if value > i64::MAX as u64 {
-                let (data, position) = cursor.inner();
-                return Err(ParsicombError::SyntaxError {
-                    message: format!("positive number too large: {}", value).into(),
-                    loc: CodeLoc::new(data, position),
-                });
+                return Err(
+                    cursor.syntax_error(format!("positive number too large: {}", value).into())
+                );
             }
             value as i64
         };

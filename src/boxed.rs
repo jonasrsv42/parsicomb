@@ -1,77 +1,86 @@
 use crate::cursor::Cursor;
-use crate::error::ParsicombError;
+use crate::error::ErrorNode;
 use crate::parser::Parser;
-use std::marker::PhantomData;
 
 /// A type-erased parser
 ///
-/// Hides the concrete parser and error types behind a trait object, leaving
-/// only the cursor and output types visible; errors become
-/// [`ParsicombError::WrappedError`]. Use it to:
-/// - close a recursive grammar: `lazy(|| expr().boxed())`
-/// - cap type growth in very long combinator chains
+/// Hides the concrete parser type behind a trait object, leaving only the
+/// cursor, output and error types visible. Use it to:
+/// - close a recursive grammar: `lazy(|| expr().boxed())`, where `expr`
+///   returns a concrete error type (see [`lazy()`](crate::lazy()))
+/// - cap type growth in long combinator chains; around 40–50 combinators in
+///   one expression the compiler's recursion limit is reached, and compile
+///   time grows steeply well before that
 /// - store parsers of different concrete types in one collection
 ///
-/// It costs one allocation at construction, a virtual call per parse and one
-/// allocation per failed parse, so box at a few chosen boundaries.
-pub struct BoxedParser<'code, Cur: Cursor, Out> {
-    parser: Box<dyn Parser<Cursor = Cur, Output = Out, Error = ParsicombError<'code, Cur::Element>> + 'code>,
+/// It costs one allocation at construction and a virtual call per parse, so
+/// box at a few chosen boundaries.
+pub struct BoxedParser<'a, Cur, Out, Err> {
+    parser: Box<dyn Parser<Cursor = Cur, Output = Out, Error = Err> + 'a>,
 }
 
-impl<'code, Cur: Cursor, Out> BoxedParser<'code, Cur, Out> {
+impl<'a, Cur, Out, Err> BoxedParser<'a, Cur, Out, Err> {
+    /// Erase the type of `parser`
     pub fn new<P>(parser: P) -> Self
     where
-        P: Parser<Cursor = Cur, Output = Out> + 'code,
+        P: Parser<Cursor = Cur, Output = Out, Error = Err> + 'a,
     {
         BoxedParser {
-            parser: Box::new(WrapError {
-                parser,
-                _lifetime: PhantomData,
-            }),
+            parser: Box::new(parser),
         }
     }
 }
 
-impl<'code, Cur: Cursor, Out> Parser for BoxedParser<'code, Cur, Out> {
+impl<'a, Cur, Out, Err> Parser for BoxedParser<'a, Cur, Out, Err>
+where
+    Cur: Cursor,
+    Err: ErrorNode<Element = Cur::Element>,
+{
     type Cursor = Cur;
     type Output = Out;
-    type Error = ParsicombError<'code, Cur::Element>;
+    type Error = Err;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         self.parser.parse(cursor)
     }
 }
 
-/// Wraps the error of the inner parser into a [`ParsicombError`]
-struct WrapError<'code, P> {
-    parser: P,
-    _lifetime: PhantomData<&'code ()>,
-}
-
-impl<'code, P> Parser for WrapError<'code, P>
-where
-    P: Parser,
-    P::Error: 'code,
-    <P::Cursor as Cursor>::Element: 'code,
-{
-    type Cursor = P::Cursor;
-    type Output = P::Output;
-    type Error = ParsicombError<'code, <P::Cursor as Cursor>::Element>;
-
-    fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
-        self.parser.parse(cursor).map_err(ParsicombError::wrap)
-    }
-}
-
-/// Extension trait to add .boxed() method support for parsers
+/// Extension trait adding `.boxed()` to every parser
 pub trait BoxedExt: Parser + Sized {
-    fn boxed<'code>(self) -> BoxedParser<'code, Self::Cursor, Self::Output>
+    /// Erase this parser's type; see [`BoxedParser`]
+    fn boxed<'a>(self) -> BoxedParser<'a, Self::Cursor, Self::Output, Self::Error>
     where
-        Self: 'code,
+        Self: 'a,
     {
         BoxedParser::new(self)
     }
 }
 
-/// Implement BoxedExt for all parsers
 impl<P: Parser> BoxedExt for P {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::byte::is_byte;
+    use crate::map::MapExt;
+    use crate::{ByteCursor, ParsicombError};
+
+    #[test]
+    fn test_parsers_of_different_types_share_a_boxed_type() {
+        let parsers: Vec<BoxedParser<ByteCursor, u8, ParsicombError>> =
+            vec![is_byte(b'a').boxed(), is_byte(b'b').map(|b| b + 1).boxed()];
+
+        let cursor = ByteCursor::new(b"b");
+        assert!(parsers[0].parse(cursor).is_err());
+        assert_eq!(parsers[1].parse(cursor).unwrap().0, b'c');
+    }
+
+    #[test]
+    fn test_boxed_keeps_the_error() {
+        let error = is_byte(b'a')
+            .boxed()
+            .parse(ByteCursor::new(b"x"))
+            .unwrap_err();
+        assert!(matches!(error, ParsicombError::Expected { .. }));
+    }
+}

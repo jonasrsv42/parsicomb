@@ -69,6 +69,7 @@ pub trait ErrorNode: Error {
 
 pub use crate::error_fmt::ReadablePosition;
 
+/// A position in the input, together with the input it points into
 #[derive(Debug, Copy, Clone)]
 pub struct CodeLoc<'code, T: Atomic = u8> {
     code: &'code [T],
@@ -136,19 +137,23 @@ impl<'code, T: Atomic> CodeLoc<'code, T> {
     }
 }
 
-/// What a leaf parser expected and what it found instead
+/// What a leaf parser expected to find
 ///
-/// Holds plain data so constructing it never allocates; the message is only
-/// built when the error is displayed.
+/// Holds only plain data, so building one does not allocate (except
+/// `CharInString` holding an owned string); the message is built when the
+/// error is displayed. For `Element` and `Range`, what was found is read
+/// from the input at the error location. Character expectations carry the
+/// decoded character themselves, since decoding depends on the input encoding.
 #[derive(Debug, Clone)]
-pub enum Expected {
-    /// A specific byte
-    Byte { expected: u8, found: u8 },
-    /// A byte in an inclusive range
-    ByteInRange { start: u8, end: u8, found: u8 },
-    /// A specific character
-    Char { expected: char, found: char },
-    /// A character of a string being matched; `found` is `None` at end of input
+pub enum Expected<T> {
+    /// A specific element
+    Element(T),
+    /// An element in an inclusive range
+    Range(T, T),
+    /// A specific character; `found` is `None` when no character could be decoded
+    Char { expected: char, found: Option<char> },
+    /// A character of a string being matched; `found` is `None` when no
+    /// character could be decoded
     CharInString {
         expected: char,
         found: Option<char>,
@@ -156,66 +161,80 @@ pub enum Expected {
     },
 }
 
-impl fmt::Display for Expected {
+/// Formats an element through [`Atomic::describe`]
+struct Describe<'a, T>(&'a T);
+
+impl<T: Atomic> fmt::Display for Describe<'_, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Printable ASCII as-is, everything else escaped (`\n`, `\x80`, ...)
-        let show = std::ascii::escape_default;
+        self.0.describe(f)
+    }
+}
+
+/// Formats an optional decoded character, `None` meaning nothing decodable
+struct FoundChar(Option<char>);
+
+impl fmt::Display for FoundChar {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0 {
+            Some(c) => write!(f, "{:?}", c),
+            None => write!(f, "end of input"),
+        }
+    }
+}
+
+impl<T: Atomic> Expected<T> {
+    /// Write `expected X, found Y`, reading the found element from `loc`
+    fn write_message(&self, loc: &CodeLoc<'_, T>, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let found = loc.code.get(loc.loc);
+        let write_found = |f: &mut fmt::Formatter<'_>| match found {
+            Some(element) => write!(f, "found {}", Describe(element)),
+            None => write!(f, "found end of input"),
+        };
+
         match self {
-            Expected::Byte { expected, found } => write!(
-                f,
-                "expected byte 0x{:02X} ('{}'), found 0x{:02X} ('{}')",
-                expected,
-                show(*expected),
-                found,
-                show(*found)
-            ),
-            Expected::ByteInRange { start, end, found } => write!(
-                f,
-                "expected byte in range 0x{:02X}-0x{:02X} ('{}'-'{}'), found 0x{:02X} ('{}')",
-                start,
-                end,
-                show(*start),
-                show(*end),
-                found,
-                show(*found)
-            ),
+            Expected::Element(expected) => {
+                write!(f, "expected {}, ", Describe(expected))?;
+                write_found(f)
+            }
+            Expected::Range(start, end) => {
+                write!(f, "expected {} to {}, ", Describe(start), Describe(end))?;
+                write_found(f)
+            }
             Expected::Char { expected, found } => {
-                write!(f, "expected {:?}, found {:?}", expected, found)
+                write!(f, "expected {:?}, found {}", expected, FoundChar(*found))
             }
             Expected::CharInString {
                 expected,
-                found: Some(found),
+                found,
                 string,
             } => write!(
                 f,
-                "expected {:?}, found {:?} while matching {:?}",
-                expected, found, string
-            ),
-            Expected::CharInString {
+                "expected {:?}, found {} while matching {:?}",
                 expected,
-                found: None,
-                string,
-            } => write!(
-                f,
-                "expected {:?}, but reached end of input while matching {:?}",
-                expected, string
+                FoundChar(*found),
+                string
             ),
         }
     }
 }
 
+/// Built-in error type of the atomic cursors and leaf parsers
 #[derive(Debug)]
 pub enum ParsicombError<'code, T: Atomic = u8> {
+    /// Advanced from the last element onto the end of input
     UnexpectedEndOfFile(CodeLoc<'code, T>),
+    /// Tried to advance a cursor that was already at the end of input
     AlreadyAtEndOfFile(CodeLoc<'code, T>),
+    /// Tried to read an element at the end of input
     CannotReadValueAtEof(CodeLoc<'code, T>),
+    /// Failure described by a free-form message
     SyntaxError {
         message: Cow<'static, str>,
         loc: CodeLoc<'code, T>,
     },
     /// A leaf parser found something other than what it expected
     Expected {
-        expected: Expected,
+        expected: Expected<T>,
         loc: CodeLoc<'code, T>,
     },
     /// Wrapped error from another parser combinator
@@ -241,7 +260,10 @@ impl<'code, T: Atomic> fmt::Display for ParsicombError<'code, T> {
         loc.write_location(f)?;
         match self {
             ParsicombError::SyntaxError { message, .. } => write!(f, ": {}", message)?,
-            ParsicombError::Expected { expected, .. } => write!(f, ": {}", expected)?,
+            ParsicombError::Expected { expected, loc } => {
+                write!(f, ": ")?;
+                expected.write_message(loc, f)?;
+            }
             _ => {}
         }
         writeln!(f)?;

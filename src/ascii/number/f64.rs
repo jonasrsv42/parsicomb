@@ -1,73 +1,57 @@
 use super::digit::digit;
+use super::sign;
 use crate::ByteCursor;
-use crate::Cursor;
+use crate::ParsicombError;
 use crate::byte::is_byte;
+use crate::cursor::Cursor;
+use crate::map_err::MapErrExt;
+use crate::optional::optional;
 use crate::parser::Parser;
-use crate::{CodeLoc, ParsicombError};
+use crate::some::some;
 use std::marker::PhantomData;
 
-/// Parser for int.uint format (e.g., 123.456, -42.789)
-fn int_dot_uint<'code>()
+/// Parser that matches ASCII floating point numbers in `int.uint` form
+/// (e.g. `123.456`, `-42.789`, `+0.5`)
+pub fn f64<'code>()
 -> impl Parser<Cursor = ByteCursor<'code>, Output = f64, Error = ParsicombError<'code>> {
-    IntDotUintParser {
+    FloatParser {
         _input: PhantomData,
     }
 }
 
-struct IntDotUintParser<'code> {
+struct FloatParser<'code> {
     _input: PhantomData<&'code [u8]>,
 }
 
-/// Consume one or more ASCII digits
-fn digits(cursor: ByteCursor<'_>) -> Result<ByteCursor<'_>, ParsicombError<'_>> {
-    let (_, mut cursor) = digit().parse(cursor)?;
-    while let Ok((_, next)) = digit().parse(cursor) {
-        cursor = next;
-    }
-    Ok(cursor)
-}
-
-impl<'code> Parser for IntDotUintParser<'code> {
+impl<'code> Parser for FloatParser<'code> {
     type Cursor = ByteCursor<'code>;
     type Output = f64;
     type Error = ParsicombError<'code>;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
-        let (data, start) = cursor.inner();
-
-        // Match [+-]digits.digits, then let the standard library do the
-        // (correctly rounded) conversion on the matched slice.
-        let mut end = cursor;
-        if let Ok(b'-' | b'+') = end.value() {
-            end = end.next();
-        }
-        let end = digits(end)?;
+        // Match [+-]digits.digits; `optional` never fails, so its wrap is never applied
+        let (_, end) = optional(sign())
+            .map_err(ParsicombError::wrap)
+            .parse(cursor)?;
+        let (_, end) = some(digit()).parse(end)?;
         let (_, end) = is_byte(b'.').parse(end)?;
-        let end = digits(end)?;
+        let (_, end) = some(digit()).parse(end)?;
 
-        let error = |message: &'static str| ParsicombError::SyntaxError {
-            message: message.into(),
-            loc: CodeLoc::new(data, start),
-        };
-
-        // The matched slice is ASCII by construction, so neither of these can
-        // fail in practice; map to errors anyway rather than panic.
-        let text = std::str::from_utf8(&data[start..end.position()])
-            .map_err(|_| error("invalid UTF-8 in float literal"))?;
-        let value: f64 = text.parse().map_err(|_| error("invalid float literal"))?;
+        // The standard library does the correctly rounded conversion. The
+        // matched slice is ASCII, so the conversions cannot fail in practice;
+        // map them to errors anyway rather than panic.
+        let span = cursor.span_to(end);
+        let value: f64 = std::str::from_utf8(span.slice())
+            .ok()
+            .and_then(|text| text.parse().ok())
+            .ok_or_else(|| cursor.syntax_error("invalid float literal".into()))?;
 
         if !value.is_finite() {
-            return Err(error("floating point overflow"));
+            return Err(cursor.syntax_error("floating point overflow".into()));
         }
 
         Ok((value, end))
     }
-}
-
-/// Parser that matches ASCII floating point numbers
-pub fn f64<'code>()
--> impl Parser<Cursor = ByteCursor<'code>, Output = f64, Error = ParsicombError<'code>> {
-    int_dot_uint()
 }
 
 #[cfg(test)]
