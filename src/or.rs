@@ -1,7 +1,8 @@
 //! Alternatives: `a.or(b)` tries `b` if `a` fails
 
 use super::parser::Parser;
-use crate::error::{ErrorNode, ErrorRank};
+use crate::cursor::Cursor;
+use crate::error::{ErrorNode, Failure, FailureInfo, FailureKind};
 use std::cmp::Ordering;
 
 use crate::error::composite_error;
@@ -29,27 +30,34 @@ where
     /// Keep the error that got furthest
     ///
     /// A committed error (see [`commit`](crate::commit())) is always kept. On
-    /// a tie `first` is kept, unless it only says what was expected and
-    /// `second` describes a real problem (see [`ErrorLeaf::is_expectation`]),
-    /// such as an overflowing number.
-    ///
-    /// [`ErrorLeaf::is_expectation`]: crate::ErrorLeaf::is_expectation
+    /// a tie the one that consumed more is kept (see
+    /// [`FailureInfo::consumed_to`]), then one that describes a real problem
+    /// ([`FailureKind::Invalid`]), such as an overflowing number, then
+    /// `first`.
     pub fn furthest(first: Err1, second: Err2) -> Self {
-        let first_rank = first.rank();
-        Self::pick(first, first_rank, second)
+        let first_info = first.info();
+        Self::pick(first, first_info, second)
     }
 
-    /// [`furthest`](Self::furthest) with `first`'s rank already computed
-    fn pick(first: Err1, first_rank: ErrorRank, second: Err2) -> Self {
-        let second_rank = second.rank();
-        let keep_first = if first_rank.is_committed || second_rank.is_committed {
-            first_rank.is_committed
+    /// [`furthest`](Self::furthest) with `first`'s info already computed
+    fn pick(first: Err1, first_info: FailureInfo, second: Err2) -> Self {
+        let second_info = second.info();
+        let keep_first = if first_info.committed || second_info.committed {
+            first_info.committed
         } else {
-            match first_rank.position.cmp(&second_rank.position) {
+            // Furthest failure, then the one that consumed more, then a real
+            // problem over an expectation
+            match first_info.position.cmp(&second_info.position) {
                 Ordering::Greater => true,
-                // Prefer a real problem over an expectation
-                Ordering::Equal => !first_rank.is_expectation || second_rank.is_expectation,
                 Ordering::Less => false,
+                Ordering::Equal => match first_info.consumed_to().cmp(&second_info.consumed_to()) {
+                    Ordering::Greater => true,
+                    Ordering::Less => false,
+                    Ordering::Equal => {
+                        first_info.kind == FailureKind::Invalid
+                            || second_info.kind == FailureKind::Expected
+                    }
+                },
             }
         };
         if keep_first {
@@ -86,14 +94,13 @@ where
         match self.parser1.parse(cursor) {
             Ok(result) => Ok(result),
             Err(first) => {
-                let first_rank = first.rank();
-                // The first alternative committed: don't try the second
-                if first_rank.is_committed {
-                    return Err(OrError::First(first));
-                }
-                match self.parser2.parse(cursor) {
-                    Ok(result) => Ok(result),
-                    Err(second) => Err(OrError::pick(first, first_rank, second)),
+                let first_info = first.info();
+                match first_info.failure(cursor.position()) {
+                    Failure::Committed => Err(OrError::First(first)),
+                    Failure::NoMatch | Failure::Failed => match self.parser2.parse(cursor) {
+                        Ok(result) => Ok(result),
+                        Err(second) => Err(OrError::pick(first, first_info, second)),
+                    },
                 }
             }
         }
@@ -210,11 +217,11 @@ mod tests {
     #[test]
     fn test_or_error_furthest_simple() {
         let data = b"xyz";
-        let error1 = ParsicombError::SyntaxError {
+        let error1 = ParsicombError::Invalid {
             message: "first error".into(),
             loc: CodeLoc::new(data, 0), // position 0
         };
-        let error2 = ParsicombError::SyntaxError {
+        let error2 = ParsicombError::Invalid {
             message: "second error".into(),
             loc: CodeLoc::new(data, 2), // position 2 (further)
         };
@@ -229,11 +236,11 @@ mod tests {
     #[test]
     fn test_or_error_furthest_first_wins() {
         let data = b"xyz";
-        let error1 = ParsicombError::SyntaxError {
+        let error1 = ParsicombError::Invalid {
             message: "first error".into(),
             loc: CodeLoc::new(data, 3), // position 3 (further)
         };
-        let error2 = ParsicombError::SyntaxError {
+        let error2 = ParsicombError::Invalid {
             message: "second error".into(),
             loc: CodeLoc::new(data, 1), // position 1
         };
@@ -250,15 +257,15 @@ mod tests {
         let data = b"abcdefghij";
 
         // Create deeply nested structure: OrError<OrError<E1, E2>, E3>
-        let error1 = ParsicombError::SyntaxError {
+        let error1 = ParsicombError::Invalid {
             message: "error at pos 1".into(),
             loc: CodeLoc::new(data, 1),
         };
-        let error2 = ParsicombError::SyntaxError {
+        let error2 = ParsicombError::Invalid {
             message: "error at pos 8".into(), // This should be furthest
             loc: CodeLoc::new(data, 8),
         };
-        let error3 = ParsicombError::SyntaxError {
+        let error3 = ParsicombError::Invalid {
             message: "error at pos 5".into(),
             loc: CodeLoc::new(data, 5),
         };

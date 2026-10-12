@@ -49,9 +49,9 @@ macro_rules! composite_error {
                 }
             }
 
-            fn rank(&self) -> $crate::error::ErrorRank {
+            fn info(&self) -> $crate::error::FailureInfo {
                 match self {
-                    $( $name::$variant(error) => error.rank(), )+
+                    $( $name::$variant(error) => error.info(), )+
                 }
             }
         }

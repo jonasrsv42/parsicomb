@@ -20,7 +20,7 @@ pub trait Cursor: Copy {
     /// Error type for failures located at a cursor position
     ///
     /// Leaf parsers and combinators that report their own failures (e.g.
-    /// `not`, `filter`, `all`) build it through `syntax_error` and
+    /// `not`, `filter`, `all`) build it through `invalid_error` and
     /// `expected_error`.
     type Error: ErrorNode<Element = Self::Element>;
 
@@ -52,16 +52,24 @@ pub trait Cursor: Copy {
         self.value().is_err()
     }
 
-    /// Create an error located at this cursor with a free-form message
-    fn syntax_error(&self, message: Cow<'static, str>) -> Self::Error;
+    /// Create an error located at this cursor for a real problem in the
+    /// input, described by a free-form message (e.g. "number too large")
+    ///
+    /// Its [`kind`](crate::ErrorLeaf::kind) must be
+    /// [`FailureKind::Invalid`](crate::error::FailureKind::Invalid):
+    /// `optional` and repetitions pass it on, and `label` keeps it. For a
+    /// "nothing here" failure with a custom message, use
+    /// [`expected_error`](Self::expected_error) with
+    /// [`Expected::Label`].
+    fn invalid_error(&self, message: Cow<'static, str>) -> Self::Error;
 
     /// Create an error located at this cursor for a leaf parser that found
     /// something other than `expected`
     ///
-    /// The error's [`likely_error`](crate::ErrorNode::likely_error) must
-    /// report [`is_expectation`](crate::ErrorLeaf::is_expectation) as true, so
-    /// that `label`, `filter` and `or` can tell it apart from errors that
-    /// describe a real problem.
+    /// Its [`kind`](crate::ErrorLeaf::kind) must be
+    /// [`FailureKind::Expected`](crate::error::FailureKind::Expected), so that
+    /// combinators can tell "nothing here" apart from real problems (see
+    /// [`Failure`](crate::error::Failure)).
     fn expected_error(&self, expected: Expected<Self::Element>) -> Self::Error;
 
     /// The span of input from this cursor up to (not including) `end`

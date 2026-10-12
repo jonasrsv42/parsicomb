@@ -29,7 +29,7 @@ impl<'code> Parser for Char<'code> {
         }
 
         // Invalid UTF-8 is reported at the start of the character
-        let invalid = |message: &'static str| cursor.syntax_error(message.into());
+        let invalid = |message: &'static str| cursor.invalid_error(message.into());
 
         // Sequence width and the smallest codepoint that needs that width
         let (width, min_codepoint) = match lead {

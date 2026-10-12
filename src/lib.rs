@@ -50,7 +50,10 @@ pub use commit::{CommitExt, commit};
 pub use cursor::Cursor;
 pub use cursors::{AtomicCursor, ByteCursor};
 pub use default::default;
-pub use error::{CodeLoc, ErrorLeaf, ErrorNode, Expected, ParsicombError};
+pub use error::{
+    CodeLoc, Consumed, ErrorLeaf, ErrorNode, Expected, Failure, FailureInfo, FailureKind,
+    ParsicombError,
+};
 pub use filter::{FilterExt, filter};
 pub use label::{LabelExt, label};
 pub use lazy::lazy;

@@ -1,14 +1,26 @@
 //! One or more items separated by a separator
 
 use crate::cursor::Cursor;
-use crate::error::ErrorNode;
+use crate::error::{ErrorNode, Failure, composite_error};
 use crate::parser::Parser;
+
+composite_error! {
+    /// Error type for SeparatedList parser
+    pub enum SeparatedListError<PErr, PSepErr> {
+        /// An item failed
+        Item(PErr),
+        /// A separator failed after matching part of its input, with a real
+        /// problem, or inside a `commit`
+        Separator(PSepErr),
+    }
+}
 
 /// Parser combinator that matches a list of items separated by a parser
 ///
 /// This combinator parses at least one item, followed by zero or more
 /// occurrences of (separator + item). It returns a vector of all items.
-/// Its error is the element parser's error.
+/// The list ends where the separator fails with [`Failure::NoMatch`]; any
+/// other separator failure is passed on.
 ///
 /// # Examples
 /// - `"a,b,c"` with separator `,` → `vec!["a", "b", "c"]`
@@ -18,8 +30,6 @@ use crate::parser::Parser;
 /// - Requires at least one element
 /// - Trailing separators cause an error
 /// - Does not handle whitespace automatically
-/// - A failing separator ends the list, even after a `commit` inside it;
-///   commit in the elements instead
 pub struct SeparatedList<P, PSep> {
     parser: P,
     separator: PSep,
@@ -39,20 +49,28 @@ where
 {
     type Cursor = P::Cursor;
     type Output = Vec<P::Output>;
-    type Error = P::Error;
+    type Error = SeparatedListError<P::Error, PSep::Error>;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let mut results = Vec::new();
 
         // Parse the first element (required)
-        let (first_value, mut cursor) = self.parser.parse(cursor)?;
+        let (first_value, mut cursor) = self
+            .parser
+            .parse(cursor)
+            .map_err(SeparatedListError::Item)?;
         results.push(first_value);
 
         // Parse remaining elements preceded by separator
         loop {
             let after_separator = match self.separator.parse(cursor) {
                 Ok((_, next_cursor)) => next_cursor,
-                Err(_) => break,
+                Err(error) => match error.failure(cursor.position()) {
+                    Failure::NoMatch => break,
+                    Failure::Failed | Failure::Committed => {
+                        return Err(SeparatedListError::Separator(error));
+                    }
+                },
             };
 
             // An element is required after a separator, unless the separator
@@ -61,11 +79,11 @@ where
                 Ok(result) => result,
                 Err(error)
                     if after_separator.position() == cursor.position()
-                        && error.rank().is_no_match_at(cursor.position()) =>
+                        && error.failure(cursor.position()) == Failure::NoMatch =>
                 {
                     break;
                 }
-                Err(error) => return Err(error),
+                Err(error) => return Err(SeparatedListError::Item(error)),
             };
 
             // Separator + element consumed nothing: stop rather than loop forever
@@ -200,5 +218,30 @@ mod tests {
         let (output, remaining) = parser.parse(cursor).unwrap();
         assert_eq!(output, vec![None]);
         assert_eq!(remaining.value().unwrap(), b'b');
+    }
+
+    #[test]
+    fn test_separator_failures_after_a_match_are_passed_on() {
+        use crate::and::AndExt;
+        use crate::commit::CommitExt;
+        use crate::error::ErrorNode;
+
+        let digit = || crate::ascii::digit();
+        // `, ` matched `,` then failed: the input is wrong here
+        let list = separated_list(digit(), is_byte(b',').and(is_byte(b' ')));
+        let error = list.parse(ByteCursor::new(b"1,x")).unwrap_err();
+        assert_eq!(error.info().position, 2);
+        // Committed separator failures too
+        let list = separated_list(digit(), is_byte(b',').and(is_byte(b' ').commit()));
+        assert!(
+            list.parse(ByteCursor::new(b"1,x"))
+                .unwrap_err()
+                .info()
+                .committed
+        );
+        // No separator at all ends the list
+        let list = separated_list(digit(), is_byte(b',').and(is_byte(b' ')));
+        let (items, cursor) = list.parse(ByteCursor::new(b"1;")).unwrap();
+        assert_eq!((items.len(), cursor.position()), (1, 1));
     }
 }

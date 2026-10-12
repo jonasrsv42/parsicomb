@@ -29,7 +29,7 @@ fn binary_buffer(size: usize) -> Vec<u8> {
 /// error whose location buffer spans the whole input, positioned *after* the
 /// big payload.
 fn error_at_end(buf: &[u8]) -> ParsicombError<'_> {
-    ParsicombError::SyntaxError {
+    ParsicombError::Invalid {
         message: Cow::Borrowed("invalid value tag"),
         loc: CodeLoc::new(buf, buf.len().saturating_sub(1)),
     }
@@ -72,7 +72,7 @@ fn bench(c: &mut Criterion) {
     let buf = b"let x = ;\nlet y = 2;\n".to_vec();
     small.bench_function("20_bytes", |b| {
         b.iter(|| {
-            let e: ParsicombError<'_, u8> = ParsicombError::SyntaxError {
+            let e: ParsicombError<'_, u8> = ParsicombError::Invalid {
                 message: Cow::Borrowed("expected expression"),
                 loc: CodeLoc::new(black_box(&buf), 8),
             };

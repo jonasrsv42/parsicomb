@@ -2,17 +2,15 @@
 
 use super::parser::Parser;
 use crate::cursor::Cursor;
-use crate::error::ErrorNode;
+use crate::error::{ErrorNode, Failure};
 
 /// Parser combinator that matches one or more occurrences of the given parser
 ///
 /// A glob import of this module (`use parsicomb::some::*`) shadows
 /// [`Option::Some`]; import [`some`] by name instead.
 ///
-/// Stops where the parser matches nothing (see
-/// [`ErrorRank::is_no_match_at`](crate::error::ErrorRank::is_no_match_at));
-/// any other failure, one after the parser matched part of its input or a
-/// real problem, is passed on.
+/// Stops when the parser fails with [`Failure::NoMatch`]; any other failure
+/// is passed on (see [`Failure`]).
 pub struct Some<P> {
     parser: P,
 }
@@ -48,9 +46,10 @@ where
                     results.push(value);
                     cursor = next_cursor;
                 }
-                Err(error) if !error.rank().is_no_match_at(cursor.position()) => return Err(error),
-                // Nothing matched: the repetition ends here
-                Err(_) => break,
+                Err(error) => match error.failure(cursor.position()) {
+                    Failure::NoMatch => break,
+                    Failure::Failed | Failure::Committed => return Err(error),
+                },
             }
         }
 

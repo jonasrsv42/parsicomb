@@ -2,14 +2,26 @@
 
 use super::parser::Parser;
 use crate::cursor::Cursor;
-use crate::error::Expected;
+use crate::error::{ErrorNode, Expected, Failure, composite_error};
+
+composite_error! {
+    /// Error type for Not parser
+    pub enum NotError<CurErr, PErr> {
+        /// The given parser matched
+        Matched(CurErr),
+        /// The given parser failed inside a `commit`, which `not` passes on
+        Committed(PErr),
+    }
+}
 
 /// Parser combinator that performs negative lookahead
 ///
-/// Succeeds with () if the given parser fails at the current position.
-/// Fails with `expected something else, found …` if the given parser
-/// succeeds; wrap it in [`label`](crate::label()) to say what was expected
-/// instead. Never consumes any input regardless of outcome.
+/// Succeeds with () if the given parser fails at the current position, unless
+/// it failed inside a [`commit`](crate::commit()) (such as `max_depth`'s
+/// "maximum nesting depth exceeded"), which is passed on. Fails with
+/// `expected something else, found …` if the given parser succeeds; wrap it
+/// in [`label`](crate::label()) to say what was expected instead. Never
+/// consumes any input regardless of outcome.
 pub struct Not<P> {
     parser: P,
 }
@@ -24,12 +36,17 @@ impl<P> Not<P> {
 impl<P: Parser> Parser for Not<P> {
     type Cursor = P::Cursor;
     type Output = ();
-    type Error = <P::Cursor as Cursor>::Error;
+    type Error = NotError<<P::Cursor as Cursor>::Error, P::Error>;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         match self.parser.parse(cursor) {
-            Ok(_) => Err(cursor.expected_error(Expected::Label("something else"))),
-            Err(_) => Ok(((), cursor)),
+            Ok(_) => Err(NotError::Matched(
+                cursor.expected_error(Expected::Label("something else")),
+            )),
+            Err(error) => match error.failure(cursor.position()) {
+                Failure::NoMatch | Failure::Failed => Ok(((), cursor)),
+                Failure::Committed => Err(NotError::Committed(error)),
+            },
         }
     }
 }
@@ -208,5 +225,18 @@ mod tests {
         // Cursor should not have moved
         assert_eq!(cursor_after.position(), 4);
         assert_eq!(cursor_after.value().unwrap(), b' ');
+    }
+
+    #[test]
+    fn test_committed_failure_is_passed_on() {
+        use crate::commit::CommitExt;
+        use crate::error::ErrorNode;
+
+        let parser = not(is_byte(b'a').and(is_byte(b'b').commit()));
+        let error = parser.parse(ByteCursor::new(b"ax")).unwrap_err();
+        assert!(error.info().committed);
+        // An uncommitted failure is still "doesn't match"
+        let parser = not(is_byte(b'a').and(is_byte(b'b')));
+        assert!(parser.parse(ByteCursor::new(b"ax")).is_ok());
     }
 }

@@ -2,15 +2,17 @@
 
 use super::parser::Parser;
 use crate::cursor::Cursor;
-use crate::error::ErrorNode;
+use crate::error::{ErrorNode, Failure};
 
 /// Parser combinator that optionally matches the given parser
 ///
 /// Returns `Some(value)` if the parser succeeds, and `None` without moving
-/// the cursor if it matches nothing (see
-/// [`ErrorRank::is_no_match_at`](crate::error::ErrorRank::is_no_match_at)).
-/// Any other failure, one after the parser matched part of its input or a
-/// real problem, is passed on.
+/// the cursor if it fails with [`Failure::NoMatch`]; any other failure is
+/// passed on (see [`Failure`]).
+///
+/// So `optional(p)` is not the same as `p.map(Some).or(default(None))`: `or`
+/// also backtracks from a `p` that matched part of its input and then failed,
+/// and drops that error.
 pub struct Optional<P> {
     parser: P,
 }
@@ -33,8 +35,10 @@ where
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         match self.parser.parse(cursor) {
             Ok((value, next_cursor)) => Ok((Some(value), next_cursor)),
-            Err(error) if !error.rank().is_no_match_at(cursor.position()) => Err(error),
-            Err(_) => Ok((None, cursor)),
+            Err(error) => match error.failure(cursor.position()) {
+                Failure::NoMatch => Ok((None, cursor)),
+                Failure::Failed | Failure::Committed => Err(error),
+            },
         }
     }
 }

@@ -1,7 +1,7 @@
 //! Name what a parser expects, for error messages
 
 use crate::cursor::Cursor;
-use crate::error::{ErrorNode, Expected, composite_error};
+use crate::error::{ErrorNode, Expected, Failure, composite_error};
 use crate::parser::Parser;
 
 composite_error! {
@@ -17,9 +17,8 @@ composite_error! {
 
 /// Parser combinator that describes its inner parser in errors
 ///
-/// When the inner parser fails at its start with an error that only says
-/// what was expected there (see [`ErrorLeaf::is_expectation`]), the error
-/// becomes `expected <label>, found …`. This turns the error of an `or` chain
+/// When the inner parser fails with [`Failure::NoMatch`] (what it expected
+/// isn't at its start), the error becomes `expected <label>, found …`. This turns the error of an `or` chain
 /// whose alternatives all fail on the first element into one message naming
 /// the whole set. Failures further into the input, and errors that describe
 /// a real problem such as an overflowing number, are kept as they are.
@@ -32,8 +31,6 @@ composite_error! {
 /// let error = sign.parse(ByteCursor::new(b"x")).unwrap_err();
 /// assert!(error.to_string().contains("expected a sign, found 'x'"));
 /// ```
-///
-/// [`ErrorLeaf::is_expectation`]: crate::ErrorLeaf::is_expectation
 pub struct Label<P> {
     parser: P,
     label: &'static str,
@@ -69,11 +66,14 @@ where
     PErr: ErrorNode,
     Cur: Cursor,
 {
-    let rank = error.rank();
-    if rank.is_no_match_at(cursor.position()) {
-        LabelError::Labeled(cursor.expected_error(Expected::Label(label)))
-    } else {
-        LabelError::Inner(error)
+    let info = error.info();
+    match info.failure(cursor.position()) {
+        // Only a failure at the start is replaced: one further in (after
+        // input that doesn't count as consumed) keeps pointing where it is
+        Failure::NoMatch if info.position == cursor.position() => {
+            LabelError::Labeled(cursor.expected_error(Expected::Label(label)))
+        }
+        Failure::NoMatch | Failure::Failed | Failure::Committed => LabelError::Inner(error),
     }
 }
 

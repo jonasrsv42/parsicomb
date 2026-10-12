@@ -118,8 +118,8 @@ impl<'code, T: Atomic + 'code> Cursor for AtomicCursor<'code, T> {
         matches!(self, AtomicCursor::EndOfFile { .. })
     }
 
-    fn syntax_error(&self, message: Cow<'static, str>) -> Self::Error {
-        ParsicombError::SyntaxError {
+    fn invalid_error(&self, message: Cow<'static, str>) -> Self::Error {
+        ParsicombError::Invalid {
             message,
             loc: self.loc(),
         }

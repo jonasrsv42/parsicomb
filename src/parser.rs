@@ -29,6 +29,10 @@ pub trait Parser {
     /// The returned cursor is never before `cursor` in the same input:
     /// combinators such as `recognize` and `with_position` build a span from
     /// the two and panic otherwise.
+    ///
+    /// Likewise an error's position is never before `cursor`: combinators
+    /// decide whether anything matched by comparing the two (see
+    /// [`Failure`](crate::error::Failure)).
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error>;
 }
 

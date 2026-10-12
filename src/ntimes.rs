@@ -50,7 +50,7 @@ where
                 .parse(cursor)
                 .map_err(NTimesError::ParserError)?;
             if remaining > 0 && next_cursor.position() == cursor.position() {
-                return Err(NTimesError::NoProgress(cursor.syntax_error(
+                return Err(NTimesError::NoProgress(cursor.invalid_error(
                     "repeated parser matched without consuming input".into(),
                 )));
             }

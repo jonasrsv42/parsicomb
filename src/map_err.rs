@@ -60,6 +60,7 @@ where
 mod tests {
     use super::*;
     use crate::ByteCursor;
+    use crate::error::{FailureInfo, FailureKind};
     use crate::{CodeLoc, ErrorLeaf, ParsicombError};
 
     use std::fmt;
@@ -89,8 +90,8 @@ mod tests {
             CodeLoc::new(&[], 0) // Default position for test error
         }
 
-        fn is_expectation(&self) -> bool {
-            false
+        fn kind(&self) -> FailureKind {
+            FailureKind::Invalid
         }
     }
 
@@ -99,6 +100,10 @@ mod tests {
 
         fn likely_error(&self) -> &dyn ErrorLeaf<Element = Self::Element> {
             self
+        }
+
+        fn info(&self) -> FailureInfo {
+            FailureInfo::of_leaf(self)
         }
     }
 
@@ -112,7 +117,7 @@ mod tests {
 
         fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
             let (data, position) = cursor.inner();
-            Err(ParsicombError::SyntaxError {
+            Err(ParsicombError::Invalid {
                 message: "always fails".into(),
                 loc: crate::CodeLoc::new(data, position),
             })

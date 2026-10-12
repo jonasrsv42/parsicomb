@@ -86,17 +86,18 @@ together with the free functions.
 
 Parser-building functions return `impl Parser`, naming the cursor, output and
 error. Naming the error matters once a grammar is recursive, and lets
-callers use `?` on the parser inside `parser_fn`:
+callers use `?` on the parser inside `parser_fn`. A combinator's error
+converts into `ParsicombError` without allocating:
 
 ```rust
-use parsicomb::{ByteCursor, Parser, ParsicombError};
+use parsicomb::{ByteCursor, MapErrExt, Parser, ParsicombError};
 use parsicomb::ascii::u64;
 use parsicomb::byte::is_byte;
 use parsicomb::separated_list;
 
 fn numbers<'code>()
 -> impl Parser<Cursor = ByteCursor<'code>, Output = Vec<u64>, Error = ParsicombError<'code>> {
-    separated_list(u64(), is_byte(b','))
+    separated_list(u64(), is_byte(b',')).map_err(ParsicombError::from)
 }
 
 assert_eq!(numbers().parse(ByteCursor::new(b"1,2,3")).unwrap().0, vec![1, 2, 3]);
@@ -160,7 +161,8 @@ consumed). A parser can be used in several places by reference:
 `a.or(b)` tries `b` if `a` fails, and takes the first that succeeds.
 
 `optional` and the repetitions (`many`, `some`, `skip_many`, `separated_list`,
-...) stop where their parser matches nothing. Once it has matched part of its
+...) stop where their parser matches nothing (see
+[How failures are handled](#how-failures-are-handled)). Once it has matched part of its
 input, a failure means the input is wrong, so they pass it on instead of
 stopping early, and the error points at the problem (the rule Parsec uses).
 Real problems, such as a number too large, are passed on too:
@@ -456,6 +458,44 @@ typically after a keyword or an opening delimiter, `commit` makes a failure
 final: inside `p.commit()`, a failure stops `or` from trying the remaining
 alternatives, and `optional` and repetitions pass it on even where it
 matched nothing. This also saves re-parsing alternatives that can't match.
+Commit after the first token that decides, not around a whole repeated item:
+in `many(item.commit())`, the item's final "nothing here" is committed too,
+so the repetition can never end.
+
+### How failures are handled
+
+Every error says what kind of failure it is (`ErrorLeaf::kind`):
+`FailureKind::Expected` when what was looked for isn't there ("expected X,
+found Y", end of input), and `FailureKind::Invalid` for a real problem (a
+number too large, invalid UTF-8, nesting too deep). Leaf and hand-written
+parsers choose it by building their errors with `cursor.expected_error(..)`
+or `cursor.invalid_error(..)`.
+
+A combinator that started at some position sees a failure as one of three
+cases (`error.failure(start)`):
+
+- `Failure::NoMatch`: what was expected isn't at the start. Nothing here.
+- `Failure::Failed`: the parser matched part of its input and then failed,
+  or found a real problem. Something here is wrong.
+- `Failure::Committed`: the failure happened inside a `commit`.
+
+Whether a parser "matched part of its input" is decided by how much it
+consumed before failing. Normally that is everything up to the failure, but
+a parser can count less (`Consumed::UpTo`) when what it matched isn't
+evidence that it's on the right path: `skip_then` doesn't count the
+whitespace it skipped, so a missing token after it is still `NoMatch`.
+
+| | `NoMatch` | `Failed` | `Committed` |
+|---|---|---|---|
+| `or` | tries the next alternative | tries the next alternative, keeps the furthest error | passes it on |
+| `optional`, repetitions | `None` / ends | passes it on | passes it on |
+| `label`, `filter` | replaces the message | keeps it | keeps it |
+| `not` | succeeds | succeeds | passes it on |
+
+So `optional(p)` is not `p.map(Some).or(default(None))`: `or` also
+backtracks from `Invalid` and drops that error, where `optional` passes it on.
+Hand-written combinators can make the same decisions with
+`match error.failure(start) { .. }`.
 
 Leaf parsers that run out of input report `expected …, found end of input`;
 reading past the end with `cursor.value()` in a hand-written parser gives

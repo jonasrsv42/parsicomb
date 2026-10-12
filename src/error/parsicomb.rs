@@ -1,4 +1,4 @@
-use super::{CodeLoc, ErrorLeaf, ErrorNode, ErrorRank, Expected};
+use super::{CodeLoc, ErrorLeaf, ErrorNode, Expected, FailureInfo, FailureKind};
 use crate::atomic::Atomic;
 use std::borrow::Cow;
 use std::error::Error;
@@ -7,16 +7,18 @@ use std::fmt;
 /// Built-in error type of the atomic cursors and leaf parsers
 #[derive(Debug)]
 pub enum ParsicombError<'code, T: Atomic = u8> {
-    /// Tried to read an element at the end of input
+    /// Tried to read an element at the end of input ([`FailureKind::Expected`])
     EndOfInput(CodeLoc<'code, T>),
-    /// Failure described by a free-form message
-    SyntaxError {
+    /// A real problem in the input, described by a free-form message
+    /// ([`FailureKind::Invalid`])
+    Invalid {
         /// What went wrong
         message: Cow<'static, str>,
         /// Where it went wrong
         loc: CodeLoc<'code, T>,
     },
     /// A leaf parser found something other than what it expected
+    /// ([`FailureKind::Expected`])
     Expected {
         /// What the parser expected
         expected: Expected<T>,
@@ -24,13 +26,13 @@ pub enum ParsicombError<'code, T: Atomic = u8> {
         loc: CodeLoc<'code, T>,
     },
     /// Wrapped error from another parser combinator; built by
-    /// [`ParsicombError::wrap`], which keeps `rank` in sync with `inner`
+    /// [`ParsicombError::wrap`], which keeps `info` in sync with `inner`
     #[non_exhaustive]
     WrappedError {
         /// The wrapped error
         inner: Box<dyn ErrorNode<Element = T> + Send + Sync + 'code>,
-        /// `inner`'s rank, computed once when wrapping
-        rank: ErrorRank,
+        /// `inner`'s info, computed once when wrapping
+        info: FailureInfo,
     },
 }
 
@@ -38,7 +40,7 @@ impl<'code, T: Atomic> fmt::Display for ParsicombError<'code, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let (headline, loc) = match self {
             ParsicombError::EndOfInput(loc) => ("Unexpected end of input", loc),
-            ParsicombError::SyntaxError { loc, .. } => ("Syntax error", loc),
+            ParsicombError::Invalid { loc, .. } => ("Syntax error", loc),
             ParsicombError::Expected { loc, .. } => ("Syntax error", loc),
             ParsicombError::WrappedError { inner, .. } => {
                 return write!(f, "{}", inner.likely_error());
@@ -48,7 +50,7 @@ impl<'code, T: Atomic> fmt::Display for ParsicombError<'code, T> {
         write!(f, "{} at ", headline)?;
         let position = loc.write_location(f)?;
         match self {
-            ParsicombError::SyntaxError { message, .. } => write!(f, ": {}", message)?,
+            ParsicombError::Invalid { message, .. } => write!(f, ": {}", message)?,
             ParsicombError::Expected { expected, loc } => {
                 write!(f, ": ")?;
                 expected.write_message(loc, f)?;
@@ -70,14 +72,14 @@ impl<'code, T: Atomic> ParsicombError<'code, T> {
     /// `ParsicombError`s; `wrap` is for other error types.
     pub fn wrap(error: impl ErrorNode<Element = T> + Send + Sync + 'code) -> Self {
         ParsicombError::WrappedError {
-            rank: error.rank(),
+            info: error.info(),
             inner: Box::new(error),
         }
     }
 
     /// Returns the position where this error occurred
     pub fn position(&self) -> usize {
-        self.rank().position
+        self.info().position
     }
 }
 
@@ -87,17 +89,19 @@ impl<'code, T: Atomic> ErrorLeaf for ParsicombError<'code, T> {
     fn loc(&self) -> CodeLoc<'_, Self::Element> {
         match self {
             ParsicombError::EndOfInput(loc)
-            | ParsicombError::SyntaxError { loc, .. }
+            | ParsicombError::Invalid { loc, .. }
             | ParsicombError::Expected { loc, .. } => *loc,
             ParsicombError::WrappedError { inner, .. } => inner.likely_error().loc(),
         }
     }
 
-    fn is_expectation(&self) -> bool {
+    fn kind(&self) -> FailureKind {
         match self {
-            ParsicombError::EndOfInput(_) | ParsicombError::Expected { .. } => true,
-            ParsicombError::SyntaxError { .. } => false,
-            ParsicombError::WrappedError { rank, .. } => rank.is_expectation,
+            ParsicombError::EndOfInput(_) | ParsicombError::Expected { .. } => {
+                FailureKind::Expected
+            }
+            ParsicombError::Invalid { .. } => FailureKind::Invalid,
+            ParsicombError::WrappedError { info, .. } => info.kind,
         }
     }
 }
@@ -112,10 +116,10 @@ impl<'code, T: Atomic> ErrorNode for ParsicombError<'code, T> {
         }
     }
 
-    fn rank(&self) -> ErrorRank {
+    fn info(&self) -> FailureInfo {
         match self {
-            ParsicombError::WrappedError { rank, .. } => *rank,
-            _ => ErrorRank::of_leaf(self),
+            ParsicombError::WrappedError { info, .. } => *info,
+            _ => FailureInfo::of_leaf(self),
         }
     }
 }
@@ -167,7 +171,7 @@ mod tests {
     fn test_codeloc_eos_line_ending() {
         let data = b"hello\n";
         let loc = CodeLoc::new(data, 6); // Position 6 = past end (after newline)
-        let error = ParsicombError::SyntaxError {
+        let error = ParsicombError::Invalid {
             message: "test error".into(),
             loc,
         };
@@ -211,7 +215,7 @@ mod tests {
     #[test]
     fn test_location_reports_line_column_and_offset() {
         let code = "ab\ncé?".as_bytes();
-        let error: ParsicombError = ParsicombError::SyntaxError {
+        let error: ParsicombError = ParsicombError::Invalid {
             message: "boom".into(),
             loc: CodeLoc::new(code, code.len() - 1),
         };
@@ -262,14 +266,14 @@ mod tests {
 
     #[test]
     fn test_wrapped_position_comes_from_the_inner_error() {
-        let inner = ParsicombError::SyntaxError {
+        let inner = ParsicombError::Invalid {
             message: "boom".into(),
             loc: CodeLoc::new(b"abcdef", 5),
         };
         let wrapped = ParsicombError::wrap(ParsicombError::wrap(inner));
         assert_eq!(wrapped.position(), 5);
         assert_eq!(wrapped.likely_error().loc().position(), 5);
-        assert!(!wrapped.rank().is_expectation);
+        assert_eq!(wrapped.info().kind, FailureKind::Invalid);
     }
 
     #[test]

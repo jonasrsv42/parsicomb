@@ -3,7 +3,7 @@
 
 use crate::atomic::Atomic;
 use crate::cursor::Cursor;
-use crate::error::{ErrorLeaf, ErrorNode, ErrorRank, ParsicombError};
+use crate::error::{Consumed, ErrorLeaf, ErrorNode, Failure, FailureInfo, ParsicombError};
 use crate::parser::Parser;
 use std::fmt;
 
@@ -58,14 +58,14 @@ where
         }
     }
 
-    fn rank(&self) -> ErrorRank {
+    fn info(&self) -> FailureInfo {
         match self {
-            SkipThenError::Skip(error) => error.rank(),
-            SkipThenError::Parser(error) => error.rank(),
-            SkipThenError::NothingAfterSkip { error, start } => ErrorRank {
-                position: *start,
-                ..error.rank()
-            },
+            SkipThenError::Skip(error) => error.info(),
+            SkipThenError::Parser(error) => error.info(),
+            // Still ranked where it failed, but the skipped input doesn't count
+            SkipThenError::NothingAfterSkip { error, start } => {
+                error.info().with_consumed(Consumed::UpTo(*start))
+            }
         }
     }
 }
@@ -135,7 +135,7 @@ where
         let (_, after_skip) = self.skip.parse(cursor).map_err(SkipThenError::Skip)?;
         self.parser.parse(after_skip).map_err(|error| {
             if after_skip.position() > cursor.position()
-                && error.rank().is_no_match_at(after_skip.position())
+                && error.failure(after_skip.position()) == Failure::NoMatch
             {
                 SkipThenError::NothingAfterSkip {
                     error,
@@ -172,7 +172,7 @@ mod tests {
     }
 
     #[test]
-    fn test_nothing_after_the_skip_is_no_match_at_the_start() {
+    fn test_nothing_after_the_skip_is_no_match() {
         let parser = optional(skip_then(spaces(), is_byte(b'x')));
         let (value, cursor) = parser.parse(ByteCursor::new(b"   y")).unwrap();
         assert_eq!(value, None);
@@ -188,18 +188,33 @@ mod tests {
         let error = skip_then(spaces(), is_byte(b'x'))
             .parse(ByteCursor::new(b"   y"))
             .unwrap_err();
-        assert_eq!(error.rank().position, 0);
-        assert_eq!(error.likely_error().loc().position(), 3);
+        assert_eq!(error.info().position, 3);
+        assert_eq!(error.info().consumed, Consumed::UpTo(0));
+        assert_eq!(error.failure(0), Failure::NoMatch);
         let converted = ParsicombError::from(error);
-        assert_eq!(converted.rank().position, 0);
+        assert_eq!(converted.info().consumed, Consumed::UpTo(0));
         assert!(converted.to_string().contains("found 'y'"));
+    }
+
+    #[test]
+    fn test_or_ranks_by_where_the_token_is_missing() {
+        // `skip_then`'s failure is at 2, past the other alternative's at 1
+        use crate::map::MapExt;
+        use crate::or::OrExt;
+        let parser =
+            skip_then(spaces(), is_byte(b'x')).or(is_byte(b' ').and(is_byte(b'q')).map(|_| b'q'));
+        let error = parser.parse(ByteCursor::new(b"  z")).unwrap_err();
+        assert!(
+            error.to_string().contains("offset 2): expected 'x'"),
+            "got {error}"
+        );
     }
 
     #[test]
     fn test_failure_past_the_token_start_is_passed_on() {
         let pair = skip_then(spaces(), is_byte(b'a').and(is_byte(b'b')));
         let error = many(pair).parse(ByteCursor::new(b" ab ax")).unwrap_err();
-        assert_eq!(error.rank().position, 5);
+        assert_eq!(error.info().position, 5);
     }
 
     #[test]
@@ -209,5 +224,33 @@ mod tests {
             .parse(ByteCursor::new(b" 1 99999999999999999999"))
             .unwrap_err();
         assert!(error.to_string().contains("number too large"));
+    }
+
+    #[test]
+    fn test_label_keeps_a_failure_after_the_skip_where_it_is() {
+        use crate::label::LabelExt;
+        let parser = skip_then(spaces(), is_byte(b'x')).label("an x");
+        let error = parser.parse(ByteCursor::new(b"   ;")).unwrap_err();
+        assert_eq!(error.failure(0), Failure::NoMatch);
+        assert!(
+            error
+                .to_string()
+                .contains("offset 3): expected 'x', found ';'"),
+            "got {error}"
+        );
+    }
+
+    #[test]
+    fn test_or_classification_does_not_depend_on_order() {
+        use crate::map::MapExt;
+        use crate::or::OrExt;
+        let skipped = || skip_then(spaces(), is_byte(b'x'));
+        let matched = || spaces().and(is_byte(b'y')).map(|(_, y)| y);
+        let input = ByteCursor::new(b"  ;");
+        let one = skipped().or(matched()).parse(input).unwrap_err();
+        let other = matched().or(skipped()).parse(input).unwrap_err();
+        // `matched` consumed the spaces, so either way the result is Failed
+        assert_eq!(one.failure(0), Failure::Failed);
+        assert_eq!(other.failure(0), Failure::Failed);
     }
 }

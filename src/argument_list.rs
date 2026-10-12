@@ -1,20 +1,23 @@
 //! Delimited, separated lists such as `(a, b, c)`
 
 use crate::cursor::Cursor;
-use crate::error::ErrorNode;
+use crate::error::{ErrorNode, Failure};
 use crate::parser::Parser;
 
 use crate::error::composite_error;
 
 composite_error! {
     /// Error type for ArgumentList parser
-    pub enum ArgumentListError<ErrOpen, ErrArg, ErrClose> {
+    pub enum ArgumentListError<ErrOpen, ErrArg, ErrSep, ErrClose> {
         /// Failed to parse opening delimiter
         OpenDelimiter(ErrOpen),
         /// Failed to parse first argument
         FirstArgument(ErrArg),
         /// Failed to parse argument after separator
         ArgumentAfterSeparator(ErrArg),
+        /// A separator failed after matching part of its input, with a real
+        /// problem, or inside a `commit`
+        Separator(ErrSep),
         /// Expected closing delimiter or separator
         ExpectedClosingDelimiter(ErrClose),
     }
@@ -60,7 +63,7 @@ where
 {
     type Cursor = POpen::Cursor;
     type Output = Vec<PArg::Output>;
-    type Error = ArgumentListError<POpen::Error, PArg::Error, PClose::Error>;
+    type Error = ArgumentListError<POpen::Error, PArg::Error, PSep::Error, PClose::Error>;
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         // Parse opening delimiter
@@ -72,10 +75,12 @@ where
         // Check if we have an empty list (immediate closing delimiter)
         match self.close.parse(cursor) {
             Ok((_, cursor)) => return Ok((vec![], cursor)),
-            Err(error) if !error.rank().is_no_match_at(cursor.position()) => {
-                return Err(ArgumentListError::ExpectedClosingDelimiter(error));
-            }
-            Err(_) => {}
+            Err(error) => match error.failure(cursor.position()) {
+                Failure::NoMatch => {}
+                Failure::Failed | Failure::Committed => {
+                    return Err(ArgumentListError::ExpectedClosingDelimiter(error));
+                }
+            },
         }
 
         // Parse first argument (required if not empty)
@@ -87,14 +92,23 @@ where
         let mut results = vec![first];
 
         // Parse remaining arguments preceded by separator
-        while let Ok((_, sep_cursor)) = self.separator.parse(cursor) {
+        loop {
+            let sep_cursor = match self.separator.parse(cursor) {
+                Ok((_, sep_cursor)) => sep_cursor,
+                Err(error) => match error.failure(cursor.position()) {
+                    Failure::NoMatch => break,
+                    Failure::Failed | Failure::Committed => {
+                        return Err(ArgumentListError::Separator(error));
+                    }
+                },
+            };
             // Found separator, must parse another argument, unless the
             // separator matched nothing: then the arguments ended
             let (arg, next_cursor) = match self.parser.parse(sep_cursor) {
                 Ok(result) => result,
                 Err(error)
                     if sep_cursor.position() == cursor.position()
-                        && error.rank().is_no_match_at(cursor.position()) =>
+                        && error.failure(cursor.position()) == Failure::NoMatch =>
                 {
                     break;
                 }

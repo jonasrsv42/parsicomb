@@ -207,8 +207,8 @@ mod tests {
             }
         }
 
-        fn syntax_error(&self, message: std::borrow::Cow<'static, str>) -> Self::Error {
-            ParsicombError::SyntaxError {
+        fn invalid_error(&self, message: std::borrow::Cow<'static, str>) -> Self::Error {
+            ParsicombError::Invalid {
                 message,
                 loc: CodeLoc::new(self.source(), self.position()),
             }

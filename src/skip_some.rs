@@ -2,17 +2,15 @@
 
 use super::parser::Parser;
 use crate::cursor::Cursor;
-use crate::error::ErrorNode;
+use crate::error::{ErrorNode, Failure};
 
 /// Parser combinator that matches one or more occurrences of the given
 /// parser and discards their outputs
 ///
 /// Like [`some`](crate::some::some) without collecting a `Vec`.
 ///
-/// Stops where the parser matches nothing (see
-/// [`ErrorRank::is_no_match_at`](crate::error::ErrorRank::is_no_match_at));
-/// any other failure, one after the parser matched part of its input or a
-/// real problem, is passed on.
+/// Stops when the parser fails with [`Failure::NoMatch`]; any other failure
+/// is passed on (see [`Failure`]).
 pub struct SkipSome<P> {
     parser: P,
 }
@@ -38,8 +36,10 @@ impl<P: Parser> Parser for SkipSome<P> {
                 // An iteration that consumes nothing would repeat forever
                 Ok((_, next_cursor)) if next_cursor.position() == cursor.position() => break,
                 Ok((_, next_cursor)) => cursor = next_cursor,
-                Err(error) if !error.rank().is_no_match_at(cursor.position()) => return Err(error),
-                Err(_) => break,
+                Err(error) => match error.failure(cursor.position()) {
+                    Failure::NoMatch => break,
+                    Failure::Failed | Failure::Committed => return Err(error),
+                },
             }
         }
 

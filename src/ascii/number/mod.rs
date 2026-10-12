@@ -89,7 +89,7 @@ fn unsigned_value<'code>(
         .try_fold(0u64, |value, digit| {
             value.checked_mul(10)?.checked_add(u64::from(digit - b'0'))
         })
-        .ok_or_else(|| start.syntax_error(too_large(digits).into()))
+        .ok_or_else(|| start.invalid_error(too_large(digits).into()))
 }
 
 /// `number too large: <digits>`, with long runs of digits shortened so the
@@ -113,7 +113,7 @@ fn signed_value<'code>(
     if sign == Some(b'-') {
         if magnitude > i64::MAX as u64 + 1 {
             return Err(
-                start.syntax_error(format!("negative number too large: -{}", magnitude).into())
+                start.invalid_error(format!("negative number too large: -{}", magnitude).into())
             );
         }
         // Wrapping is exact here: magnitude <= 2^63, and 2^63 wraps to i64::MIN
@@ -121,7 +121,7 @@ fn signed_value<'code>(
     } else {
         if magnitude > i64::MAX as u64 {
             return Err(
-                start.syntax_error(format!("positive number too large: {}", magnitude).into())
+                start.invalid_error(format!("positive number too large: {}", magnitude).into())
             );
         }
         Ok(magnitude as i64)
@@ -141,9 +141,9 @@ fn float_value<'code>(
     let value: f64 = std::str::from_utf8(span.slice())
         .ok()
         .and_then(|text| text.parse().ok())
-        .ok_or_else(|| start.syntax_error("invalid float literal".into()))?;
+        .ok_or_else(|| start.invalid_error("invalid float literal".into()))?;
     if !value.is_finite() {
-        return Err(start.syntax_error("floating point overflow".into()));
+        return Err(start.invalid_error("floating point overflow".into()));
     }
     Ok(value)
 }

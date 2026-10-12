@@ -48,7 +48,7 @@ impl<P: Parser> Parser for All<P> {
 
             if next_cursor.position() == cursor.position() {
                 return Err(AllError::NoProgress(
-                    cursor.syntax_error("parser succeeded without consuming input".into()),
+                    cursor.invalid_error("parser succeeded without consuming input".into()),
                 ));
             }
 

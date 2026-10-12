@@ -96,7 +96,7 @@ impl<P: Parser> Parser for MaxDepth<P> {
         let current = DEPTH.with(Cell::get);
         if current >= self.max {
             return Err(MaxDepthError::TooDeep(CommitError::new(
-                cursor.syntax_error("maximum nesting depth exceeded".into()),
+                cursor.invalid_error("maximum nesting depth exceeded".into()),
             )));
         }
         DEPTH.with(|depth| depth.set(current + 1));
