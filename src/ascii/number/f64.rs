@@ -11,7 +11,7 @@ use crate::parser_fn::parser_fn;
 /// Parser that matches ASCII floating point numbers in `int.uint` form
 /// (e.g. `123.456`, `-42.789`, `+0.5`)
 ///
-/// Fails at the start of the number if it overflows an f64; a number too
+/// Fails after the number if it overflows an f64; a number too
 /// small for an f64 becomes 0.0, as with [`str::parse`].
 pub fn f64<'code>()
 -> impl Parser<Cursor = ByteCursor<'code>, Output = f64, Error = ParsicombError<'code>> {

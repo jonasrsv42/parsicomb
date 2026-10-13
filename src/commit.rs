@@ -1,13 +1,13 @@
 //! Commit to a parse: failures after a commit point are not backtracked
 
 use crate::atomic::Atomic;
-use crate::error::{ErrorLeaf, ErrorNode, FailureInfo, ParsicombError};
+use crate::error::{ErrorLeaf, ErrorNode, ParsicombError, Progress};
 use crate::parser::Parser;
 use std::fmt;
 
 /// Error of a [`Commit`] parser: the inner parser's error, marked committed
 ///
-/// Its [`info`](ErrorNode::info) reports `committed`, so `or`, `optional` and
+/// Its [`progress`](ErrorNode::progress) is committed, so `or`, `optional` and
 /// repetitions pass it on instead of trying something else.
 #[derive(Debug)]
 pub struct CommitError<E> {
@@ -40,8 +40,8 @@ impl<E: ErrorNode> ErrorNode for CommitError<E> {
         self.inner.likely_error()
     }
 
-    fn info(&self) -> FailureInfo {
-        self.inner.info().with_committed(true)
+    fn progress(&self) -> Progress {
+        self.inner.progress().committed()
     }
 }
 
@@ -160,8 +160,8 @@ mod tests {
     fn test_or_does_not_try_the_second_alternative_after_a_cut() {
         let parser = committed_ab().or(is_byte(b'a'));
         let error = parser.parse(ByteCursor::new(b"ac")).unwrap_err();
-        assert!(error.info().committed);
-        assert_eq!(error.info().position, 1);
+        assert!(error.progress().since(0) == crate::Advance::Committed);
+        assert_eq!(error.progress().position(), 1);
     }
 
     #[test]
@@ -172,8 +172,8 @@ mod tests {
             .map(|_| 0)
             .or(committed_ab());
         let error = parser.parse(ByteCursor::new(b"aac")).unwrap_err();
-        assert!(error.info().committed);
-        assert_eq!(error.info().position, 1);
+        assert!(error.progress().since(0) == crate::Advance::Committed);
+        assert_eq!(error.progress().position(), 1);
     }
 
     #[test]
@@ -199,15 +199,18 @@ mod tests {
         assert_eq!(
             list.parse(ByteCursor::new(b"ab,ac"))
                 .unwrap_err()
-                .info()
-                .position,
+                .progress()
+                .position(),
             4
         );
 
         // Without a commit too, an element that matched part of its input
         // fails the repetition; one that matches nothing ends it
         let ab = || is_byte(b'a').and(is_byte(b'b'));
-        assert_eq!(many(ab()).parse(input).unwrap_err().info().position, 3);
+        assert_eq!(
+            many(ab()).parse(input).unwrap_err().progress().position(),
+            3
+        );
         let (values, cursor) = many(ab()).parse(ByteCursor::new(b"abx")).unwrap();
         assert_eq!(values.len(), 1);
         assert_eq!(cursor.position(), 2);
@@ -228,7 +231,7 @@ mod tests {
         let error = not(committed_ab())
             .parse(ByteCursor::new(b"ac"))
             .unwrap_err();
-        assert!(error.info().committed);
+        assert!(error.progress().since(0) == crate::Advance::Committed);
     }
 
     #[test]
@@ -252,7 +255,7 @@ mod tests {
 
         let input = b"[[1,2],[3,x]]";
         let error = many(value()).parse(ByteCursor::new(input)).unwrap_err();
-        assert!(error.info().committed);
+        assert!(error.progress().since(0) == crate::Advance::Committed);
         assert_eq!(error.position(), 10);
         assert!(
             error.to_string().contains("expected a digit, found 'x'"),

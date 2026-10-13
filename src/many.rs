@@ -2,12 +2,12 @@
 
 use super::parser::Parser;
 use crate::cursor::Cursor;
-use crate::error::{ErrorNode, Failure};
+use crate::error::{Advance, ErrorNode};
 
 /// Parser combinator that matches zero or more occurrences of the given parser
 ///
-/// Stops when the parser fails with [`Failure::NoMatch`]; any other failure
-/// is passed on (see [`Failure`]).
+/// Stops when the parser fails without advancing ([`Advance::None`]); any
+/// other failure is passed on (see [`Advance`]).
 pub struct Many<P> {
     parser: P,
 }
@@ -38,9 +38,9 @@ where
                     results.push(value);
                     cursor = next_cursor;
                 }
-                Err(error) => match error.failure(cursor.position()) {
-                    Failure::NoMatch => break,
-                    Failure::Failed | Failure::Committed => return Err(error),
+                Err(error) => match error.progress().since(cursor.position()) {
+                    Advance::None => break,
+                    Advance::Partial | Advance::Committed => return Err(error),
                 },
             }
         }

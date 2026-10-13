@@ -1,7 +1,7 @@
 //! Delimited, separated lists such as `(a, b, c)`
 
 use crate::cursor::Cursor;
-use crate::error::{ErrorNode, Failure};
+use crate::error::{Advance, ErrorNode};
 use crate::parser::Parser;
 
 use crate::error::composite_error;
@@ -15,8 +15,8 @@ composite_error! {
         FirstArgument(ErrArg),
         /// Failed to parse argument after separator
         ArgumentAfterSeparator(ErrArg),
-        /// A separator failed after matching part of its input, with a real
-        /// problem, or inside a `commit`
+        /// A separator failed after matching part of its input, or inside a
+        /// `commit`
         Separator(ErrSep),
         /// Expected closing delimiter or separator
         ExpectedClosingDelimiter(ErrClose),
@@ -75,9 +75,9 @@ where
         // Check if we have an empty list (immediate closing delimiter)
         match self.close.parse(cursor) {
             Ok((_, cursor)) => return Ok((vec![], cursor)),
-            Err(error) => match error.failure(cursor.position()) {
-                Failure::NoMatch => {}
-                Failure::Failed | Failure::Committed => {
+            Err(error) => match error.progress().since(cursor.position()) {
+                Advance::None => {}
+                Advance::Partial | Advance::Committed => {
                     return Err(ArgumentListError::ExpectedClosingDelimiter(error));
                 }
             },
@@ -95,9 +95,9 @@ where
         loop {
             let sep_cursor = match self.separator.parse(cursor) {
                 Ok((_, sep_cursor)) => sep_cursor,
-                Err(error) => match error.failure(cursor.position()) {
-                    Failure::NoMatch => break,
-                    Failure::Failed | Failure::Committed => {
+                Err(error) => match error.progress().since(cursor.position()) {
+                    Advance::None => break,
+                    Advance::Partial | Advance::Committed => {
                         return Err(ArgumentListError::Separator(error));
                     }
                 },
@@ -108,7 +108,7 @@ where
                 Ok(result) => result,
                 Err(error)
                     if sep_cursor.position() == cursor.position()
-                        && error.failure(cursor.position()) == Failure::NoMatch =>
+                        && error.progress().since(cursor.position()) == Advance::None =>
                 {
                     break;
                 }

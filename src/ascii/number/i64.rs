@@ -10,15 +10,13 @@ use crate::parser_fn::parser_fn;
 
 /// Parser that matches ASCII integer numbers (positive or negative)
 ///
-/// Fails at the start of the number (its sign, if any) if it does not fit in
-/// an i64, except that a magnitude too large for a u64 is reported by
-/// [`u64`](super::u64()) at its first digit.
+/// Fails after the number if it does not fit in an i64.
 pub fn i64<'code>()
 -> impl Parser<Cursor = ByteCursor<'code>, Output = i64, Error = ParsicombError<'code>> {
     parser_fn(|start: ByteCursor<'code>| {
         let (sign, cursor) = optional(sign()).parse(start)?;
         let (magnitude, cursor) = u64().parse(cursor)?;
-        Ok((signed_value(start, sign, magnitude)?, cursor))
+        Ok((signed_value(cursor, sign, magnitude)?, cursor))
     })
 }
 

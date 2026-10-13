@@ -141,4 +141,16 @@ mod tests {
         let result = parser.parse(cursor);
         assert!(matches!(result, Err(AllError::NoProgress(_))));
     }
+
+    #[test]
+    fn test_no_progress_at_the_start_is_no_match() {
+        use crate::map::MapExt;
+        use crate::optional::optional;
+        use crate::or::OrExt;
+
+        let parser = all(optional(is_byte(b'a')))
+            .map(|_| 0)
+            .or(is_byte(b'b').map(|_| 1));
+        assert_eq!(parser.parse(ByteCursor::new(b"b")).unwrap().0, 1);
+    }
 }

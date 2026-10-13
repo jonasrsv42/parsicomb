@@ -19,9 +19,8 @@ pub trait Cursor: Copy {
 
     /// Error type for failures located at a cursor position
     ///
-    /// Leaf parsers and combinators that report their own failures (e.g.
-    /// `not`, `filter`, `all`) build it through `invalid_error` and
-    /// `expected_error`.
+    /// Leaf parsers and combinators that report their own failures build it
+    /// through `invalid_error` and `expected_error`.
     type Error: ErrorNode<Element = Self::Element>;
 
     /// A range of the input between two cursor positions
@@ -55,21 +54,20 @@ pub trait Cursor: Copy {
     /// Create an error located at this cursor for a real problem in the
     /// input, described by a free-form message (e.g. "number too large")
     ///
-    /// Its [`kind`](crate::ErrorLeaf::kind) must be
-    /// [`FailureKind::Invalid`](crate::error::FailureKind::Invalid):
-    /// `optional` and repetitions pass it on, and `label` keeps it. For a
+    /// Call it on the cursor after the input the problem is in, such as
+    /// after the digits of a number too large: like every error, its
+    /// [`progress`](crate::ErrorNode::progress) is
+    /// [`Progress::at`](crate::Progress::at) this cursor, so the parser counts
+    /// as having matched that input (see [`Advance`](crate::Advance)). For a
     /// "nothing here" failure with a custom message, use
-    /// [`expected_error`](Self::expected_error) with
-    /// [`Expected::Label`].
+    /// [`expected_error`](Self::expected_error) with [`Expected::Label`].
     fn invalid_error(&self, message: Cow<'static, str>) -> Self::Error;
 
     /// Create an error located at this cursor for a leaf parser that found
     /// something other than `expected`
     ///
-    /// Its [`kind`](crate::ErrorLeaf::kind) must be
-    /// [`FailureKind::Expected`](crate::error::FailureKind::Expected), so that
-    /// combinators can tell "nothing here" apart from real problems (see
-    /// [`Failure`](crate::error::Failure)).
+    /// Its [`progress`](crate::ErrorNode::progress) is
+    /// [`Progress::at`](crate::Progress::at) this cursor.
     fn expected_error(&self, expected: Expected<Self::Element>) -> Self::Error;
 
     /// The span of input from this cursor up to (not including) `end`

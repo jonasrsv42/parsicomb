@@ -1,14 +1,13 @@
 //! Name what a parser expects, for error messages
 
 use crate::cursor::Cursor;
-use crate::error::{ErrorNode, Expected, Failure, composite_error};
+use crate::error::{Advance, ErrorNode, Expected, composite_error};
 use crate::parser::Parser;
 
 composite_error! {
     /// Error type for Label parser
     pub enum LabelError<PErr, CurErr> {
-        /// The inner parser's error, kept because it got past the start or
-        /// describes a real problem
+        /// The inner parser's error, kept because it got past the start
         Inner(PErr),
         /// `expected <label>, found …` at the start
         Labeled(CurErr),
@@ -17,11 +16,12 @@ composite_error! {
 
 /// Parser combinator that describes its inner parser in errors
 ///
-/// When the inner parser fails with [`Failure::NoMatch`] (what it expected
-/// isn't at its start), the error becomes `expected <label>, found …`. This turns the error of an `or` chain
-/// whose alternatives all fail on the first element into one message naming
-/// the whole set. Failures further into the input, and errors that describe
-/// a real problem such as an overflowing number, are kept as they are.
+/// When the inner parser fails without advancing ([`Advance::None`]: what it
+/// expected isn't at its start), the error becomes `expected <label>, found
+/// …`. This turns the error of an `or` chain whose alternatives all fail on
+/// the first element into one message naming the whole set. Failures past the start,
+/// including real problems such as an overflowing number, are kept as they
+/// are.
 ///
 /// ```
 /// use parsicomb::{ByteCursor, LabelExt, OrExt, Parser};
@@ -66,14 +66,14 @@ where
     PErr: ErrorNode,
     Cur: Cursor,
 {
-    let info = error.info();
-    match info.failure(cursor.position()) {
+    let progress = error.progress();
+    match progress.since(cursor.position()) {
         // Only a failure at the start is replaced: one further in (after
-        // input that doesn't count as consumed) keeps pointing where it is
-        Failure::NoMatch if info.position == cursor.position() => {
+        // input that doesn't count as progress) keeps pointing where it is
+        Advance::None if progress.position() == cursor.position() => {
             LabelError::Labeled(cursor.expected_error(Expected::Label(label)))
         }
-        Failure::NoMatch | Failure::Failed | Failure::Committed => LabelError::Inner(error),
+        Advance::None | Advance::Partial | Advance::Committed => LabelError::Inner(error),
     }
 }
 

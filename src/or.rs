@@ -2,22 +2,20 @@
 
 use super::parser::Parser;
 use crate::cursor::Cursor;
-use crate::error::{ErrorNode, Failure, FailureInfo, FailureKind};
-use std::cmp::Ordering;
+use crate::error::{Advance, ErrorNode, Progress};
 
 use crate::error::composite_error;
 
 composite_error! {
-    /// Error type for Or parser: the error of whichever alternative got furthest
-    /// into the input
+    /// Error type for Or parser: the error of the alternative that got
+    /// furthest, see [`OrError::pick`]
     ///
-    /// Only the furthest error is kept, so the error of a long `.or()` chain is
+    /// Only one error is kept, so the error of a long `.or()` chain is
     /// no larger than its largest alternative's.
     pub enum OrError<Err1, Err2> {
-        /// The first alternative got furthest (or both got equally far, see
-        /// [`OrError::furthest`])
+        /// The first alternative's error was kept
         First(Err1),
-        /// The second alternative got furthest
+        /// The second alternative's error was kept
         Second(Err2),
     }
 }
@@ -27,40 +25,23 @@ where
     Err1: ErrorNode,
     Err2: ErrorNode<Element = Err1::Element>,
 {
-    /// Keep the error that got furthest
+    /// Keep the error of the alternative that got furthest, `first` on a tie
     ///
-    /// A committed error (see [`commit`](crate::commit())) is always kept. On
-    /// a tie the one that consumed more is kept (see
-    /// [`FailureInfo::consumed_to`]), then one that describes a real problem
-    /// ([`FailureKind::Invalid`]), such as an overflowing number, then
-    /// `first`.
-    pub fn furthest(first: Err1, second: Err2) -> Self {
-        let first_info = first.info();
-        Self::pick(first, first_info, second)
+    /// Of two alternatives that started at the same place, the one whose
+    /// [`Progress`] is greater got furthest: a committed failure, then the
+    /// one whose progress counts further, then the one that failed further
+    /// in. The error kept therefore also decides how far the enclosing
+    /// parsers see the `or` advance ([`Advance`]): an uncommitted alternative
+    /// that matched nothing is never kept over one that matched input,
+    /// however far in its error points.
+    pub fn pick(first: Err1, second: Err2) -> Self {
+        let first_progress = first.progress();
+        Self::pick_with_progress(first, first_progress, second)
     }
 
-    /// [`furthest`](Self::furthest) with `first`'s info already computed
-    fn pick(first: Err1, first_info: FailureInfo, second: Err2) -> Self {
-        let second_info = second.info();
-        let keep_first = if first_info.committed || second_info.committed {
-            first_info.committed
-        } else {
-            // Furthest failure, then the one that consumed more, then a real
-            // problem over an expectation
-            match first_info.position.cmp(&second_info.position) {
-                Ordering::Greater => true,
-                Ordering::Less => false,
-                Ordering::Equal => match first_info.consumed_to().cmp(&second_info.consumed_to()) {
-                    Ordering::Greater => true,
-                    Ordering::Less => false,
-                    Ordering::Equal => {
-                        first_info.kind == FailureKind::Invalid
-                            || second_info.kind == FailureKind::Expected
-                    }
-                },
-            }
-        };
-        if keep_first {
+    /// [`pick`](Self::pick) with `first`'s progress already computed
+    fn pick_with_progress(first: Err1, first_progress: Progress, second: Err2) -> Self {
+        if first_progress >= second.progress() {
             OrError::First(first)
         } else {
             OrError::Second(second)
@@ -94,12 +75,14 @@ where
         match self.parser1.parse(cursor) {
             Ok(result) => Ok(result),
             Err(first) => {
-                let first_info = first.info();
-                match first_info.failure(cursor.position()) {
-                    Failure::Committed => Err(OrError::First(first)),
-                    Failure::NoMatch | Failure::Failed => match self.parser2.parse(cursor) {
+                let first_progress = first.progress();
+                match first_progress.since(cursor.position()) {
+                    Advance::Committed => Err(OrError::First(first)),
+                    Advance::None | Advance::Partial => match self.parser2.parse(cursor) {
                         Ok(result) => Ok(result),
-                        Err(second) => Err(OrError::pick(first, first_info, second)),
+                        Err(second) => {
+                            Err(OrError::pick_with_progress(first, first_progress, second))
+                        }
                     },
                 }
             }
@@ -109,7 +92,7 @@ where
 
 /// Extension trait to add .or() method support for parsers
 pub trait OrExt: Parser + Sized {
-    /// Try `other` if `self` fails; the error is the alternative that got furthest
+    /// Try `other` if `self` fails; see [`OrError::pick`] for which error is kept
     fn or<P>(self, other: P) -> Or<Self, P>
     where
         P: Parser<Cursor = Self::Cursor, Output = Self::Output>,
@@ -226,7 +209,7 @@ mod tests {
             loc: CodeLoc::new(data, 2), // position 2 (further)
         };
 
-        let or_error = OrError::furthest(error1, error2);
+        let or_error = OrError::pick(error1, error2);
         let furthest = or_error.likely_error();
 
         assert_eq!(furthest.loc().position(), 2);
@@ -245,7 +228,7 @@ mod tests {
             loc: CodeLoc::new(data, 1), // position 1
         };
 
-        let or_error = OrError::furthest(error1, error2);
+        let or_error = OrError::pick(error1, error2);
         let furthest = or_error.likely_error();
 
         assert_eq!(furthest.loc().position(), 3);
@@ -271,8 +254,8 @@ mod tests {
         };
 
         // Build the nested structure
-        let inner_or = OrError::furthest(error1, error2);
-        let outer_or = OrError::furthest(inner_or, error3);
+        let inner_or = OrError::pick(error1, error2);
+        let outer_or = OrError::pick(inner_or, error3);
 
         // likely_error() recurses through the nested OrErrors
         let furthest = outer_or.likely_error();
@@ -371,5 +354,31 @@ mod tests {
         let parser = is_byte(b'a').or(is_byte(b'b'));
         let message = parser.parse(ByteCursor::new(b"x")).unwrap_err().to_string();
         assert!(message.contains("expected 'a'"), "got {message}");
+    }
+
+    #[test]
+    fn test_a_failure_wins_over_a_further_no_match() {
+        use crate::ascii::{u64, whitespace};
+        use crate::optional::optional;
+        use crate::skip_many::skip_many;
+        use crate::skip_then::skip_then;
+
+        // ` y` matched a space then failed; the second alternative matched
+        // nothing, though its error lies past the skipped spaces
+        let spaced_y = is_byte(b' ').and(is_byte(b'y')).map(|(_, y)| y);
+        let parser = optional(spaced_y.or(skip_then(skip_many(whitespace()), is_byte(b'x'))));
+        let error = parser.parse(ByteCursor::new(b"   z")).unwrap_err();
+        assert_eq!(error.progress().position(), 1);
+
+        // The second alternative skips the digits, then finds no `x`
+        let digits_x = skip_then(skip_many(crate::ascii::digit()), is_byte(b'x')).map(|_| 0);
+        let parser = optional(u64().or(digits_x));
+        let error = parser
+            .parse(ByteCursor::new(b"99999999999999999999999"))
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("number too large"),
+            "got {error}"
+        );
     }
 }

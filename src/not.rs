@@ -2,7 +2,7 @@
 
 use super::parser::Parser;
 use crate::cursor::Cursor;
-use crate::error::{ErrorNode, Expected, Failure, composite_error};
+use crate::error::{Advance, ErrorNode, Expected, composite_error};
 
 composite_error! {
     /// Error type for Not parser
@@ -22,6 +22,9 @@ composite_error! {
 /// `expected something else, found …` if the given parser succeeds; wrap it
 /// in [`label`](crate::label()) to say what was expected instead. Never
 /// consumes any input regardless of outcome.
+///
+/// Invalid input also counts as the parser not matching, so `not` is no
+/// end-of-input check: use [`Cursor::eos`] for that.
 pub struct Not<P> {
     parser: P,
 }
@@ -43,9 +46,9 @@ impl<P: Parser> Parser for Not<P> {
             Ok(_) => Err(NotError::Matched(
                 cursor.expected_error(Expected::Label("something else")),
             )),
-            Err(error) => match error.failure(cursor.position()) {
-                Failure::NoMatch | Failure::Failed => Ok(((), cursor)),
-                Failure::Committed => Err(NotError::Committed(error)),
+            Err(error) => match error.progress().since(cursor.position()) {
+                Advance::None | Advance::Partial => Ok(((), cursor)),
+                Advance::Committed => Err(NotError::Committed(error)),
             },
         }
     }
@@ -234,7 +237,7 @@ mod tests {
 
         let parser = not(is_byte(b'a').and(is_byte(b'b').commit()));
         let error = parser.parse(ByteCursor::new(b"ax")).unwrap_err();
-        assert!(error.info().committed);
+        assert!(error.progress().since(0) == crate::Advance::Committed);
         // An uncommitted failure is still "doesn't match"
         let parser = not(is_byte(b'a').and(is_byte(b'b')));
         assert!(parser.parse(ByteCursor::new(b"ax")).is_ok());

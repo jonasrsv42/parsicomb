@@ -1,5 +1,5 @@
 /// Define an error enum whose variants each hold the error of one part of a
-/// combinator, displayed through the furthest underlying error
+/// combinator, displayed through the leaf error it reports
 ///
 /// Every type parameter must be an `ErrorNode` over the same element type as
 /// the first one. Generates the enum with `#[derive(Debug)]`, its
@@ -18,7 +18,7 @@ macro_rules! composite_error {
             $( $(#[$variant_meta])* $variant($field) ),+
         }
 
-        /// Displays the error that got furthest into the input
+        /// Displays the leaf error it reports (`likely_error`)
         impl<$first $(, $rest)*> std::fmt::Display for $name<$first $(, $rest)*>
         where
             $first: $crate::error::ErrorNode,
@@ -49,9 +49,9 @@ macro_rules! composite_error {
                 }
             }
 
-            fn info(&self) -> $crate::error::FailureInfo {
+            fn progress(&self) -> $crate::error::Progress {
                 match self {
-                    $( $name::$variant(error) => error.info(), )+
+                    $( $name::$variant(error) => error.progress(), )+
                 }
             }
         }

@@ -37,8 +37,8 @@ fn advance_chars_while<'code>(
 /// Parser that skips zero or more UTF-8 characters matching a predicate
 ///
 /// Unlike `skip_many(char().filter(..))`, it builds no error where the run
-/// ends. Pair it with [`recognize`](crate::recognize::recognize) to get the
-/// span it skipped.
+/// ends; invalid UTF-8 ends the run and isn't reported. Pair it with
+/// [`recognize`](crate::recognize::recognize) to get the span it skipped.
 pub struct SkipCharsWhile<'code, F> {
     pred: F,
     _input: PhantomData<&'code [u8]>,
@@ -65,7 +65,7 @@ pub fn skip_chars_while<'code, F: Fn(char) -> bool>(pred: F) -> SkipCharsWhile<'
 /// Parser that skips one or more UTF-8 characters matching a predicate
 ///
 /// Fails with `expected <label>, found …` when the first character
-/// doesn't match.
+/// doesn't match; invalid UTF-8 ends the run and isn't reported.
 pub struct SkipCharsWhile1<'code, F> {
     pred: F,
     label: &'static str,

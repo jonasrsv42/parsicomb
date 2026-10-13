@@ -2,7 +2,7 @@
 
 use super::parser::Parser;
 use crate::cursor::Cursor;
-use crate::error::{ErrorNode, Failure};
+use crate::error::{Advance, ErrorNode};
 
 /// Parser combinator that matches zero or more occurrences of the given
 /// parser and discards their outputs
@@ -10,8 +10,8 @@ use crate::error::{ErrorNode, Failure};
 /// Like [`many`](crate::many::many) without collecting a `Vec`. Pair it with
 /// [`recognize`](crate::recognize::recognize) to get the span it matched.
 ///
-/// Stops when the parser fails with [`Failure::NoMatch`]; any other failure
-/// is passed on (see [`Failure`]).
+/// Stops when the parser fails without advancing ([`Advance::None`]); any
+/// other failure is passed on (see [`Advance`]).
 pub struct SkipMany<P> {
     parser: P,
 }
@@ -34,9 +34,9 @@ impl<P: Parser> Parser for SkipMany<P> {
                 // An iteration that consumes nothing would repeat forever
                 Ok((_, next_cursor)) if next_cursor.position() == cursor.position() => break,
                 Ok((_, next_cursor)) => cursor = next_cursor,
-                Err(error) => match error.failure(cursor.position()) {
-                    Failure::NoMatch => break,
-                    Failure::Failed | Failure::Committed => return Err(error),
+                Err(error) => match error.progress().since(cursor.position()) {
+                    Advance::None => break,
+                    Advance::Partial | Advance::Committed => return Err(error),
                 },
             }
         }

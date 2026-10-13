@@ -9,12 +9,12 @@ use crate::recognize::recognize;
 
 /// Parser that matches one or more ASCII digits and returns them as a u64
 ///
-/// Fails at the first digit if the number does not fit in a u64.
+/// Fails after the digits if the number does not fit in a u64.
 pub fn u64<'code>()
 -> impl Parser<Cursor = ByteCursor<'code>, Output = u64, Error = ParsicombError<'code>> {
     parser_fn(|start: ByteCursor<'code>| {
         let (digits, end) = recognize(digits()).parse(start)?;
-        Ok((unsigned_value(start, digits.slice())?, end))
+        Ok((unsigned_value(end, digits.slice())?, end))
     })
 }
 

@@ -1,7 +1,7 @@
 //! One or more items separated by a separator
 
 use crate::cursor::Cursor;
-use crate::error::{ErrorNode, Failure, composite_error};
+use crate::error::{Advance, ErrorNode, composite_error};
 use crate::parser::Parser;
 
 composite_error! {
@@ -9,8 +9,8 @@ composite_error! {
     pub enum SeparatedListError<PErr, PSepErr> {
         /// An item failed
         Item(PErr),
-        /// A separator failed after matching part of its input, with a real
-        /// problem, or inside a `commit`
+        /// A separator failed after matching part of its input, or inside a
+        /// `commit`
         Separator(PSepErr),
     }
 }
@@ -19,8 +19,8 @@ composite_error! {
 ///
 /// This combinator parses at least one item, followed by zero or more
 /// occurrences of (separator + item). It returns a vector of all items.
-/// The list ends where the separator fails with [`Failure::NoMatch`]; any
-/// other separator failure is passed on.
+/// The list ends where the separator fails without advancing
+/// ([`Advance::None`]); any other separator failure is passed on.
 ///
 /// # Examples
 /// - `"a,b,c"` with separator `,` → `vec!["a", "b", "c"]`
@@ -65,9 +65,9 @@ where
         loop {
             let after_separator = match self.separator.parse(cursor) {
                 Ok((_, next_cursor)) => next_cursor,
-                Err(error) => match error.failure(cursor.position()) {
-                    Failure::NoMatch => break,
-                    Failure::Failed | Failure::Committed => {
+                Err(error) => match error.progress().since(cursor.position()) {
+                    Advance::None => break,
+                    Advance::Partial | Advance::Committed => {
                         return Err(SeparatedListError::Separator(error));
                     }
                 },
@@ -79,7 +79,7 @@ where
                 Ok(result) => result,
                 Err(error)
                     if after_separator.position() == cursor.position()
-                        && error.failure(cursor.position()) == Failure::NoMatch =>
+                        && error.progress().since(cursor.position()) == Advance::None =>
                 {
                     break;
                 }
@@ -230,14 +230,15 @@ mod tests {
         // `, ` matched `,` then failed: the input is wrong here
         let list = separated_list(digit(), is_byte(b',').and(is_byte(b' ')));
         let error = list.parse(ByteCursor::new(b"1,x")).unwrap_err();
-        assert_eq!(error.info().position, 2);
+        assert_eq!(error.progress().position(), 2);
         // Committed separator failures too
         let list = separated_list(digit(), is_byte(b',').and(is_byte(b' ').commit()));
         assert!(
             list.parse(ByteCursor::new(b"1,x"))
                 .unwrap_err()
-                .info()
-                .committed
+                .progress()
+                .since(0)
+                == crate::Advance::Committed
         );
         // No separator at all ends the list
         let list = separated_list(digit(), is_byte(b',').and(is_byte(b' ')));

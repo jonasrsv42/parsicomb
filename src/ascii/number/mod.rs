@@ -48,9 +48,9 @@ pub fn number<'code>()
             return Ok((Number::F64(float_value(start, end)?), end));
         }
 
-        let magnitude = unsigned_value(after_sign, integer.slice())?;
+        let magnitude = unsigned_value(integer_end, integer.slice())?;
         Ok((
-            Number::I64(signed_value(start, sign, magnitude)?),
+            Number::I64(signed_value(integer_end, sign, magnitude)?),
             integer_end,
         ))
     })
@@ -79,9 +79,10 @@ fn fraction_start(cursor: ByteCursor<'_>) -> Option<ByteCursor<'_>> {
     is_fraction.then_some(after_dot)
 }
 
-/// The value of a run of ASCII digits; overflow is reported at `start`
+/// The value of a run of ASCII digits; overflow is reported at `end`, after
+/// the digits
 fn unsigned_value<'code>(
-    start: ByteCursor<'code>,
+    end: ByteCursor<'code>,
     digits: &[u8],
 ) -> Result<u64, ParsicombError<'code>> {
     digits
@@ -89,7 +90,7 @@ fn unsigned_value<'code>(
         .try_fold(0u64, |value, digit| {
             value.checked_mul(10)?.checked_add(u64::from(digit - b'0'))
         })
-        .ok_or_else(|| start.invalid_error(too_large(digits).into()))
+        .ok_or_else(|| end.invalid_error(too_large(digits).into()))
 }
 
 /// `number too large: <digits>`, with long runs of digits shortened so the
@@ -104,16 +105,17 @@ fn too_large(digits: &[u8]) -> String {
     }
 }
 
-/// `magnitude` with `sign` applied; overflow is reported at `start`
+/// `magnitude` with `sign` applied; overflow is reported at `end`, after the
+/// number
 fn signed_value<'code>(
-    start: ByteCursor<'code>,
+    end: ByteCursor<'code>,
     sign: Option<u8>,
     magnitude: u64,
 ) -> Result<i64, ParsicombError<'code>> {
     if sign == Some(b'-') {
         if magnitude > i64::MAX as u64 + 1 {
             return Err(
-                start.invalid_error(format!("negative number too large: -{}", magnitude).into())
+                end.invalid_error(format!("negative number too large: -{}", magnitude).into())
             );
         }
         // Wrapping is exact here: magnitude <= 2^63, and 2^63 wraps to i64::MIN
@@ -121,7 +123,7 @@ fn signed_value<'code>(
     } else {
         if magnitude > i64::MAX as u64 {
             return Err(
-                start.invalid_error(format!("positive number too large: {}", magnitude).into())
+                end.invalid_error(format!("positive number too large: {}", magnitude).into())
             );
         }
         Ok(magnitude as i64)
@@ -129,7 +131,7 @@ fn signed_value<'code>(
 }
 
 /// The float in `start..end`, which holds `[sign]digits.digits`; overflow is
-/// reported at `start`
+/// reported at `end`
 fn float_value<'code>(
     start: ByteCursor<'code>,
     end: ByteCursor<'code>,
@@ -141,9 +143,9 @@ fn float_value<'code>(
     let value: f64 = std::str::from_utf8(span.slice())
         .ok()
         .and_then(|text| text.parse().ok())
-        .ok_or_else(|| start.invalid_error("invalid float literal".into()))?;
+        .ok_or_else(|| end.invalid_error("invalid float literal".into()))?;
     if !value.is_finite() {
-        return Err(start.invalid_error("floating point overflow".into()));
+        return Err(end.invalid_error("floating point overflow".into()));
     }
     Ok(value)
 }

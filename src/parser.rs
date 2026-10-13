@@ -32,7 +32,7 @@ pub trait Parser {
     ///
     /// Likewise an error's position is never before `cursor`: combinators
     /// decide whether anything matched by comparing the two (see
-    /// [`Failure`](crate::error::Failure)).
+    /// [`Advance`](crate::error::Advance)).
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error>;
 }
 

@@ -429,12 +429,12 @@ absolute index into the input (bytes for a byte cursor, elements otherwise).
 For errors more than 2^20 elements into the input only the offset is shown, so
 rendering stays cheap.
 
-When alternatives fail, `or` reports the one that got furthest into the input.
-On a tie it reports the first, unless only the second describes a real problem
-(see below); `and` reports whichever side failed. Name a set of
-alternatives with `label`: when all of them fail at the start, the error
-becomes `expected <label>, found …`. Errors that describe a real problem, such
-as an overflowing number or invalid UTF-8, are kept:
+When alternatives fail, `or` reports the one that got furthest into the input
+(see "How failures are handled" below); `and` reports whichever side failed.
+Name a set of alternatives with `label`: when all of them fail at the start,
+the error becomes `expected <label>, found …`. Failures past the start are
+kept, including real problems such as an overflowing number or invalid UTF-8,
+which are reported after the input they are in:
 
 ```rust
 use parsicomb::{ByteCursor, LabelExt, OrExt, Parser};
@@ -452,9 +452,8 @@ let error = u64().label("a number").parse(ByteCursor::new(b"99999999999999999999
 assert!(error.to_string().contains("number too large"));
 ```
 
-`or` keeps trying alternatives after one that matched part of its input, and
-reports whichever got furthest. Once the input can only mean one thing,
-typically after a keyword or an opening delimiter, `commit` makes a failure
+`or` keeps trying alternatives after one that matched part of its input.
+Once the input can only mean one thing, typically after a keyword or an opening delimiter, `commit` makes a failure
 final: inside `p.commit()`, a failure stops `or` from trying the remaining
 alternatives, and `optional` and repetitions pass it on even where it
 matched nothing. This also saves re-parsing alternatives that can't match.
@@ -464,38 +463,52 @@ so the repetition can never end.
 
 ### How failures are handled
 
-Every error says what kind of failure it is (`ErrorLeaf::kind`):
-`FailureKind::Expected` when what was looked for isn't there ("expected X,
-found Y", end of input), and `FailureKind::Invalid` for a real problem (a
-number too large, invalid UTF-8, nesting too deep). Leaf and hand-written
-parsers choose it by building their errors with `cursor.expected_error(..)`
-or `cursor.invalid_error(..)`.
+Every error says how far the failed parser got (`error.progress()`). Each
+failure is somewhere (`at`), and the message points there. The parsers
+around a failed parser also need to know how far its progress counts, to
+decide whether to backtrack:
 
-A combinator that started at some position sees a failure as one of three
-cases (`error.failure(start)`):
+- `Progress::Partial { at }`: progress up to the failure. A leaf parser
+  builds its error at the cursor where it stopped, with
+  `cursor.expected_error(..)` where what it expected isn't there, or
+  `cursor.invalid_error(..)` after input that is there but wrong (a number
+  too large, invalid UTF-8).
+- `Progress::Peek { from, at }`: it only peeked at the input from `from`
+  before failing at `at`, so its progress counts only up to `from`. This is
+  for input that isn't evidence the parser is on the right path: `skip_then`
+  doesn't count the whitespace it skipped, so a missing token after it
+  fails at the token but counts as no progress. The parsers around it see
+  "nothing here" while the message still points at the missing token. Put
+  `label` inside `skip_then` rather than around it, so the label replaces
+  the error where the token is missing.
+- `Progress::Committed { at }`: it failed inside a `commit`, or fatally
+  (nesting too deep).
 
-- `Failure::NoMatch`: what was expected isn't at the start. Nothing here.
-- `Failure::Failed`: the parser matched part of its input and then failed,
-  or found a real problem. Something here is wrong.
-- `Failure::Committed`: the failure happened inside a `commit`.
+A combinator that started a parser at `start` sees how far it advanced
+(`error.progress().since(start)`):
 
-Whether a parser "matched part of its input" is decided by how much it
-consumed before failing. Normally that is everything up to the failure, but
-a parser can count less (`Consumed::UpTo`) when what it matched isn't
-evidence that it's on the right path: `skip_then` doesn't count the
-whitespace it skipped, so a missing token after it is still `NoMatch`.
+- `Advance::None`: no progress past the start. Nothing here.
+- `Advance::Partial`: progress past the start, then a failure. Something
+  here is wrong.
+- `Advance::Committed`: committed or fatal.
 
-| | `NoMatch` | `Failed` | `Committed` |
+Progress is ordered: committed first, then the progress that counts
+further, then the failure further in. `or` reports the alternative with
+the greater progress, so an uncommitted alternative that matched nothing is
+never reported over one that matched input, however far in its error points.
+
+| | `None` | `Partial` | `Committed` |
 |---|---|---|---|
-| `or` | tries the next alternative | tries the next alternative, keeps the furthest error | passes it on |
+| `or` | tries the next alternative | tries the next alternative | passes it on |
 | `optional`, repetitions | `None` / ends | passes it on | passes it on |
-| `label`, `filter` | replaces the message | keeps it | keeps it |
+| `label`, `filter` | replaces the message if it failed at the start | keeps it | keeps it |
 | `not` | succeeds | succeeds | passes it on |
 
 So `optional(p)` is not `p.map(Some).or(default(None))`: `or` also
-backtracks from `Invalid` and drops that error, where `optional` passes it on.
+backtracks from `Advance::Partial` and drops that error, where `optional`
+passes it on.
 Hand-written combinators can make the same decisions with
-`match error.failure(start) { .. }`.
+`match error.progress().since(start) { .. }`.
 
 Leaf parsers that run out of input report `expected …, found end of input`;
 reading past the end with `cursor.value()` in a hand-written parser gives

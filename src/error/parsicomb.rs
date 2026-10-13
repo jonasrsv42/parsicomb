@@ -1,4 +1,4 @@
-use super::{CodeLoc, ErrorLeaf, ErrorNode, Expected, FailureInfo, FailureKind};
+use super::{CodeLoc, ErrorLeaf, ErrorNode, Expected, Progress};
 use crate::atomic::Atomic;
 use std::borrow::Cow;
 use std::error::Error;
@@ -7,10 +7,9 @@ use std::fmt;
 /// Built-in error type of the atomic cursors and leaf parsers
 #[derive(Debug)]
 pub enum ParsicombError<'code, T: Atomic = u8> {
-    /// Tried to read an element at the end of input ([`FailureKind::Expected`])
+    /// Tried to read an element at the end of input
     EndOfInput(CodeLoc<'code, T>),
     /// A real problem in the input, described by a free-form message
-    /// ([`FailureKind::Invalid`])
     Invalid {
         /// What went wrong
         message: Cow<'static, str>,
@@ -18,7 +17,6 @@ pub enum ParsicombError<'code, T: Atomic = u8> {
         loc: CodeLoc<'code, T>,
     },
     /// A leaf parser found something other than what it expected
-    /// ([`FailureKind::Expected`])
     Expected {
         /// What the parser expected
         expected: Expected<T>,
@@ -26,13 +24,13 @@ pub enum ParsicombError<'code, T: Atomic = u8> {
         loc: CodeLoc<'code, T>,
     },
     /// Wrapped error from another parser combinator; built by
-    /// [`ParsicombError::wrap`], which keeps `info` in sync with `inner`
+    /// [`ParsicombError::wrap`], which keeps `progress` in sync with `inner`
     #[non_exhaustive]
     WrappedError {
         /// The wrapped error
         inner: Box<dyn ErrorNode<Element = T> + Send + Sync + 'code>,
-        /// `inner`'s info, computed once when wrapping
-        info: FailureInfo,
+        /// `inner`'s progress, computed once when wrapping
+        progress: Progress,
     },
 }
 
@@ -72,14 +70,14 @@ impl<'code, T: Atomic> ParsicombError<'code, T> {
     /// `ParsicombError`s; `wrap` is for other error types.
     pub fn wrap(error: impl ErrorNode<Element = T> + Send + Sync + 'code) -> Self {
         ParsicombError::WrappedError {
-            info: error.info(),
+            progress: error.progress(),
             inner: Box::new(error),
         }
     }
 
     /// Returns the position where this error occurred
     pub fn position(&self) -> usize {
-        self.info().position
+        self.progress().position()
     }
 }
 
@@ -94,16 +92,6 @@ impl<'code, T: Atomic> ErrorLeaf for ParsicombError<'code, T> {
             ParsicombError::WrappedError { inner, .. } => inner.likely_error().loc(),
         }
     }
-
-    fn kind(&self) -> FailureKind {
-        match self {
-            ParsicombError::EndOfInput(_) | ParsicombError::Expected { .. } => {
-                FailureKind::Expected
-            }
-            ParsicombError::Invalid { .. } => FailureKind::Invalid,
-            ParsicombError::WrappedError { info, .. } => info.kind,
-        }
-    }
 }
 
 impl<'code, T: Atomic> ErrorNode for ParsicombError<'code, T> {
@@ -116,10 +104,10 @@ impl<'code, T: Atomic> ErrorNode for ParsicombError<'code, T> {
         }
     }
 
-    fn info(&self) -> FailureInfo {
+    fn progress(&self) -> Progress {
         match self {
-            ParsicombError::WrappedError { info, .. } => *info,
-            _ => FailureInfo::of_leaf(self),
+            ParsicombError::WrappedError { progress, .. } => *progress,
+            _ => Progress::at(self.loc().position()),
         }
     }
 }
@@ -273,7 +261,7 @@ mod tests {
         let wrapped = ParsicombError::wrap(ParsicombError::wrap(inner));
         assert_eq!(wrapped.position(), 5);
         assert_eq!(wrapped.likely_error().loc().position(), 5);
-        assert_eq!(wrapped.info().kind, FailureKind::Invalid);
+        assert_eq!(wrapped.progress(), Progress::at(5));
     }
 
     #[test]

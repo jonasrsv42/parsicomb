@@ -60,7 +60,7 @@ where
 mod tests {
     use super::*;
     use crate::ByteCursor;
-    use crate::error::{FailureInfo, FailureKind};
+    use crate::error::Progress;
     use crate::{CodeLoc, ErrorLeaf, ParsicombError};
 
     use std::fmt;
@@ -89,10 +89,6 @@ mod tests {
         fn loc(&self) -> CodeLoc<'_, Self::Element> {
             CodeLoc::new(&[], 0) // Default position for test error
         }
-
-        fn kind(&self) -> FailureKind {
-            FailureKind::Invalid
-        }
     }
 
     impl ErrorNode for CustomError {
@@ -102,8 +98,8 @@ mod tests {
             self
         }
 
-        fn info(&self) -> FailureInfo {
-            FailureInfo::of_leaf(self)
+        fn progress(&self) -> Progress {
+            Progress::at(0)
         }
     }
 

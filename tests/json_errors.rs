@@ -111,7 +111,7 @@ fn malformed_json_is_reported_where_it_goes_wrong() {
         (b"[1.5e10]", "column 5 (offset 4): expected ']', found 'e'"),
         (
             b"[99999999999999999999]",
-            "column 2 (offset 1): number too large: 99999999999999999999",
+            "column 22 (offset 21): number too large: 99999999999999999999",
         ),
         (
             b"{\"a\":\n  {\"b\":\n    [1,\n     2\n     3]}}",

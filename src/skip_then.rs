@@ -3,7 +3,7 @@
 
 use crate::atomic::Atomic;
 use crate::cursor::Cursor;
-use crate::error::{Consumed, ErrorLeaf, ErrorNode, Failure, FailureInfo, ParsicombError};
+use crate::error::{Advance, ErrorLeaf, ErrorNode, ParsicombError, Progress};
 use crate::parser::Parser;
 use std::fmt;
 
@@ -12,8 +12,7 @@ use std::fmt;
 pub enum SkipThenError<SkipErr, PErr> {
     /// The skipped parser failed
     Skip(SkipErr),
-    /// The parser failed after matching part of its input, or with a real
-    /// problem
+    /// The parser failed after making progress, or with nothing skipped
     Parser(PErr),
     /// The parser matched nothing after the skipped input; reported as no
     /// match at `start`, where the skipping began
@@ -58,13 +57,13 @@ where
         }
     }
 
-    fn info(&self) -> FailureInfo {
+    fn progress(&self) -> Progress {
         match self {
-            SkipThenError::Skip(error) => error.info(),
-            SkipThenError::Parser(error) => error.info(),
-            // Still ranked where it failed, but the skipped input doesn't count
+            SkipThenError::Skip(error) => error.progress(),
+            SkipThenError::Parser(error) => error.progress(),
+            // Still reported where it failed, but the skipped input doesn't count
             SkipThenError::NothingAfterSkip { error, start } => {
-                error.info().with_consumed(Consumed::UpTo(*start))
+                error.progress().peeked_from(*start)
             }
         }
     }
@@ -135,7 +134,7 @@ where
         let (_, after_skip) = self.skip.parse(cursor).map_err(SkipThenError::Skip)?;
         self.parser.parse(after_skip).map_err(|error| {
             if after_skip.position() > cursor.position()
-                && error.failure(after_skip.position()) == Failure::NoMatch
+                && error.progress().since(after_skip.position()) == Advance::None
             {
                 SkipThenError::NothingAfterSkip {
                     error,
@@ -188,24 +187,25 @@ mod tests {
         let error = skip_then(spaces(), is_byte(b'x'))
             .parse(ByteCursor::new(b"   y"))
             .unwrap_err();
-        assert_eq!(error.info().position, 3);
-        assert_eq!(error.info().consumed, Consumed::UpTo(0));
-        assert_eq!(error.failure(0), Failure::NoMatch);
+        assert_eq!(error.progress().position(), 3);
+        assert_eq!(error.progress(), Progress::Peek { from: 0, at: 3 });
+        assert_eq!(error.progress().since(0), Advance::None);
         let converted = ParsicombError::from(error);
-        assert_eq!(converted.info().consumed, Consumed::UpTo(0));
+        assert_eq!(converted.progress(), Progress::Peek { from: 0, at: 3 });
         assert!(converted.to_string().contains("found 'y'"));
     }
 
     #[test]
-    fn test_or_ranks_by_where_the_token_is_missing() {
-        // `skip_then`'s failure is at 2, past the other alternative's at 1
+    fn test_or_keeps_a_failure_over_a_further_missing_token() {
+        // `skip_then`'s failure is at 2 but matched nothing; the other
+        // alternative matched a space, so its failure at 1 is what decides
         use crate::map::MapExt;
         use crate::or::OrExt;
         let parser =
             skip_then(spaces(), is_byte(b'x')).or(is_byte(b' ').and(is_byte(b'q')).map(|_| b'q'));
         let error = parser.parse(ByteCursor::new(b"  z")).unwrap_err();
         assert!(
-            error.to_string().contains("offset 2): expected 'x'"),
+            error.to_string().contains("offset 1): expected 'q'"),
             "got {error}"
         );
     }
@@ -214,7 +214,7 @@ mod tests {
     fn test_failure_past_the_token_start_is_passed_on() {
         let pair = skip_then(spaces(), is_byte(b'a').and(is_byte(b'b')));
         let error = many(pair).parse(ByteCursor::new(b" ab ax")).unwrap_err();
-        assert_eq!(error.info().position, 5);
+        assert_eq!(error.progress().position(), 5);
     }
 
     #[test]
@@ -231,7 +231,7 @@ mod tests {
         use crate::label::LabelExt;
         let parser = skip_then(spaces(), is_byte(b'x')).label("an x");
         let error = parser.parse(ByteCursor::new(b"   ;")).unwrap_err();
-        assert_eq!(error.failure(0), Failure::NoMatch);
+        assert_eq!(error.progress().since(0), Advance::None);
         assert!(
             error
                 .to_string()
@@ -249,8 +249,8 @@ mod tests {
         let input = ByteCursor::new(b"  ;");
         let one = skipped().or(matched()).parse(input).unwrap_err();
         let other = matched().or(skipped()).parse(input).unwrap_err();
-        // `matched` consumed the spaces, so either way the result is Failed
-        assert_eq!(one.failure(0), Failure::Failed);
-        assert_eq!(other.failure(0), Failure::Failed);
+        // `matched` consumed the spaces, so either way it advanced (`Advance::Partial`)
+        assert_eq!(one.progress().since(0), Advance::Partial);
+        assert_eq!(other.progress().since(0), Advance::Partial);
     }
 }

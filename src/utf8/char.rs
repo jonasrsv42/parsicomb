@@ -28,15 +28,16 @@ impl<'code> Parser for Char<'code> {
             return Ok((lead as char, cursor.next()));
         }
 
-        // Invalid UTF-8 is reported at the start of the character
-        let invalid = |message: &'static str| cursor.invalid_error(message.into());
+        // Invalid UTF-8 is reported after the bytes read, which the parser
+        // counts as matched
+        let invalid = |end: Self::Cursor, message: &'static str| end.invalid_error(message.into());
 
         // Sequence width and the smallest codepoint that needs that width
         let (width, min_codepoint) = match lead {
             0xC0..=0xDF => (2, 0x80),
             0xE0..=0xEF => (3, 0x800),
             0xF0..=0xF7 => (4, 0x10000),
-            _ => return Err(invalid("invalid UTF-8 start byte")),
+            _ => return Err(invalid(cursor.next(), "invalid UTF-8 start byte")),
         };
 
         let mut codepoint = (lead & (0x7F >> width)) as u32;
@@ -44,23 +45,23 @@ impl<'code> Parser for Char<'code> {
         for _ in 1..width {
             let byte = next
                 .value()
-                .map_err(|_| invalid("incomplete UTF-8 sequence"))?;
+                .map_err(|_| invalid(next, "incomplete UTF-8 sequence"))?;
             if byte & 0xC0 != 0x80 {
-                return Err(invalid("invalid UTF-8 continuation byte"));
+                return Err(invalid(next, "invalid UTF-8 continuation byte"));
             }
             codepoint = (codepoint << 6) | (byte & 0x3F) as u32;
             next = next.next();
         }
 
         if codepoint < min_codepoint {
-            return Err(invalid("overlong UTF-8 encoding"));
+            return Err(invalid(next, "overlong UTF-8 encoding"));
         }
         match char::from_u32(codepoint) {
             Some(ch) => Ok((ch, next)),
             None if (0xD800..=0xDFFF).contains(&codepoint) => {
-                Err(invalid("UTF-16 surrogate in UTF-8"))
+                Err(invalid(next, "UTF-16 surrogate in UTF-8"))
             }
-            None => Err(invalid("codepoint beyond Unicode range")),
+            None => Err(invalid(next, "codepoint beyond Unicode range")),
         }
     }
 }
@@ -706,5 +707,22 @@ mod tests {
             message.contains(r#"expected a vowel, found "ü""#),
             "got {message}"
         );
+    }
+
+    #[test]
+    fn test_invalid_utf8_is_reported_after_the_bytes_read() {
+        use crate::ErrorNode;
+        use crate::optional::optional;
+
+        // A bad start byte is input that is there but wrong, so `optional`
+        // passes it on
+        let error = optional(char())
+            .parse(ByteCursor::new(&[0xFF, b'a']))
+            .unwrap_err();
+        assert_eq!(error.progress().position(), 1);
+        assert!(error.to_string().contains("invalid UTF-8 start byte"));
+
+        let error = char().parse(ByteCursor::new(&[0xC2, 0x00])).unwrap_err();
+        assert_eq!(error.progress().position(), 1);
     }
 }
