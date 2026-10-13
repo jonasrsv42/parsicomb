@@ -595,11 +595,7 @@ shared beginning once and make the rest optional: `'(' expr ')'` followed by
 
 A parser is anything implementing `Parser`. Its `parse` takes a cursor (a
 `Copy` position in the input) and returns the output together with the
-cursor after what it consumed:
-
-```text
-fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error>
-```
+cursor after what it consumed: `Result<(Output, Cursor), Error>`.
 
 On failure the caller still has its original cursor, which is what makes
 backtracking free. `parser_fn` turns a closure of that shape into a parser,
