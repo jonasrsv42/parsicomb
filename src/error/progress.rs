@@ -26,37 +26,10 @@ use std::cmp::Ordering;
 /// the input: a committed one, then the one whose progress counts further,
 /// then the one that failed further in.
 ///
-/// For example Parsec's `try`, where a failure counts as no progress so
-/// enclosing combinators backtrack from it, turns its inner error's progress
-/// into a peek from where it started, with [`WithProgress`](super::WithProgress):
-///
-/// ```
-/// use parsicomb::{AndExt, ByteCursor, Cursor, ErrorNode, Parser, WithProgress, optional, parser_fn};
-/// use parsicomb::byte::is_byte;
-/// use parsicomb::utf8::is_string;
-///
-/// fn attempt<P: Parser>(
-///     parser: P,
-/// ) -> impl Parser<Cursor = P::Cursor, Output = P::Output, Error = WithProgress<P::Error>> {
-///     parser_fn(move |cursor: P::Cursor| {
-///         let start = cursor.position();
-///         parser.parse(cursor).map_err(|error| {
-///             // Still reported where it failed, but only peeked from the start
-///             let progress = error.progress().peeked_from(start);
-///             WithProgress::new(error, progress)
-///         })
-///     })
-/// }
-///
-/// // `pub ` matches `pub`, then fails at `(`
-/// let input = ByteCursor::new(b"pub(crate)");
-/// let pub_space = || is_string("pub").and(is_byte(b' '));
-/// assert!(optional(pub_space()).parse(input).is_err());
-/// assert!(optional(attempt(pub_space())).parse(input).unwrap().0.is_none());
-/// ```
-///
-/// Put a [`label`](crate::label()) inside such a wrapper: it only replaces a
-/// failure at its start, and a peek fails further in.
+/// For example [`attempt`](crate::attempt()) (Parsec's `try`) turns its
+/// inner parser's failures into a peek from where it started, so enclosing
+/// combinators backtrack from them. Wrappers like it can be written with
+/// [`WithProgress`](super::WithProgress).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Progress {

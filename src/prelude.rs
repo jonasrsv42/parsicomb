@@ -13,6 +13,7 @@
 
 pub use crate::combinator::AndExt;
 pub use crate::combinator::AndThenExt;
+pub use crate::combinator::AttemptExt;
 pub use crate::combinator::BetweenExt;
 pub use crate::combinator::BoxedExt;
 pub use crate::combinator::CommitExt;

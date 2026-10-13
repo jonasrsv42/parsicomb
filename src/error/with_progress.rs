@@ -7,8 +7,8 @@ use std::fmt;
 /// An error reported as its inner error, with a progress set when it was
 /// built instead of the inner error's
 ///
-/// For wrappers that adjust how far a failure counts, such as Parsec's `try`
-/// (see [`Progress`]); build the progress from the inner error's, so that a
+/// For wrappers that adjust how far a failure counts, such as
+/// [`attempt`](crate::attempt()); build the progress from the inner error's, so that a
 /// committed failure inside stays committed.
 #[derive(Debug)]
 pub struct WithProgress<E> {

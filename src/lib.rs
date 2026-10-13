@@ -45,12 +45,12 @@ pub use atomic::{
     Atomic, atomic, atomic_between, default, eof, is_atomic, is_sequence, skip_while, skip_while1,
 };
 pub use combinator::{
-    AndExt, AndThenExt, BetweenExt, BoxedExt, BoxedParser, CommitExt, FilterExt, LabelExt, ManyExt,
-    MapErrExt, MapExt, MaxDepthExt, NotExt, OptionalExt, OrExt, PositionExt, PrecededExt,
-    RecognizeExt, SeparatedListExt, SomeExt, Span, TerminatedExt, all, and, and_then,
-    argument_list, between, commit, filter, label, lazy, many, map, map_err, max_depth, not,
-    ntimes, optional, or, parser_fn, position, preceded, recognize, separated_list, separated_pair,
-    skip_many, skip_some, skip_then, some, take_until, terminated,
+    AndExt, AndThenExt, AttemptExt, BetweenExt, BoxedExt, BoxedParser, CommitExt, FilterExt,
+    LabelExt, ManyExt, MapErrExt, MapExt, MaxDepthExt, NotExt, OptionalExt, OrExt, PositionExt,
+    PrecededExt, RecognizeExt, SeparatedListExt, SomeExt, Span, TerminatedExt, all, and, and_then,
+    argument_list, attempt, between, commit, filter, label, lazy, many, map, map_err, max_depth,
+    not, ntimes, optional, or, parser_fn, position, preceded, recognize, separated_list,
+    separated_pair, skip_many, skip_some, skip_then, some, take_until, terminated,
 };
 pub use cursor::Cursor;
 pub use cursors::{AtomicCursor, ByteCursor};

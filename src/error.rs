@@ -17,7 +17,9 @@
 //!   failing at `at`, so its progress counts only up to `from`. This is for
 //!   input that isn't evidence the parser is on the right path:
 //!   [`skip_then`](crate::skip_then()) doesn't count the whitespace it
-//!   skipped, and a literal that matched only partly doesn't count either.
+//!   skipped, a literal that matched only partly doesn't count either, and
+//!   [`attempt`](crate::attempt()) turns any failure inside it into a peek
+//!   from its start.
 //!   The parsers around it see "nothing here" while the message still points
 //!   at the mismatch. Put [`label`](crate::label()) inside `skip_then` rather
 //!   than around it, so the label replaces the error where the token is

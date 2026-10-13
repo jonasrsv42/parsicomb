@@ -30,9 +30,11 @@ Syntax error at line 1, column 5 (offset 4): expected ']', found ';'
   of copying it, and messages are only formatted when an error is displayed.
 - **Statically dispatched:** combinators are plain generic types that inline
   into one function; type erasure with `.boxed()` is opt-in.
-- **Parsec-style backtracking:** a parser that fails without consuming input
-  lets the alternatives around it try; one that fails after consuming input
-  is reported where it went wrong.
+- **Backtracking you can tune:** `or` tries every alternative and reports
+  the one that got furthest. `optional` and the repetitions stop only where
+  their parser matched nothing, as in Parsec, so errors point at the problem.
+  `commit` makes a failure final, and `attempt` makes one count as "nothing
+  here" to backtrack fully.
 - **No panics while parsing:** failures are `Result`s. Bound recursion with
   `max_depth` on untrusted input.
 
@@ -182,7 +184,7 @@ Things to notice:
 | `utf8` | characters and strings | `is_string("let")`, `unicode_letter()` |
 | `ascii` | numbers and whitespace | `u64()`, `number()`, `whitespace()` |
 | `atomic` | the same for any element type, runs, end of input | `is_atomic(token)`, `skip_while(pred)`, `eof()` |
-| `combinator` | parsers built from parsers | `many`, `or`, `between`, `label`, `commit`, `lazy` |
+| `combinator` | parsers built from parsers | `many`, `or`, `between`, `label`, `commit`, `attempt`, `lazy` |
 
 The functions are also at the crate root (`parsicomb::{many, eof, …}`).
 Combinators that take a parser first also come as methods, so
@@ -424,7 +426,18 @@ let error = u64().label("a number").parse(ByteCursor::new(b"99999999999999999999
 assert!(error.to_string().contains("number too large"));
 ```
 
-## Backtracking and `commit`
+## Controlling backtracking
+
+By default:
+- `or` tries every alternative and reports the one that got furthest.
+- `optional` and the repetitions stop only where their parser matched
+  nothing.
+
+Two combinators change that where you need it:
+- **`commit`** makes failures final.
+- **`attempt`** makes failures count as "nothing here".
+
+### The default
 
 A parser that fails **without consuming input** means "nothing here". `or`
 tries its next alternative, and `optional` and the repetitions (`many`,
@@ -453,20 +466,66 @@ and fails at a malformed item rather than at the closing bracket. Literals
 are matched as a whole: `is_string("pub")` on `push` counts as "nothing
 here".
 
+### Stricter: `commit`
+
 Once the input can only mean one thing, typically after a keyword or an
 opening delimiter, `commit` makes a failure final. Inside `p.commit()`, a
 failure stops `or` from trying its other alternatives, and `optional` and the
 repetitions pass it on even where it matched nothing. This also saves
-re-parsing alternatives that can't match.
+re-parsing alternatives that can't match, and with a commit after the first
+token of each alternative, `or` behaves as in Parsec.
+
+```rust
+use parsicomb::prelude::*;
+use parsicomb::ascii::u64;
+use parsicomb::byte::is_byte;
+
+// `#` and a number, or a bare `#`
+let bare = || is_byte(b'#').map(|_| 0);
+
+let tagged = is_byte(b'#').and(u64()).map(|(_, n)| n);
+assert_eq!(tagged.or(bare()).parse(ByteCursor::new(b"#x")).unwrap().0, 0);
+
+// After `#`, a number is required
+let tagged = is_byte(b'#').and(u64().commit()).map(|(_, n)| n);
+assert!(tagged.or(bare()).parse(ByteCursor::new(b"#x")).is_err());
+```
 
 Commit after the first token that decides, not around a whole repeated item.
 In `many(item.commit())`, the item's final "nothing here" is committed too,
 so the repetition can never end.
 
+### Looser: `attempt`
+
+To backtrack fully from a parser instead, use `p.attempt()` (Parsec's
+`try`). `optional` and the repetitions then treat any failure inside `p` as
+"nothing here", while the error still points where `p` failed. A committed
+failure inside stays committed.
+
+```rust
+use parsicomb::prelude::*;
+use parsicomb::byte::is_byte;
+use parsicomb::optional;
+use parsicomb::utf8::is_string;
+
+// `pub ` matches `pub`, then fails at `(`
+let input = ByteCursor::new(b"pub(crate)");
+let pub_space = || is_string("pub").and(is_byte(b' '));
+
+assert!(optional(pub_space()).parse(input).is_err());
+assert!(optional(pub_space().attempt()).parse(input).unwrap().0.is_none());
+```
+
+### Summary
+
+What each combinator does when its parser fails:
+
 | A failure that… | consumed nothing | consumed input | is committed |
 |---|---|---|---|
 | `or` | tries the next alternative | tries the next alternative | passes it on |
 | `optional`, repetitions | `None` / ends | passes it on | passes it on |
+| `commit` | commits it | commits it | passes it on |
+| `attempt` | passes it on | makes it "nothing here" | passes it on |
 | `label`, `filter` | replaces the message | keeps it | keeps it |
 | `not` | succeeds | succeeds | passes it on |
 | `and` and other sequences | passes it on | passes it on | passes it on |
