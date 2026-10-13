@@ -1,4 +1,48 @@
 //! Error types and the failure model
+//!
+//! # How failures are handled
+//!
+//! Every error says how far the failed parser got
+//! ([`ErrorNode::progress`]). Each failure is somewhere (`at`), and the
+//! message points there. The parsers around a failed parser also need to know
+//! how far its progress counts, to decide whether to backtrack:
+//!
+//! - [`Progress::Partial`]: progress up to the failure. A leaf parser builds
+//!   its error at the cursor where it stopped, with
+//!   [`Cursor::expected_error`](crate::Cursor::expected_error) where what it
+//!   expected isn't there, or
+//!   [`Cursor::invalid_error`](crate::Cursor::invalid_error) after input that
+//!   is there but wrong (a number too large, invalid UTF-8).
+//! - [`Progress::Peek`]: it only peeked at the input from `from` before
+//!   failing at `at`, so its progress counts only up to `from`. This is for
+//!   input that isn't evidence the parser is on the right path:
+//!   [`skip_then`](crate::skip_then()) doesn't count the whitespace it
+//!   skipped, and a literal that matched only partly doesn't count either.
+//!   The parsers around it see "nothing here" while the message still points
+//!   at the mismatch. Put [`label`](crate::label()) inside `skip_then` rather
+//!   than around it, so the label replaces the error where the token is
+//!   missing.
+//! - [`Progress::Committed`]: it failed inside a
+//!   [`commit`](crate::commit()), or fatally (nesting too deep).
+//!
+//! A combinator that started a parser at `start` sees how far it advanced
+//! with [`Progress::since`]:
+//!
+//! - [`Advance::None`]: no progress past the start. Nothing here.
+//! - [`Advance::Partial`]: progress past the start, then a failure. Something
+//!   here is wrong.
+//! - [`Advance::Committed`]: committed or fatal.
+//!
+//! Progress is ordered: committed first, then the progress that counts
+//! further, then the failure further in. `or` reports the alternative with
+//! the greater progress, so an alternative that matched nothing (and isn't
+//! committed) is never reported over one that matched input, however far in
+//! its error points.
+//!
+//! Leaf parsers that run out of input report `expected …, found end of
+//! input`; reading past the end with
+//! [`Cursor::value`](crate::Cursor::value) in a hand-written parser gives
+//! `Unexpected end of input`.
 
 use crate::atomic::Atomic;
 use std::error::Error;
