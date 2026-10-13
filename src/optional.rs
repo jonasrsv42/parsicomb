@@ -33,6 +33,7 @@ where
     type Output = Option<P::Output>;
     type Error = P::Error;
 
+    #[inline]
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         match self.parser.parse(cursor) {
             Ok((value, next_cursor)) => Ok((Some(value), next_cursor)),

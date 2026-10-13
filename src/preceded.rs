@@ -40,6 +40,7 @@ where
     type Output = P::Output;
     type Error = AndError<PPrefix::Error, P::Error>;
 
+    #[inline]
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let (_, cursor) = self.prefix.parse(cursor).map_err(AndError::FirstParser)?;
         self.parser.parse(cursor).map_err(AndError::SecondParser)

@@ -29,6 +29,7 @@ impl<P: Parser> Parser for SkipMany<P> {
     type Output = ();
     type Error = P::Error;
 
+    #[inline]
     fn parse(&self, mut cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         loop {
             match self.parser.parse(cursor) {

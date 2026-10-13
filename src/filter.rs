@@ -45,6 +45,7 @@ where
     type Output = P::Output;
     type Error = FilterError<P::Error, <P::Cursor as Cursor>::Error>;
 
+    #[inline]
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         match self.parser.parse(cursor) {
             Ok((value, next)) if (self.predicate)(&value) => Ok((value, next)),

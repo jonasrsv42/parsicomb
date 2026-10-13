@@ -58,6 +58,7 @@ where
     type Output = (P1::Output, P2::Output);
     type Error = AndError<P1::Error, P2::Error>;
 
+    #[inline]
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let (out1, cursor) = self.parser1.parse(cursor).map_err(AndError::FirstParser)?;
         let (out2, cursor) = self.parser2.parse(cursor).map_err(AndError::SecondParser)?;

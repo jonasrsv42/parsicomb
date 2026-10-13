@@ -36,6 +36,7 @@ where
     type Output = P::Output;
     type Error = AndError<P::Error, PSuffix::Error>;
 
+    #[inline]
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let (output, cursor) = self.parser.parse(cursor).map_err(AndError::FirstParser)?;
         let (_, cursor) = self.suffix.parse(cursor).map_err(AndError::SecondParser)?;

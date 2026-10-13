@@ -28,6 +28,7 @@ where
     type Output = Vec<P::Output>;
     type Error = P::Error;
 
+    #[inline]
     fn parse(&self, mut cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let mut results = Vec::new();
 

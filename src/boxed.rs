@@ -43,6 +43,7 @@ where
     type Output = Out;
     type Error = Err;
 
+    #[inline]
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         self.parser.parse(cursor)
     }

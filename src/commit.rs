@@ -100,6 +100,7 @@ impl<P: Parser> Parser for Commit<P> {
     type Output = P::Output;
     type Error = CommitError<P::Error>;
 
+    #[inline]
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         self.parser
             .parse(cursor)

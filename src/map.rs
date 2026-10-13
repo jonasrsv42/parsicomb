@@ -25,6 +25,7 @@ where
     type Output = Out;
     type Error = P::Error;
 
+    #[inline]
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let (value, cursor) = self.parser.parse(cursor)?;
         let mapped_value = (self.mapper)(value);

@@ -72,6 +72,7 @@ where
     type Output = P1::Output;
     type Error = OrError<P1::Error, P2::Error>;
 
+    #[inline]
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         match self.parser1.parse(cursor) {
             Ok(result) => Ok(result),

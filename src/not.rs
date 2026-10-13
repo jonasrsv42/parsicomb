@@ -42,6 +42,7 @@ impl<P: Parser> Parser for Not<P> {
     type Output = ();
     type Error = NotError<<P::Cursor as Cursor>::Error, P::Error>;
 
+    #[inline]
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         match self.parser.parse(cursor) {
             Ok(_) => Err(NotError::Matched(

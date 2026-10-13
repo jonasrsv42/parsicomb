@@ -50,6 +50,7 @@ impl<P: Parser> Parser for Label<P> {
     type Output = P::Output;
     type Error = LabelError<P::Error, <P::Cursor as Cursor>::Error>;
 
+    #[inline]
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         self.parser
             .parse(cursor)

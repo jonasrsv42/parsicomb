@@ -67,6 +67,7 @@ where
     type Output = P::Output;
     type Error = P::Error;
 
+    #[inline]
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         self.parser.get_or_init(&self.factory).parse(cursor)
     }

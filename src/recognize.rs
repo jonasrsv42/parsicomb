@@ -25,6 +25,7 @@ impl<P: Parser> Parser for Recognize<P> {
     type Output = <P::Cursor as Cursor>::Span;
     type Error = P::Error;
 
+    #[inline]
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let (_, end) = self.parser.parse(cursor)?;
         Ok((cursor.span_to(end), end))

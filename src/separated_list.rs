@@ -52,6 +52,7 @@ where
     type Output = Vec<P::Output>;
     type Error = SeparatedListError<P::Error, PSep::Error>;
 
+    #[inline]
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let mut results = Vec::new();
 

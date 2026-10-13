@@ -106,6 +106,7 @@ impl<P: Parser> Parser for Position<P> {
     type Output = (P::Output, <P::Cursor as Cursor>::Span);
     type Error = P::Error;
 
+    #[inline]
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let (output, new_cursor) = self.parser.parse(cursor)?;
         Ok(((output, cursor.span_to(new_cursor)), new_cursor))

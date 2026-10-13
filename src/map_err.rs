@@ -28,6 +28,7 @@ where
     type Output = P::Output;
     type Error = NewErr;
 
+    #[inline]
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         self.parser.parse(cursor).map_err(&self.mapper)
     }

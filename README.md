@@ -538,6 +538,24 @@ Leaf parsers that run out of input report `expected …, found end of input`;
 reading past the end with `cursor.value()` in a hand-written parser gives
 `Unexpected end of input`.
 
+## Performance
+
+Combinators are marked `#[inline]`, so a chain of them compiles into one
+function: a loop such as `skip_many(is_byte(b'7'))` or `many(digit())` runs
+within a few times the speed of a hand-written loop (well under a
+nanosecond per byte in our benchmarks). Each failed attempt (the end of a
+`many`, an `or` alternative that doesn't match, an `optional` that finds
+nothing) still builds an error, so alternatives that usually fail cost a
+little more than ones that usually match.
+
+Inlining is the compiler's decision, though, and a very large grammar can
+end up with calls that aren't inlined. For runs of elements, `skip_while`,
+`utf8::skip_chars_while` and `recognize` (see [Runs without
+collecting](#runs-without-collecting)) loop internally and stay fast either
+way. If profiling shows a hot loop of tiny parsers, write that one spot as a
+[hand-written parser](#hand-written-parsers) with `parser_fn` and keep
+composing everywhere else.
+
 ## Compile Times
 
 Combinators are nested generic types, so a single expression with dozens of

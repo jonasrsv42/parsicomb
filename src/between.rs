@@ -54,6 +54,7 @@ where
     type Output = PContent::Output;
     type Error = BetweenError<POpen::Error, PContent::Error, PClose::Error>;
 
+    #[inline]
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let (_, cursor) = self
             .open

@@ -28,6 +28,7 @@ impl<P: Parser> Parser for SkipSome<P> {
     type Output = ();
     type Error = P::Error;
 
+    #[inline]
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         // First parse must succeed
         let (_, mut cursor) = self.parser.parse(cursor)?;
