@@ -13,11 +13,16 @@ let list = u64().separated_by(is_byte(b',')).between(is_byte(b'['), is_byte(b']'
 assert_eq!(list.parse(ByteCursor::new(b"[1,2,3]")).unwrap().0, vec![1, 2, 3]);
 
 let error = list.parse(ByteCursor::new(b"[1,2;3]")).unwrap_err();
-assert_eq!(
-    error.to_string(),
-    "Syntax error at line 1, column 5 (offset 4): expected ']', found ';'\n\
-     \n  > 1 | [1,2;3]\n            ^--- here\n"
-);
+println!("{error}");
+```
+
+prints
+
+```text
+Syntax error at line 1, column 5 (offset 4): expected ']', found ';'
+
+  > 1 | [1,2;3]
+            ^--- here
 ```
 
 - **Composable:** `and`, `or`, `many`, `between`, … as functions or methods.
@@ -33,13 +38,16 @@ assert_eq!(
 
 ## Install
 
-ParsiComb isn't on crates.io yet. Depend on it from GitHub, pinned to a tag
-or a commit so upgrades are deliberate (the API can still change):
+ParsiComb isn't on crates.io yet. Depend on it from GitHub, pinned to a
+commit so upgrades are deliberate (the API can still change):
 
 ```toml
 [dependencies]
-parsicomb = { git = "https://github.com/jonasrsv42/parsicomb", tag = "v0.1.0" }
+parsicomb = { git = "https://github.com/jonasrsv42/parsicomb", rev = "d730dc9" }
 ```
+
+Use any commit from the history, or `branch = "main"` to follow the latest;
+`cargo update -p parsicomb` then moves `Cargo.lock` to the newest commit.
 
 It needs Rust 1.85 or newer (edition 2024). For the API docs, run
 `cargo doc -p parsicomb --open`.
@@ -162,93 +170,33 @@ Things to notice:
   allocating, and recursive rules need a concrete error type (see
   [Recursive grammars](#recursive-grammars)).
 
-## Imports
+## Finding your way around
 
 `use parsicomb::prelude::*` brings in the traits for method syntax (`.and()`,
 `.or()`, `.map()`, …) and the core types: `Parser`, `Cursor`, `ByteCursor`,
-`ParsicombError` and `ErrorNode`.
+`ParsicombError` and `ErrorNode`. Everything else is in a few modules:
 
-- Leaf parsers are in `byte`, `utf8`, `ascii` and `atomic`.
-- The combinator functions (`many`, `or`, `lazy`, …) are at the crate root.
-- Every combinator's parser and error types are in `parsicomb::combinator`.
+| Module | What's in it | For example |
+|--------|--------------|-------------|
+| `byte` | single bytes | `is_byte(b'[')`, `between_bytes(b'a', b'z')` |
+| `utf8` | characters and strings | `is_string("let")`, `unicode_letter()` |
+| `ascii` | numbers and whitespace | `u64()`, `number()`, `whitespace()` |
+| `atomic` | the same for any element type, runs, end of input | `is_atomic(token)`, `skip_while(pred)`, `eof()` |
+| `combinator` | parsers built from parsers | `many`, `or`, `between`, `label`, `commit`, `lazy` |
 
-## Building blocks
+The functions are also at the crate root (`parsicomb::{many, eof, …}`).
+Combinators that take a parser first also come as methods, so
+`many(p)` can be written `p.many()` and `between(open, p, close)` can be written
+`p.between(open, close)`. A parser can be used in several places by
+reference: `item.and(&separator)`.
 
-| Parser | Matches | Output |
-|--------|---------|--------|
-| `byte::byte()` | any byte | `u8` |
-| `byte::is_byte(b)` | the byte `b` | `u8` |
-| `byte::between_bytes(lo, hi)` | a byte in `lo..=hi` | `u8` |
-| `utf8::char()` | any UTF-8 character | `char` |
-| `utf8::is_char(c)` | the character `c` | `char` |
-| `utf8::is_string(s)` | the string `s` | `Cow<'static, str>` |
-| `utf8::unicode_letter()` and friends | a Unicode character class | `char` |
-| `ascii::digit()` | an ASCII digit | `u8` |
-| `ascii::u64()`, `ascii::i64()` | an integer | `u64`, `i64` |
-| `ascii::f64()` | a float: `int.frac` with an optional exponent, or `int` and an exponent | `f64` |
-| `ascii::number()` | an integer or a float | `Number` |
-| `ascii::whitespace()` | a space, tab, `\n`, `\r` or form feed | `u8` |
-| `skip_while(pred)`, `skip_while1(pred, label)` | a run of elements | `()` |
-| `eof()` | the end of the input | `()` |
-| `default(value)` | nothing, always succeeds | `value` |
-| `atomic()`, `is_atomic(e)`, `atomic_between(lo, hi)` | one element, for any element type | the element |
-| `is_sequence(&[...])` | a run of elements | the matched `Span` |
+Parsers that match input without collecting it, such as `recognize` and
+`is_sequence`, output a `Span`. Call `span.slice()` for the matched elements,
+or `std::str::from_utf8(span.slice())` for text.
 
-A `Span` is a range of the input: `span.slice()` is the matched elements,
-`span.start()` and `span.end()` their offsets. For text, read it with
-`std::str::from_utf8(span.slice())`, or `span.as_string()`, which replaces
-invalid UTF-8.
-
-## Combinators
-
-```rust
-use parsicomb::prelude::*;
-use parsicomb::ascii::{digit, u64};
-use parsicomb::byte::is_byte;
-use parsicomb::utf8::is_string;
-use parsicomb::{between, many, optional, preceded, separated_pair, some, terminated};
-
-let cursor = |input: &'static [u8]| ByteCursor::new(input);
-
-// Zero or more, one or more
-assert_eq!(many(digit()).parse(cursor(b"")).unwrap().0, vec![]);
-assert_eq!(some(digit()).parse(cursor(b"12")).unwrap().0, vec![b'1', b'2']);
-assert!(some(digit()).parse(cursor(b"")).is_err());
-
-// Optional
-assert_eq!(optional(is_byte(b'-')).parse(cursor(b"5")).unwrap().0, None);
-
-// Delimited and paired
-let bracketed = between(is_byte(b'['), u64(), is_byte(b']'));
-assert_eq!(bracketed.parse(cursor(b"[42]")).unwrap().0, 42);
-
-let pair = separated_pair(is_string("key"), is_byte(b'='), u64());
-assert_eq!(pair.parse(cursor(b"key=42")).unwrap().0, ("key".into(), 42));
-
-// Keeping one side of a sequence
-assert_eq!(preceded(is_byte(b'#'), u64()).parse(cursor(b"#7")).unwrap().0, 7);
-assert_eq!(terminated(u64(), is_byte(b';')).parse(cursor(b"7;")).unwrap().0, 7);
-
-// Method forms read left to right
-let tags = u64().preceded_by(is_byte(b'#')).many();
-assert_eq!(tags.parse(cursor(b"#1#2")).unwrap().0, vec![1, 2]);
-```
-
-Combinators that take one parser first also come as methods:
-- `.many()`, `.some()` and `.optional()`;
-- `.separated_by(sep)` and `.between(open, close)`;
-- `.preceded_by(prefix)` and `.terminated_by(suffix)`;
-- `.map(f)`, `.map_err(f)`, `.and_then(f)` and `.filter(pred, label)`;
-- `.label(name)`, `.recognize()` and `.with_position()`;
-- `.not()`, `.commit()`, `.max_depth(n)` and `.boxed()`.
-
-Also available:
-- `argument_list` for `(a, b, c)`-style lists;
-- `skip_many` and `skip_some`, which repeat without collecting;
-- `take_until`, `ntimes` and `all`;
-- `skip_then`, described under [Whitespace](#whitespace-and-keywords).
-
-A parser can be used in several places by reference: `item.and(&separator)`.
+For the full list, see the API docs (`cargo doc -p parsicomb --open`) or
+`src/combinator/`, where the combinators are grouped by what they do:
+`sequence`, `choice`, `repeat`, `transform`, `control` and `build`.
 
 ## Recipes
 
@@ -436,13 +384,16 @@ use parsicomb::prelude::*;
 use parsicomb::utf8::is_string;
 
 let error = is_string("hello").parse(ByteCursor::new(b"help")).unwrap_err();
+println!("{error}");
+```
 
-assert_eq!(
-    error.to_string(),
-    "Syntax error at line 1, column 4 (offset 3): \
-     expected \"hello\", found \"help\"\n\
-     \n  > 1 | help\n           ^--- here\n"
-);
+prints
+
+```text
+Syntax error at line 1, column 4 (offset 3): expected "hello", found "help"
+
+  > 1 | help
+           ^--- here
 ```
 
 Lines and columns count from 1, and the column matches the `^` pointer. The
