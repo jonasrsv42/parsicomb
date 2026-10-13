@@ -7,6 +7,7 @@ use crate::parser::Parser;
 use std::marker::PhantomData;
 
 /// Parser that matches an element within an inclusive range
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct AtomicBetween<Cur: Cursor> {
     start: Cur::Element,
     end: Cur::Element,

@@ -56,7 +56,7 @@ pub(crate) fn readable_position<T: Atomic>(code: &[T], loc: usize) -> Option<Rea
 
     let mut line = 1;
     let mut line_start = 0;
-    for (i, element) in code[..loc].iter().enumerate() {
+    for (i, element) in code.iter().take(loc).enumerate() {
         if element.is_newline() {
             line += 1;
             line_start = i + 1;
@@ -93,15 +93,19 @@ fn printable(text: &str) -> String {
 /// elements and, for an error inside a multi-byte character, ends at the
 /// start of that character.
 fn text_before<T: Atomic>(code: &[T], line_start: usize, loc: usize) -> (String, usize) {
-    if loc < code.len() && !code[loc].is_newline() {
-        let through = T::format_slice(&code[line_start..=loc]);
-        let own = T::format_slice(&code[loc..=loc]).chars().count();
-        let before = through.chars().count().saturating_sub(own);
-        (through, before)
-    } else {
-        let text = T::format_slice(&code[line_start..loc]);
-        let before = text.chars().count();
-        (text, before)
+    let line = |end: usize| code.get(line_start..end).unwrap_or_default();
+    match code.get(loc..=loc) {
+        Some(own @ [element]) if !element.is_newline() => {
+            let through = T::format_slice(line(loc + 1));
+            let own = T::format_slice(own).chars().count();
+            let before = through.chars().count().saturating_sub(own);
+            (through, before)
+        }
+        _ => {
+            let text = T::format_slice(line(loc));
+            let before = text.chars().count();
+            (text, before)
+        }
     }
 }
 
@@ -119,20 +123,21 @@ fn context_window<T: Atomic>(code: &[T], loc: usize, err_line: usize) -> (usize,
     // (the 3rd newline boundary back), capped at CONTEXT_RADIUS elements. In
     // binary input with no newlines this simply stops at the radius cap.
     let back_cap = loc.saturating_sub(CONTEXT_RADIUS);
-    let mut nl_back = [0usize; 3];
-    let mut nb = 0;
+    let mut nl_back = Vec::with_capacity(3);
     let mut i = loc;
-    while i > back_cap && nb < 3 {
-        if code[i - 1].is_newline() {
-            nl_back[nb] = i - 1;
-            nb += 1;
+    while i > back_cap && nl_back.len() < 3 {
+        if code.get(i - 1).is_some_and(Atomic::is_newline) {
+            nl_back.push(i - 1);
         }
         i -= 1;
     }
-    let win_start = if nb == 3 { nl_back[2] + 1 } else { i };
+    let win_start = match nl_back.get(2) {
+        Some(third) => third + 1,
+        None => i,
+    };
     // Newlines remaining strictly inside [win_start, loc) tell us how many lines
     // below `first_line` the error line sits.
-    let inside = (0..nb).filter(|&k| nl_back[k] >= win_start).count();
+    let inside = nl_back.iter().filter(|&&nl| nl >= win_start).count();
     let first_line = err_line - inside;
 
     // Walk forward to the end of the line two lines below the error
@@ -141,7 +146,7 @@ fn context_window<T: Atomic>(code: &[T], loc: usize, err_line: usize) -> (usize,
     let mut nf = 0;
     let mut j = loc;
     while j < fwd_cap && nf < 3 {
-        if code[j].is_newline() {
+        if code.get(j).is_some_and(Atomic::is_newline) {
             nf += 1;
         }
         j += 1;
@@ -199,7 +204,9 @@ pub(crate) fn context_lines_at<T: Atomic>(
         lines.push(format!(
             "{}{}",
             prefix,
-            printable(&T::format_slice(&code[line_start..line_end]))
+            printable(&T::format_slice(
+                code.get(line_start..line_end).unwrap_or_default()
+            ))
         ));
 
         if is_err {

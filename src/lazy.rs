@@ -38,6 +38,7 @@ use std::cell::OnceCell;
 /// let (depth, _) = nested().parse(ByteCursor::new(b"(((x)))")).unwrap();
 /// assert_eq!(depth, 3);
 /// ```
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct Lazy<F, P> {
     factory: F,
     parser: OnceCell<P>,

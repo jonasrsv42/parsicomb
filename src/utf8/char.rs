@@ -9,6 +9,7 @@ use std::borrow::Cow;
 use std::marker::PhantomData;
 
 /// Parser that consumes and returns a single UTF-8 character
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct Char<'code> {
     _input: PhantomData<&'code [u8]>,
 }
@@ -40,7 +41,7 @@ impl<'code> Parser for Char<'code> {
             _ => return Err(invalid(cursor.next(), "invalid UTF-8 start byte")),
         };
 
-        let mut codepoint = (lead & (0x7F >> width)) as u32;
+        let mut codepoint = u32::from(lead & (0x7F >> width));
         let mut next = cursor.next();
         for _ in 1..width {
             let byte = next
@@ -49,7 +50,7 @@ impl<'code> Parser for Char<'code> {
             if byte & 0xC0 != 0x80 {
                 return Err(invalid(next, "invalid UTF-8 continuation byte"));
             }
-            codepoint = (codepoint << 6) | (byte & 0x3F) as u32;
+            codepoint = (codepoint << 6) | u32::from(byte & 0x3F);
             next = next.next();
         }
 
@@ -76,10 +77,13 @@ pub fn char<'code>() -> Char<'code> {
 /// Every ASCII byte, so an ASCII character's encoding is a `'static` slice
 static ASCII: [u8; 128] = {
     let mut table = [0u8; 128];
-    let mut i = 0;
-    while i < 128 {
-        table[i] = i as u8;
-        i += 1;
+    let mut byte = 0u8;
+    while byte < 128 {
+        #[expect(clippy::indexing_slicing, reason = "byte < 128, the table's length")]
+        {
+            table[byte as usize] = byte;
+        }
+        byte += 1;
     }
     table
 };
@@ -88,6 +92,7 @@ static ASCII: [u8; 128] = {
 ///
 /// A mismatch is reported at the start of the character, even when some of
 /// its bytes matched (`é` and `è` share their first byte).
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct IsChar<'code> {
     expected: char,
     encoding: Cow<'static, [u8]>,
@@ -101,7 +106,10 @@ impl<'code> Parser for IsChar<'code> {
 
     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
         let (source, position) = cursor.inner();
-        if source[position..].starts_with(&self.encoding) {
+        if source
+            .get(position..)
+            .is_some_and(|rest| rest.starts_with(&self.encoding))
+        {
             Ok((self.expected, cursor.advance(self.encoding.len())))
         } else {
             Err(cursor.expected_error(Expected::Sequence {
@@ -118,7 +126,8 @@ impl<'code> Parser for IsChar<'code> {
 /// encoding, which is cloned into each error.
 pub fn is_char<'code>(expected: char) -> IsChar<'code> {
     let encoding: Cow<'static, [u8]> = if expected.is_ascii() {
-        Cow::Borrowed(&ASCII[expected as usize..][..1])
+        let index = expected as usize;
+        Cow::Borrowed(ASCII.get(index..=index).unwrap_or_default())
     } else {
         Cow::Owned(expected.encode_utf8(&mut [0; 4]).as_bytes().to_vec())
     };

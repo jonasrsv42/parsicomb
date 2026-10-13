@@ -34,9 +34,11 @@ pub trait Cursor: Copy {
     /// Advance the cursor to the next element
     ///
     /// If already at the end, returns a cursor still positioned at the end
+    #[must_use = "cursors are copied: `next` returns the moved cursor"]
     fn next(self) -> Self;
 
     /// Advance the cursor by `n` elements, stopping at the end of the sequence
+    #[must_use = "cursors are copied: `advance` returns the moved cursor"]
     fn advance(self, n: usize) -> Self {
         (0..n).fold(self, |cursor, _| cursor.next())
     }

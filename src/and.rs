@@ -36,6 +36,7 @@ composite_error! {
 /// assert_eq!(int_part, 123);
 /// assert_eq!(frac_part, 456);
 /// ```
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct And<P1, P2> {
     parser1: P1,
     parser2: P2,

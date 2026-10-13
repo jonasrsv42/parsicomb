@@ -3,6 +3,7 @@
 use super::parser::Parser;
 
 /// Parser combinator that transforms the output of a parser using a mapping function
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct Map<P, F> {
     parser: P,
     mapper: F,

@@ -13,6 +13,7 @@ use crate::error::{Advance, ErrorNode};
 /// So `optional(p)` is not the same as `p.map(Some).or(default(None))`: `or`
 /// also backtracks from a `p` that matched part of its input and then failed,
 /// and drops that error.
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct Optional<P> {
     parser: P,
 }

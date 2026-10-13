@@ -10,6 +10,7 @@ use crate::parser::Parser;
 /// at the end of input (whether or not a terminator was found) and when an
 /// item consumes nothing. Unlike [`many`](crate::many()), a failure of
 /// `parser` fails the whole `take_until`.
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct TakeUntil<P, F> {
     parser: P,
     predicate: F,

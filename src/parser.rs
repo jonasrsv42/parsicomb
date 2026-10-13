@@ -4,6 +4,7 @@ use crate::cursor::Cursor;
 use crate::error::ErrorNode;
 
 /// Core parser trait for parser combinators
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub trait Parser {
     /// The cursor type this parser operates on
     type Cursor: Cursor;

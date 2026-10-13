@@ -5,6 +5,7 @@ use crate::cursor::Cursor;
 use crate::error::ErrorNode;
 
 /// Parser combinator that transforms the error of a parser using a mapping function
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct MapErr<P, F> {
     parser: P,
     mapper: F,

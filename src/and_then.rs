@@ -7,6 +7,7 @@ use crate::and::AndError;
 ///
 /// For grammars where what comes next depends on what was parsed, e.g. a
 /// closing delimiter that repeats the opening one.
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct AndThen<P, F> {
     parser: P,
     next: F,

@@ -7,6 +7,7 @@ use crate::parser::Parser;
 use std::marker::PhantomData;
 
 /// Parser that matches one specific element
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct IsAtomic<Cur: Cursor> {
     expected: Cur::Element,
     _cursor: PhantomData<Cur>,

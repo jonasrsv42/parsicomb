@@ -50,6 +50,7 @@ where
 }
 
 /// Parser combinator that tries the first parser, and if it fails, tries the second parser
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct Or<P1, P2> {
     parser1: P1,
     parser2: P2,

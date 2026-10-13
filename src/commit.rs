@@ -83,6 +83,7 @@ where
 /// ```
 ///
 /// Lookahead (`not`) and `label` pass committed failures on as they are.
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct Commit<P> {
     parser: P,
 }

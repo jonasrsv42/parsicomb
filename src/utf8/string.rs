@@ -13,6 +13,7 @@ use std::borrow::Cow;
 /// A mismatch is reported at the start of the character it falls in (`é`
 /// and `è` share their first byte). Failures don't allocate for
 /// `&'static str`; an owned string is cloned into each error.
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct IsString<'code> {
     expected: Cow<'static, str>,
     bytes: IsSequence<ByteCursor<'code>>,

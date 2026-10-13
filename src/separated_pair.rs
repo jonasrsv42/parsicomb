@@ -27,6 +27,7 @@ composite_error! {
 /// - `"1.0,2.0"` with separator `,` → `(1.0, 2.0)`
 /// - `"hello->world"` with separator `->` → `("hello", "world")`
 /// - `"A:B"` with separator `:` → `("A", "B")`
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct SeparatedPair<P1, PSep, P2> {
     left: P1,
     separator: PSep,

@@ -138,6 +138,7 @@ impl Progress {
     /// The same failure, having only peeked at the input from `from`;
     /// progress that counts only up to before `from` stays as it is, and a
     /// committed failure stays committed
+    #[must_use = "returns the adjusted progress"]
     pub fn peeked_from(self, from: usize) -> Self {
         match self.counts_to() {
             Some(counts_to) if from < counts_to => Progress::Peek {
@@ -149,6 +150,7 @@ impl Progress {
     }
 
     /// The same failure, committed
+    #[must_use = "returns the adjusted progress"]
     pub fn committed(self) -> Self {
         Progress::Committed {
             at: self.position(),

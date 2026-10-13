@@ -11,6 +11,7 @@ use crate::error::{Advance, ErrorNode};
 ///
 /// Stops when the parser fails without advancing ([`Advance::None`]); any
 /// other failure is passed on (see [`Advance`]).
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct SkipSome<P> {
     parser: P,
 }

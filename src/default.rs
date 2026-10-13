@@ -4,6 +4,7 @@ use super::parser::Parser;
 use crate::Cursor;
 
 /// Parser that always succeeds without consuming input, returning a clone of the given value
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct DefaultParser<Out, Cur> {
     default: Out,
     _cursor: std::marker::PhantomData<Cur>,

@@ -97,7 +97,7 @@ fn unsigned_value<'code>(
 /// message stays small however long the input number is
 fn too_large(digits: &[u8]) -> String {
     const SHOWN: usize = 24;
-    let shown = String::from_utf8_lossy(&digits[..digits.len().min(SHOWN)]);
+    let shown = String::from_utf8_lossy(digits.get(..SHOWN).unwrap_or(digits));
     if digits.len() > SHOWN {
         format!("number too large: {shown}… ({} digits)", digits.len())
     } else {
@@ -113,20 +113,14 @@ fn signed_value<'code>(
     magnitude: u64,
 ) -> Result<i64, ParsicombError<'code>> {
     if sign == Some(b'-') {
-        if magnitude > i64::MAX as u64 + 1 {
-            return Err(
-                end.invalid_error(format!("negative number too large: -{}", magnitude).into())
-            );
-        }
-        // Wrapping is exact here: magnitude <= 2^63, and 2^63 wraps to i64::MIN
-        Ok((magnitude as i64).wrapping_neg())
+        // Subtracting from 0 reaches i64::MIN, which has no positive counterpart
+        0i64.checked_sub_unsigned(magnitude).ok_or_else(|| {
+            end.invalid_error(format!("negative number too large: -{}", magnitude).into())
+        })
     } else {
-        if magnitude > i64::MAX as u64 {
-            return Err(
-                end.invalid_error(format!("positive number too large: {}", magnitude).into())
-            );
-        }
-        Ok(magnitude as i64)
+        i64::try_from(magnitude).map_err(|_| {
+            end.invalid_error(format!("positive number too large: {}", magnitude).into())
+        })
     }
 }
 

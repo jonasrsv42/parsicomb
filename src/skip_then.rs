@@ -109,6 +109,7 @@ where
 /// assert_eq!(numbers, vec![1, 2, 3]);
 /// assert_eq!(rest.position(), 5);
 /// ```
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct SkipThen<PSkip, P> {
     skip: PSkip,
     parser: P,

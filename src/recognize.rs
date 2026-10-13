@@ -8,6 +8,7 @@ use crate::cursor::Cursor;
 ///
 /// With [`skip_many`](crate::skip_many::skip_many) this matches runs of input
 /// without collecting them, e.g. `recognize(skip_some(byte().filter(..)))`.
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct Recognize<P> {
     parser: P,
 }

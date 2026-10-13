@@ -58,31 +58,23 @@ impl<T: Atomic> Expected<T> {
                 // (e.g. the multi-byte character) holding the mismatch
                 let start = at.saturating_sub(*matched).min(code.len());
                 let end = found_end(code, start, at);
-                return if start == end {
+                let found = code.get(start..end).unwrap_or_default();
+                return if found.is_empty() {
                     write!(f, "found end of input")
                 } else if at >= code.len() {
-                    write!(
-                        f,
-                        "found {:?} at end of input",
-                        T::format_slice(&code[start..end])
-                    )
+                    write!(f, "found {:?} at end of input", T::format_slice(found))
                 } else {
-                    write!(f, "found {:?}", T::format_slice(&code[start..end]))
+                    write!(f, "found {:?}", T::format_slice(found))
                 };
             }
         }
 
-        match code.get(at) {
-            None => write!(f, "found end of input"),
+        let unit = code.get(at..found_end(code, at, at)).unwrap_or_default();
+        match unit {
+            [] => write!(f, "found end of input"),
+            [element] => write!(f, "found {}", Describe(element)),
             // A multi-element unit, e.g. a multi-byte character
-            Some(_) if found_end(code, at, at) > at + 1 => {
-                write!(
-                    f,
-                    "found {:?}",
-                    T::format_slice(&code[at..found_end(code, at, at)])
-                )
-            }
-            Some(element) => write!(f, "found {}", Describe(element)),
+            _ => write!(f, "found {:?}", T::format_slice(unit)),
         }
     }
 }
@@ -92,8 +84,8 @@ impl<T: Atomic> Expected<T> {
 fn found_end<T: Atomic>(code: &[T], start: usize, at: usize) -> usize {
     let at = at.min(code.len());
     let mut end = start.min(at);
-    while end <= at && end < code.len() {
-        end += T::unit_len(&code[end..]).clamp(1, code.len() - end);
+    while let Some(rest) = code.get(end..).filter(|rest| end <= at && !rest.is_empty()) {
+        end += T::unit_len(rest).clamp(1, rest.len());
     }
     end.max(at)
 }

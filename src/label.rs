@@ -32,6 +32,7 @@ composite_error! {
 /// let error = sign.parse(ByteCursor::new(b"x")).unwrap_err();
 /// assert!(error.to_string().contains("expected a sign, found 'x'"));
 /// ```
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct Label<P> {
     parser: P,
     label: &'static str,

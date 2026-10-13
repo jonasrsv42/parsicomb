@@ -18,6 +18,7 @@ pub type FilterError<PErr, CurErr> = LabelError<PErr, CurErr>;
 /// expectation (as [`Label`](crate::label::Label) does). Other inner errors,
 /// such as invalid UTF-8 under `char()`, are kept. When filters are chained,
 /// the outermost label is the one reported.
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct Filter<P, F> {
     parser: P,
     predicate: F,

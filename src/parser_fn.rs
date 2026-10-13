@@ -32,6 +32,7 @@ use std::marker::PhantomData;
 /// assert_eq!(maybe_number().parse(ByteCursor::new(b"42")).unwrap().0, Some(42));
 /// assert_eq!(maybe_number().parse(ByteCursor::new(b"-")).unwrap().0, None);
 /// ```
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct ParserFn<Cur, F> {
     parse: F,
     _cursor: PhantomData<fn(Cur) -> Cur>,

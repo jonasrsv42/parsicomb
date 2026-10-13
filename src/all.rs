@@ -24,6 +24,7 @@ composite_error! {
 /// - The parser succeeds without consuming input (returns `AllError::NoProgress`)
 ///
 /// This is useful for top-level parsers where you want to parse everything in the input.
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct All<P> {
     parser: P,
 }

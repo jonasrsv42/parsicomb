@@ -75,10 +75,11 @@ impl<'code, T: Atomic + 'code> Cursor for AtomicCursor<'code, T> {
     type Span = Span<'code, T>;
 
     fn value(&self) -> Result<Self::Element, Self::Error> {
-        match self {
-            AtomicCursor::Valid { data, position } => Ok(data[*position]),
-            AtomicCursor::EndOfFile { .. } => Err(ParsicombError::EndOfInput(self.loc())),
-        }
+        let value = match self {
+            AtomicCursor::Valid { data, position } => data.get(*position).copied(),
+            AtomicCursor::EndOfFile { .. } => None,
+        };
+        value.ok_or_else(|| ParsicombError::EndOfInput(self.loc()))
     }
 
     fn next(self) -> Self {

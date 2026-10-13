@@ -65,6 +65,7 @@ composite_error! {
 /// let error = nested().parse(ByteCursor::new(&deep)).unwrap_err();
 /// assert!(error.to_string().contains("maximum nesting depth exceeded"));
 /// ```
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct MaxDepth<P> {
     parser: P,
     max: usize,

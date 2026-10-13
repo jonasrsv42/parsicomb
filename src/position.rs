@@ -79,7 +79,7 @@ impl<'code, T: Atomic> Span<'code, T> {
 
     /// Get the slice of code that this span represents
     pub fn slice(&self) -> &'code [T] {
-        &self.source[self.start..self.end]
+        self.source.get(self.start..self.end).unwrap_or_default()
     }
 
     /// Format the spanned content as a string
@@ -89,6 +89,7 @@ impl<'code, T: Atomic> Span<'code, T> {
 }
 
 /// A parser combinator that captures the position span of a successful parse
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct Position<P> {
     parser: P,
 }

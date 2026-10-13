@@ -60,6 +60,7 @@ pub trait Atomic: Copy + PartialEq + Debug + Display + Send + Sync + 'static {
 
 /// A parser that reads one atomic element from the cursor and advances it
 /// This is the generic equivalent of a byte parser
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct AtomicParser<Cur> {
     _cursor: PhantomData<Cur>,
 }
@@ -109,10 +110,13 @@ impl Atomic for u8 {
     /// The bytes of the UTF-8 character at the start of `code`, or 1 if no
     /// valid character starts there
     fn unit_len(code: &[Self]) -> usize {
-        let window = &code[..code.len().min(4)];
+        let window = code.get(..4).unwrap_or(code);
         let valid = match std::str::from_utf8(window) {
             Ok(text) => text,
-            Err(error) => std::str::from_utf8(&window[..error.valid_up_to()]).unwrap_or_default(),
+            Err(error) => window
+                .get(..error.valid_up_to())
+                .and_then(|valid| std::str::from_utf8(valid).ok())
+                .unwrap_or_default(),
         };
         valid.chars().next().map_or(1, char::len_utf8)
     }

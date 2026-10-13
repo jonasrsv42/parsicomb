@@ -1,5 +1,34 @@
 #![doc = include_str!("../README.md")]
 #![warn(missing_docs)]
+#![forbid(unsafe_code)]
+// Parsers run on untrusted input: no panics, and no casts that silently lose
+// or change values. Tests may panic (see clippy.toml).
+#![deny(
+    clippy::panic,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::panic_in_result_fn,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_lossless,
+    clippy::dbg_macro,
+    clippy::print_stdout,
+    clippy::print_stderr
+)]
+// Test inputs are built with plain casts
+#![cfg_attr(
+    test,
+    allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_possible_wrap,
+        clippy::cast_sign_loss
+    )
+)]
 
 pub mod all;
 pub mod and;

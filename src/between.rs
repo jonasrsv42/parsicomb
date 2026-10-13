@@ -26,6 +26,7 @@ composite_error! {
 /// - `"[content]"` → `"content"`
 /// - `"(value)"` → `"value"`
 /// - `"{data}"` → `"data"`
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct Between<POpen, PContent, PClose> {
     open: POpen,
     content: PContent,

@@ -25,6 +25,7 @@ composite_error! {
 ///
 /// Invalid input also counts as the parser not matching, so `not` is no
 /// end-of-input check: use [`Cursor::eos`] for that.
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct Not<P> {
     parser: P,
 }

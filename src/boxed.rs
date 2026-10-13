@@ -17,6 +17,7 @@ use crate::parser::Parser;
 ///
 /// It costs one allocation at construction and a virtual call per parse, so
 /// box at a few chosen boundaries.
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct BoxedParser<'a, Cur, Out, Err> {
     parser: Box<dyn Parser<Cursor = Cur, Output = Out, Error = Err> + 'a>,
 }

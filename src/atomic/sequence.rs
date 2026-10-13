@@ -12,6 +12,7 @@ use std::marker::PhantomData;
 /// Outputs the span it matched. Pass a `'static` slice (a literal or a static
 /// array) to keep failures allocation-free; an owned sequence is cloned into
 /// each error.
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct IsSequence<Cur: Cursor> {
     expected: Cow<'static, [Cur::Element]>,
     _cursor: PhantomData<Cur>,

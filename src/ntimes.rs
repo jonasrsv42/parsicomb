@@ -21,6 +21,7 @@ composite_error! {
 /// match that consumes nothing is not repeated: if the parser matches without
 /// consuming input and more repetitions remain, `ntimes` fails with
 /// [`NTimesError::NoProgress`] instead of producing `count` identical matches.
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct NTimes<P> {
     parser: P,
     count: usize,

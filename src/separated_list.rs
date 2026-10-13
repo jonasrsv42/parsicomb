@@ -30,6 +30,7 @@ composite_error! {
 /// - Requires at least one element
 /// - Trailing separators cause an error
 /// - Does not handle whitespace automatically
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct SeparatedList<P, PSep> {
     parser: P,
     separator: PSep,

@@ -35,6 +35,7 @@ composite_error! {
 /// # Features
 /// - Allows empty argument lists
 /// - Distinguishes between missing delimiters and failed argument parsing
+#[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct ArgumentList<POpen, PArg, PSep, PClose> {
     open: POpen,
     parser: PArg,
