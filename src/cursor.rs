@@ -57,7 +57,7 @@ pub trait Cursor: Copy {
     /// input, described by a free-form message (e.g. "number too large")
     ///
     /// Call it on the cursor after the input the problem is in, such as
-    /// after the digits of a number too large: like every error, its
+    /// after the digits of a number too large: its
     /// [`progress`](crate::ErrorNode::progress) is
     /// [`Progress::at`](crate::Progress::at) this cursor, so the parser counts
     /// as having matched that input (see [`Advance`](crate::Advance)). For a

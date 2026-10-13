@@ -65,7 +65,7 @@ where
 /// even where it matched nothing:
 ///
 /// ```
-/// use parsicomb::{AndExt, ByteCursor, CommitExt, MapExt, OrExt, Parser};
+/// use parsicomb::prelude::*;
 /// use parsicomb::ascii::u64;
 /// use parsicomb::byte::is_byte;
 ///

@@ -9,7 +9,7 @@ use crate::ParsicombError;
 use crate::combinator::FilterExt;
 use crate::combinator::MapErrExt;
 use crate::parser::Parser;
-use crate::utf8::char::char;
+use crate::utf8::char;
 
 /// Parser that matches one Unicode whitespace character ([`char::is_whitespace`])
 pub fn unicode_whitespace<'code>()

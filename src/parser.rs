@@ -16,9 +16,8 @@ pub trait Parser {
     ///
     /// Combinators use the narrowest type that holds every failure they
     /// produce: the cursor's error when they only fail on their own (`not`),
-    /// the inner parser's error when they only pass it on (`some`,
-    /// `separated_list`, and `many`/`optional`, which fail only when a
-    /// `commit` inside them fails), and an enum of both when they do both
+    /// the inner parser's error when they only pass it on (`many`, `some`,
+    /// `optional`, `separated_list`), and an enum of both when they do both
     /// (`filter`, `all`, `max_depth`).
     type Error: ErrorNode<Element = <Self::Cursor as Cursor>::Element>;
 

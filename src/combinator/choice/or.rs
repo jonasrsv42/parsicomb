@@ -49,7 +49,11 @@ where
     }
 }
 
-/// Parser combinator that tries the first parser, and if it fails, tries the second parser
+/// Parser combinator that tries the first parser, and if it fails, the second
+///
+/// The second isn't tried when the first failed committed
+/// ([`commit`](crate::commit())). When both fail, the error of the one that
+/// got furthest is kept ([`OrError::pick`]).
 #[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct Or<P1, P2> {
     parser1: P1,
@@ -105,7 +109,7 @@ pub trait OrExt: Parser + Sized {
 
 impl<P: Parser> OrExt for P {}
 
-/// Convenience function to create an Or parser
+/// Create a parser that tries `parser2` if `parser1` fails; see [`Or`]
 pub fn or<P1, P2>(parser1: P1, parser2: P2) -> Or<P1, P2>
 where
     P1: Parser,
@@ -341,7 +345,7 @@ mod tests {
     fn test_a_real_problem_further_in_wins_over_an_expectation() {
         use crate::ascii::u64;
         use crate::combinator::LabelExt;
-        use crate::utf8::string::is_string;
+        use crate::utf8::is_string;
 
         let parser = is_string("null").map(|_| 0).or(u64()).label("a value");
         let message = parser

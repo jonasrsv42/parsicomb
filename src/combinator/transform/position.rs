@@ -123,7 +123,8 @@ pub trait PositionExt: Parser + Sized {
 
 impl<P: Parser> PositionExt for P {}
 
-/// Convenience function to create a Position combinator
+/// Create a parser that also outputs the span `parser` consumed; see
+/// [`Position`]
 pub fn position<P: Parser>(parser: P) -> Position<P> {
     Position::new(parser)
 }
@@ -218,7 +219,7 @@ mod tests {
 
     #[test]
     fn test_position_with_multi_byte_parser() {
-        use crate::utf8::string::is_string;
+        use crate::utf8::is_string;
 
         let data = "hello world".as_bytes();
         let cursor = ByteCursor::new(data);

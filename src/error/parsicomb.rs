@@ -4,7 +4,8 @@ use std::borrow::Cow;
 use std::error::Error;
 use std::fmt;
 
-/// Built-in error type of the atomic cursors and leaf parsers
+/// The crate's concrete error type: leaf parsers and cursors return it, and
+/// every combinator's error converts into it with `ParsicombError::from`
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum ParsicombError<'code, T: Atomic = u8> {
@@ -66,9 +67,10 @@ impl<'code, T: Atomic> Error for ParsicombError<'code, T> {}
 impl<'code, T: Atomic> ParsicombError<'code, T> {
     /// Wrap any ErrorNode in a ParsicombError, allocating a box
     ///
-    /// Errors of this crate's combinators convert without allocating through
-    /// [`From`] (e.g. `.map_err(Into::into)` or `?`) when all their parts are
-    /// `ParsicombError`s; `wrap` is for other error types.
+    /// Errors of this crate's combinators convert through [`From`] (e.g.
+    /// `.map_err(ParsicombError::from)` or `?`), allocating only for failures
+    /// under `commit`, `attempt`, `max_depth` or `skip_then`; `wrap` is for
+    /// other error types.
     pub fn wrap(error: impl ErrorNode<Element = T> + Send + Sync + 'code) -> Self {
         ParsicombError::WrappedError {
             progress: error.progress(),

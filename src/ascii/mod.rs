@@ -1,7 +1,7 @@
 //! Parsers for ASCII text: numbers, digits and whitespace
 
-pub mod number;
-pub mod whitespace;
+mod number;
+mod whitespace;
 
-pub use number::{Number, digit, f64, i64, number, u64};
-pub use whitespace::whitespace;
+pub use number::*;
+pub use whitespace::*;

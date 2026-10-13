@@ -56,7 +56,8 @@ impl<P: Parser> Parser for Not<P> {
     }
 }
 
-/// Convenience function to create a Not parser for negative lookahead
+/// Create a parser that succeeds where `parser` fails, without consuming
+/// input (negative lookahead); see [`Not`]
 pub fn not<P: Parser>(parser: P) -> Not<P> {
     Not::new(parser)
 }
@@ -79,7 +80,7 @@ mod tests {
     use crate::combinator::AndExt;
     use crate::combinator::MapExt;
     use crate::combinator::many;
-    use crate::utf8::string::is_string;
+    use crate::utf8::is_string;
 
     #[test]
     fn test_not_fails_on_match() {

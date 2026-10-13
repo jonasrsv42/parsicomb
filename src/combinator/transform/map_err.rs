@@ -36,7 +36,7 @@ where
 
 /// Extension trait to add .map_err() method support for parsers
 pub trait MapErrExt: Parser + Sized {
-    /// Transform the error with `mapper`, e.g. `ParsicombError::wrap`
+    /// Transform the error with `mapper`, e.g. `ParsicombError::from`
     fn map_err<F, NewErr>(self, mapper: F) -> MapErr<Self, F>
     where
         F: Fn(Self::Error) -> NewErr,
@@ -48,7 +48,7 @@ pub trait MapErrExt: Parser + Sized {
 
 impl<P: Parser> MapErrExt for P {}
 
-/// Convenience function to create a MapErr parser
+/// Create a parser that transforms `parser`'s error; see [`MapErr`]
 pub fn map_err<P, F, NewErr>(parser: P, mapper: F) -> MapErr<P, F>
 where
     P: Parser,

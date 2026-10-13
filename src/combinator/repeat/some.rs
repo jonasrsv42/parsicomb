@@ -11,6 +11,9 @@ use crate::parser::Parser;
 ///
 /// Stops when the parser fails without advancing ([`Advance::None`]); any
 /// other failure is passed on (see [`Advance`]).
+///
+/// After the first, an iteration that succeeds without consuming input would
+/// repeat forever: it ends the repetition, and its output is dropped.
 #[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct Some<P> {
     parser: P,

@@ -11,7 +11,7 @@ use crate::parser::Parser;
 /// start.
 ///
 /// ```
-/// use parsicomb::{ByteCursor, Parser, PrecededExt};
+/// use parsicomb::prelude::*;
 /// use parsicomb::ascii::u64;
 /// use parsicomb::byte::is_byte;
 ///

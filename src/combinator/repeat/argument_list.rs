@@ -158,7 +158,7 @@ where
 mod tests {
     use super::*;
     use crate::ByteCursor;
-    use crate::ascii::number::i64;
+    use crate::ascii::i64;
     use crate::byte::is_byte;
     use crate::cursor::Cursor;
 

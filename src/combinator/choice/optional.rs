@@ -45,7 +45,8 @@ where
     }
 }
 
-/// Convenience function to create an Optional parser
+/// Create a parser that outputs `None` where `parser` matches nothing; see
+/// [`Optional`]
 pub fn optional<P>(parser: P) -> Optional<P>
 where
     P: Parser,

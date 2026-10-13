@@ -30,7 +30,8 @@ impl<Out: Clone, Cur: Cursor> Parser for DefaultParser<Out, Cur> {
     }
 }
 
-/// Convenience function to create a default parser
+/// Create a parser that outputs `default` without consuming input; see
+/// [`DefaultParser`]
 pub fn default<Out: Clone, Cur: Cursor>(default: Out) -> DefaultParser<Out, Cur> {
     DefaultParser::new(default)
 }

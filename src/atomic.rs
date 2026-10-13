@@ -6,22 +6,23 @@ use crate::parser::Parser;
 use std::fmt::{self, Debug, Display};
 use std::marker::PhantomData;
 
-pub mod between;
-pub mod default;
-pub mod eof;
-pub mod is;
-pub mod sequence;
-pub mod skip_while;
+mod between;
+mod default;
+mod eof;
+mod is;
+mod sequence;
+mod skip_while;
 
-pub use between::{AtomicBetween, atomic_between};
-pub use default::{DefaultParser, default};
-pub use eof::{Eof, eof};
-pub use is::{IsAtomic, is_atomic};
-pub use sequence::{IsSequence, is_sequence};
-pub use skip_while::{SkipWhile, SkipWhile1, skip_while, skip_while1};
+pub use between::*;
+pub use default::*;
+pub use eof::*;
+pub use is::*;
+pub use sequence::*;
+pub use skip_while::*;
 
-/// Trait for atomic elements that can be used in parsing
-/// This enables generic error formatting and position calculation
+/// An element type that parsers can read: bytes, tokens, …
+///
+/// Error messages format elements and count lines with it.
 ///
 /// Elements are plain values (bytes, tokens, ...) that do not borrow, so
 /// parsers can describe expected elements with `'static` data.
@@ -62,8 +63,8 @@ pub trait Atomic: Copy + PartialEq + Debug + Display + Send + Sync + 'static {
     }
 }
 
-/// A parser that reads one atomic element from the cursor and advances it
-/// This is the generic equivalent of a byte parser
+/// Parser that reads one element of any type; [`byte()`](crate::byte::byte)
+/// for bytes
 #[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct AtomicParser<Cur> {
     _cursor: PhantomData<Cur>,
@@ -97,7 +98,7 @@ impl<Cur: Cursor> Parser for AtomicParser<Cur> {
     }
 }
 
-/// Convenience function to create an atomic parser for a specific cursor type
+/// Create a parser that reads one element; see [`AtomicParser`]
 pub fn atomic<Cur>() -> AtomicParser<Cur> {
     AtomicParser::new()
 }

@@ -25,7 +25,7 @@ composite_error! {
 /// fail further in.
 ///
 /// ```
-/// use parsicomb::{ByteCursor, LabelExt, OrExt, Parser};
+/// use parsicomb::prelude::*;
 /// use parsicomb::byte::is_byte;
 ///
 /// let sign = is_byte(b'+').or(is_byte(b'-')).label("a sign");

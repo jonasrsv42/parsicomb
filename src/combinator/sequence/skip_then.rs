@@ -101,7 +101,8 @@ where
 /// avoids the issue altogether; use `skip_then` in grammars that skip before.
 ///
 /// ```
-/// use parsicomb::{ByteCursor, Cursor, Parser, many, skip_then, skip_while};
+/// use parsicomb::prelude::*;
+/// use parsicomb::{many, skip_then, skip_while};
 /// use parsicomb::ascii::u64;
 ///
 /// let spaced_number = skip_then(skip_while(|b: u8| b == b' '), u64());

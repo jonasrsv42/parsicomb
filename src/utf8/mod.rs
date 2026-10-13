@@ -1,17 +1,17 @@
 //! Parsers for UTF-8 text: characters, strings and Unicode classes
 
-pub mod alphanumeric;
-pub mod char;
-pub mod digit;
-pub mod letter;
-pub mod skip_chars_while;
-pub mod string;
-pub mod whitespace;
+mod alphanumeric;
+mod char;
+mod digit;
+mod letter;
+mod skip_chars_while;
+mod string;
+mod whitespace;
 
-pub use alphanumeric::unicode_alphanumeric;
-pub use char::{char, is_char};
-pub use digit::unicode_digit;
-pub use letter::unicode_letter;
-pub use skip_chars_while::{skip_chars_while, skip_chars_while1};
-pub use string::is_string;
-pub use whitespace::unicode_whitespace;
+pub use alphanumeric::*;
+pub use char::*;
+pub use digit::*;
+pub use letter::*;
+pub use skip_chars_while::*;
+pub use string::*;
+pub use whitespace::*;

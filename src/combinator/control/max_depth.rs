@@ -44,8 +44,8 @@ composite_error! {
 /// limit per grammar and size it for the combined nesting.
 ///
 /// ```
-/// use parsicomb::{AndExt, BoxedExt, ByteCursor, MapErrExt, MapExt, MaxDepthExt, OrExt};
-/// use parsicomb::{Parser, ParsicombError, lazy};
+/// use parsicomb::prelude::*;
+/// use parsicomb::lazy;
 /// use parsicomb::byte::is_byte;
 ///
 /// fn nested<'code>()

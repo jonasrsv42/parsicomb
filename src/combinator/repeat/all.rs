@@ -10,17 +10,18 @@ composite_error! {
     pub enum AllError<PErr, CurErr> {
         /// Error from the child parser
         ParserError(PErr),
-        /// The child parser succeeded without consuming input before end-of-stream,
+        /// The child parser succeeded without consuming input before the end
+        /// of input,
         /// so repeating it would never terminate
         NoProgress(CurErr),
     }
 }
 
-/// Parser combinator that repeatedly applies a parser until it fails or reaches end-of-stream
+/// Parser combinator that repeats a parser up to the end of the input
 ///
 /// The `All` combinator takes a parser and applies it repeatedly until either:
 /// - The parser fails (returns the error)
-/// - End-of-stream is reached (returns all parsed items)
+/// - The end of the input is reached (returns all parsed items)
 /// - The parser succeeds without consuming input (returns `AllError::NoProgress`)
 ///
 /// This is useful for top-level parsers where you want to parse everything in the input.
@@ -61,11 +62,13 @@ impl<P: Parser> Parser for All<P> {
     }
 }
 
-/// Convenience function to create an All parser
+/// Create a parser that repeats `parser` up to the end of the input; see [`All`]
 ///
 /// # Example
 /// ```
-/// use parsicomb::{all, byte::is_byte, ByteCursor, Parser};
+/// use parsicomb::prelude::*;
+/// use parsicomb::all;
+/// use parsicomb::byte::is_byte;
 ///
 /// let data = b"aaa";
 /// let cursor = ByteCursor::new(data);

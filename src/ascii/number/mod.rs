@@ -12,15 +12,15 @@ use crate::combinator::recognize;
 use crate::cursor::Cursor;
 use crate::parser::Parser;
 
-pub mod digit;
-pub mod f64;
-pub mod i64;
-pub mod u64;
+mod digit;
+mod f64;
+mod i64;
+mod u64;
 
-pub use digit::digit;
-pub use f64::f64;
-pub use i64::i64;
-pub use u64::u64;
+pub use digit::*;
+pub use f64::*;
+pub use i64::*;
+pub use u64::*;
 
 /// A parsed number literal
 #[derive(Debug, PartialEq)]

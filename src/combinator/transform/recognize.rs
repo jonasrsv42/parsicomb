@@ -42,7 +42,7 @@ pub trait RecognizeExt: Parser + Sized {
 
 impl<P: Parser> RecognizeExt for P {}
 
-/// Convenience function to create a Recognize parser
+/// Create a parser that outputs the span `parser` consumed; see [`Recognize`]
 pub fn recognize<P: Parser>(parser: P) -> Recognize<P> {
     Recognize::new(parser)
 }

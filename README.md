@@ -1,5 +1,9 @@
 # ParsiComb
 
+<!-- Examples here are doctests. A `rust` block followed by a "prints" line
+and a `text` block is also run by tests/readme_output.rs, which compares its
+output with that block; every `text` block must be such an output. -->
+
 Parser combinators for Rust: build parsers from small pieces, over bytes, UTF-8
 text or your own tokens, and get error messages that point at the problem.
 
@@ -33,7 +37,7 @@ Syntax error at line 1, column 5 (offset 4): expected ']', found ';'
 - **Backtracking you can tune:** errors point at the problem by default;
   `commit` makes failures final, and `attempt` backtracks out of a partial
   match.
-- **No panics while parsing:** failures are `Result`s. Bound recursion with
+- **No panics on any input:** failures are `Result`s. Bound recursion with
   `max_depth` on untrusted input.
 
 ## Contents
@@ -220,7 +224,8 @@ type must be concrete, since both would otherwise contain themselves:
 
 - `map_err(ParsicombError::from)` makes the error concrete. A combinator's
   error converts into the `ParsicombError` of whichever part failed,
-  allocating only for failures under `commit`, `attempt` or `skip_then`.
+  allocating only for failures under `commit`, `attempt`, `max_depth` or
+  `skip_then`.
 - Errors of other types, such as your own error from a `map_err`, can be
   boxed with `ParsicombError::wrap`, which allocates once per failure.
 
@@ -268,7 +273,8 @@ each thread builds its own.
 
 Skip whitespace *after* tokens, as the JSON parser does: a missing token then
 matches nothing, and the alternatives around it get to try. To skip *before*
-tokens, use `skip_then(whitespace, token)`, which doesn't count the
+tokens, use `skip_then(ws, token)` with a whitespace run such as
+`skip_while(|b: u8| b.is_ascii_whitespace())`; it doesn't count the
 whitespace as a match.
 
 Match keywords as whole words: read the word, then check it. If you used
@@ -688,7 +694,7 @@ from the source when it's needed.
 ## Performance and compile times
 
 - **Combinators inline.** A chain of combinators compiles into one function,
-  and a loop such as `many(digit())` runs well under a nanosecond per byte.
+  and a loop such as `many(digit())` runs at around a nanosecond per byte.
 - **Failed attempts cost a little.** Each one (the end of a `many`, an `or`
   alternative that doesn't match) builds an error.
 - **In a hot loop, use run parsers.** `skip_while` and `skip_chars_while`

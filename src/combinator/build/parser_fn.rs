@@ -12,10 +12,10 @@ use std::marker::PhantomData;
 /// (`|cursor: ByteCursor<'code>|`): the parser's cursor type is taken from it.
 ///
 /// ```
-/// use parsicomb::{ByteCursor, Cursor, Parser, ParsicombError, parser_fn};
+/// use parsicomb::prelude::*;
+/// use parsicomb::parser_fn;
 /// use parsicomb::ascii::u64;
 /// use parsicomb::byte::is_byte;
-/// use parsicomb::combinator::MapExt;
 ///
 /// /// A number, or `-` for "none"; the next byte decides which rule runs
 /// fn maybe_number<'code>()

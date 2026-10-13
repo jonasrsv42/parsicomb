@@ -106,9 +106,9 @@ mod tests {
     use super::*;
     use crate::ByteCursor;
     use crate::Cursor;
-    use crate::ascii::number::f64;
+    use crate::ascii::f64;
     use crate::byte::is_byte;
-    use crate::utf8::string::is_string;
+    use crate::utf8::is_string;
 
     #[test]
     fn test_brackets_number() {

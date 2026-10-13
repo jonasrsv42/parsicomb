@@ -56,7 +56,9 @@ macro_rules! composite_error {
             }
         }
 
-        /// Converts to the error of whichever part failed, without allocating
+        /// Converts to the error of whichever part failed; allocates only
+        /// where that part's own conversion does (failures under `commit`,
+        /// `attempt`, `max_depth` or `skip_then`)
         impl<'code, $first $(, $rest)*> From<$name<$first $(, $rest)*>>
             for $crate::error::ParsicombError<'code, <$first as $crate::error::ErrorNode>::Element>
         where

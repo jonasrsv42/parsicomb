@@ -11,6 +11,7 @@ use std::process::Command;
 /// An example's code and the output the README shows for it
 struct Example {
     line: usize,
+    text_line: usize,
     code: String,
     expected: String,
 }
@@ -56,6 +57,7 @@ fn printing_examples(readme: &str) -> Vec<Example> {
         if let Some((expected, text_end)) = block(&lines, text, "```text") {
             examples.push(Example {
                 line: end + 1,
+                text_line: text + 1,
                 code,
                 expected,
             });
@@ -71,12 +73,17 @@ fn readme_examples_print_what_the_readme_shows() {
     let readme = fs::read_to_string(manifest_dir.join("README.md")).unwrap();
     let examples = printing_examples(&readme);
     // Every `text` block is an example's output, so none is left unchecked
-    let text_blocks = readme.lines().filter(|l| l.trim_end() == "```text").count();
+    let unchecked: Vec<usize> = readme
+        .lines()
+        .enumerate()
+        .filter(|(_, l)| l.trim_end() == "```text")
+        .map(|(i, _)| i + 1)
+        .filter(|line| !examples.iter().any(|e| e.text_line == *line))
+        .collect();
     assert!(!examples.is_empty());
-    assert_eq!(
-        examples.len(),
-        text_blocks,
-        "a `text` block in the README doesn't follow a `rust` block and a \"prints\" line"
+    assert!(
+        unchecked.is_empty(),
+        "README lines {unchecked:?}: a `text` block doesn't follow a `rust` block and a \"prints\" line"
     );
 
     // One scratch crate with a binary per example, built once

@@ -82,7 +82,7 @@ mod tests {
     use super::*;
     use crate::ByteCursor;
     use crate::byte::byte;
-    use crate::utf8::char::char;
+    use crate::utf8::char;
 
     #[test]
     fn test_take_until_char_quote() {

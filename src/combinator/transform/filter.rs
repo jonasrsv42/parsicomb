@@ -86,7 +86,7 @@ where
 mod tests {
     use super::*;
     use crate::ByteCursor;
-    use crate::utf8::char::char;
+    use crate::utf8::char;
 
     #[test]
     fn test_filter_success() {

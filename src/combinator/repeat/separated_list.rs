@@ -30,6 +30,8 @@ composite_error! {
 /// - Requires at least one element
 /// - Trailing separators cause an error
 /// - Does not handle whitespace automatically
+/// - A separator and item that together consume nothing end the list, and
+///   that item is dropped
 #[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct SeparatedList<P, PSep> {
     parser: P,
@@ -128,10 +130,10 @@ impl<P: Parser> SeparatedListExt for P {}
 mod tests {
     use super::*;
     use crate::ByteCursor;
-    use crate::ascii::number::i64;
+    use crate::ascii::i64;
     use crate::byte::is_byte;
     use crate::combinator::OrExt;
-    use crate::utf8::string::is_string;
+    use crate::utf8::is_string;
 
     #[test]
     fn test_empty_list_fails() {

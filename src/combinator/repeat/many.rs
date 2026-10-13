@@ -8,6 +8,9 @@ use crate::parser::Parser;
 ///
 /// Stops when the parser fails without advancing ([`Advance::None`]); any
 /// other failure is passed on (see [`Advance`]).
+///
+/// An iteration that succeeds without consuming input would repeat forever:
+/// it ends the repetition, and its output is dropped.
 #[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct Many<P> {
     parser: P,
@@ -51,7 +54,7 @@ where
     }
 }
 
-/// Convenience function to create a Many parser
+/// Create a parser for zero or more repetitions of `parser`; see [`Many`]
 pub fn many<P>(parser: P) -> Many<P>
 where
     P: Parser,

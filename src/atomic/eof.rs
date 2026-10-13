@@ -10,7 +10,8 @@ use std::marker::PhantomData;
 /// Put it after a parser to require that it consumed the whole input:
 ///
 /// ```
-/// use parsicomb::{ByteCursor, Parser, TerminatedExt, eof};
+/// use parsicomb::prelude::*;
+/// use parsicomb::eof;
 /// use parsicomb::ascii::u64;
 ///
 /// let number = u64().terminated_by(eof());

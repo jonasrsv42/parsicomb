@@ -64,7 +64,7 @@ impl<'code> Parser for IsString<'code> {
     }
 }
 
-/// Convenience function to create an IsString
+/// Create a parser that matches the string `expected`; see [`IsString`]
 pub fn is_string<'code>(expected: impl Into<Cow<'static, str>>) -> IsString<'code> {
     IsString::new(expected)
 }
@@ -72,7 +72,7 @@ pub fn is_string<'code>(expected: impl Into<Cow<'static, str>>) -> IsString<'cod
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::utf8::char::char;
+    use crate::utf8::char;
 
     #[test]
     fn test_exact_match() {

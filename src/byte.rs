@@ -33,7 +33,7 @@ mod tests {
     use super::*;
     use crate::Parser;
     use crate::cursor::Cursor;
-    use crate::cursors::atomic::AtomicCursor;
+    use crate::cursors::AtomicCursor;
 
     #[test]
     fn test_byte_parser_success() {

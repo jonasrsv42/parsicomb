@@ -3,8 +3,11 @@
 use crate::parser::Parser;
 use std::cell::OnceCell;
 
-/// A lazy parser that defers the construction of the actual parser until parse time.
-/// This is useful for breaking mutual recursion between parsers.
+/// Builds its parser on first use, for recursive grammars
+///
+/// A rule that contains itself, directly or through other rules, can't build
+/// its parser up front: that would recurse forever. `lazy` defers it to the
+/// first `parse`.
 ///
 /// The parser is built on the first `parse` call and cached for the lifetime of
 /// this `Lazy`, so repeated parses (e.g. inside `many`) don't rebuild it. For a
@@ -16,12 +19,9 @@ use std::cell::OnceCell;
 /// both would otherwise contain themselves:
 ///
 /// ```
-/// use parsicomb::{BoxedExt, ByteCursor, Parser, ParsicombError, lazy};
-/// use parsicomb::combinator::AndExt;
+/// use parsicomb::prelude::*;
+/// use parsicomb::lazy;
 /// use parsicomb::byte::is_byte;
-/// use parsicomb::combinator::MapExt;
-/// use parsicomb::combinator::MapErrExt;
-/// use parsicomb::combinator::OrExt;
 ///
 /// /// Nesting depth of balanced parentheses around an `x`, e.g. `((x))` → 2
 /// fn nested<'code>()

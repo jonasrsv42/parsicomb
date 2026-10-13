@@ -67,7 +67,7 @@ impl<'code> Parser for Char<'code> {
     }
 }
 
-/// Convenience function to create a Char
+/// Create a parser that reads one UTF-8 character; see [`Char`]
 pub fn char<'code>() -> Char<'code> {
     Char {
         _input: PhantomData,
@@ -120,7 +120,7 @@ impl<'code> Parser for IsChar<'code> {
     }
 }
 
-/// Convenience function to create a parser that matches a specific character
+/// Create a parser that matches the character `expected`; see [`IsChar`]
 ///
 /// Failures don't allocate for ASCII characters; other characters own their
 /// encoding, which is cloned into each error.

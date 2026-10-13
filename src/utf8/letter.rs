@@ -5,7 +5,7 @@ use crate::ParsicombError;
 use crate::combinator::FilterExt;
 use crate::combinator::MapErrExt;
 use crate::parser::Parser;
-use crate::utf8::char::char;
+use crate::utf8::char;
 
 /// Parser that matches one Unicode letter ([`char::is_alphabetic`])
 pub fn unicode_letter<'code>()

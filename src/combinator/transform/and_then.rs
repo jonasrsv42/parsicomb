@@ -52,7 +52,8 @@ pub trait AndThenExt: Parser + Sized {
 
 impl<P: Parser> AndThenExt for P {}
 
-/// Convenience function to create an AndThen parser
+/// Create a parser that runs the parser built from `parser`'s output; see
+/// [`AndThen`]
 pub fn and_then<P, F, PNext>(parser: P, next: F) -> AndThen<P, F>
 where
     P: Parser,

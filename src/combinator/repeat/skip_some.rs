@@ -11,6 +11,9 @@ use crate::parser::Parser;
 ///
 /// Stops when the parser fails without advancing ([`Advance::None`]); any
 /// other failure is passed on (see [`Advance`]).
+///
+/// After the first, an iteration that succeeds without consuming input would
+/// repeat forever: it ends the repetition.
 #[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct SkipSome<P> {
     parser: P,
@@ -49,7 +52,8 @@ impl<P: Parser> Parser for SkipSome<P> {
     }
 }
 
-/// Convenience function to create a SkipSome parser
+/// Create a parser for one or more repetitions of `parser`, discarding their
+/// outputs; see [`SkipSome`]
 pub fn skip_some<P: Parser>(parser: P) -> SkipSome<P> {
     SkipSome::new(parser)
 }

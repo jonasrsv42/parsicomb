@@ -21,11 +21,9 @@ composite_error! {
 ///
 /// Example:
 /// ```
+/// use parsicomb::prelude::*;
 /// use parsicomb::ascii::{i64, u64};
 /// use parsicomb::byte::is_byte;
-/// use parsicomb::ByteCursor;
-/// use parsicomb::combinator::AndExt;
-/// use parsicomb::parser::Parser;
 ///
 /// let data = b"123.456";
 /// let cursor = ByteCursor::new(data);
@@ -66,7 +64,7 @@ where
     }
 }
 
-/// Convenience function to create an And parser
+/// Create a parser that runs `parser1`, then `parser2`; see [`And`]
 pub fn and<P1, P2>(parser1: P1, parser2: P2) -> And<P1, P2>
 where
     P1: Parser,

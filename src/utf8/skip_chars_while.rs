@@ -5,7 +5,7 @@ use crate::ParsicombError;
 use crate::cursor::Cursor;
 use crate::error::Expected;
 use crate::parser::Parser;
-use crate::utf8::char::char;
+use crate::utf8::char;
 use std::marker::PhantomData;
 
 /// Advance past characters while `pred` holds; stops before the first

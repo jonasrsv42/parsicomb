@@ -5,9 +5,10 @@
 ///
 /// Combinators that can recover from a failure, by trying something else or
 /// stopping, decide by this: the further a failed parser advanced, the fewer
-/// combinators backtrack from it. [How failures are
-/// handled](crate#how-failures-are-handled) lists what each built-in
-/// combinator does.
+/// combinators backtrack from it. [Controlling
+/// backtracking](crate#controlling-backtracking) lists what each built-in
+/// combinator does; [How failures are
+/// handled](crate::error#how-failures-are-handled) describes the model.
 ///
 /// The cases are ordered: `None < Partial < Committed`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

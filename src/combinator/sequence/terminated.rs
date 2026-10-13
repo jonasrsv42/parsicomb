@@ -7,7 +7,7 @@ use crate::parser::Parser;
 /// `parser`'s output
 ///
 /// ```
-/// use parsicomb::{ByteCursor, Parser, TerminatedExt};
+/// use parsicomb::prelude::*;
 /// use parsicomb::ascii::u64;
 /// use parsicomb::byte::is_byte;
 ///

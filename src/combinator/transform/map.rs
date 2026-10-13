@@ -33,7 +33,7 @@ where
     }
 }
 
-/// Convenience function to create a Map parser
+/// Create a parser that transforms `parser`'s output; see [`Map`]
 pub fn map<P, F, Out>(parser: P, mapper: F) -> Map<P, F>
 where
     P: Parser,
