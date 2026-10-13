@@ -16,12 +16,13 @@ composite_error! {
 
 /// Parser combinator that describes its inner parser in errors
 ///
-/// When the inner parser fails without advancing ([`Advance::None`]: what it
-/// expected isn't at its start), the error becomes `expected <label>, found
-/// …`. This turns the error of an `or` chain whose alternatives all fail on
-/// the first element into one message naming the whole set. Failures past the start,
-/// including real problems such as an overflowing number, are kept as they
-/// are.
+/// When the inner parser fails at its start, without advancing
+/// ([`Advance::None`]: what it expected isn't there), the error becomes
+/// `expected <label>, found …`. This turns the error of an `or` chain whose
+/// alternatives all fail on the first element into one message naming the
+/// whole set. Other failures are kept as they are: those past the start,
+/// including real problems such as an overflowing number, and peeks, which
+/// fail further in.
 ///
 /// ```
 /// use parsicomb::{ByteCursor, LabelExt, OrExt, Parser};

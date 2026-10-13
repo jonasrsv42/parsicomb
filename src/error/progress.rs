@@ -81,6 +81,9 @@ use std::cmp::Ordering;
 /// assert_eq!(optional(Attempt(is_string("pub"))).parse(input).unwrap().0, None);
 /// ```
 ///
+/// Put a [`label`](crate::label()) inside such a wrapper: it only replaces a
+/// failure at its start, and a peek fails further in.
+///
 /// Such an error converts into [`ParsicombError`](super::ParsicombError) with
 /// [`ParsicombError::wrap`](super::ParsicombError::wrap), which keeps its
 /// progress.
@@ -100,7 +103,9 @@ pub enum Progress {
         at: usize,
     },
     /// Committed to this path before failing at `at`, or failed fatally
-    /// (such as nesting too deep): nothing backtracks
+    /// (such as nesting too deep): nothing backtracks. A wrapper that turns
+    /// it back into a plain failure undoes both, so it also makes a fatal
+    /// failure recoverable
     Committed {
         /// Where the failure is
         at: usize,
@@ -168,9 +173,8 @@ impl Ord for Progress {
     fn cmp(&self, other: &Self) -> Ordering {
         let key = |progress: &Progress| {
             (
-                progress
-                    .counts_to()
-                    .map_or(usize::MAX, |counts_to| counts_to),
+                matches!(progress, Progress::Committed { .. }),
+                progress.counts_to().unwrap_or(0),
                 progress.position(),
             )
         };
@@ -196,6 +200,7 @@ mod tests {
         assert!(peek(5, 9) > Progress::at(1));
         assert!(peek(0, 3) > peek(0, 2));
         assert!(Progress::at(3) > peek(0, 3));
+        assert!(Progress::Committed { at: usize::MAX } > Progress::at(usize::MAX));
     }
 
     #[test]

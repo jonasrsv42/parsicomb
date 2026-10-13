@@ -494,8 +494,9 @@ A combinator that started a parser at `start` sees how far it advanced
 
 Progress is ordered: committed first, then the progress that counts
 further, then the failure further in. `or` reports the alternative with
-the greater progress, so an uncommitted alternative that matched nothing is
-never reported over one that matched input, however far in its error points.
+the greater progress, so an alternative that matched nothing (and isn't
+committed) is never reported over one that matched input, however far in its
+error points.
 
 | | `None` | `Partial` | `Committed` |
 |---|---|---|---|
@@ -503,12 +504,19 @@ never reported over one that matched input, however far in its error points.
 | `optional`, repetitions | `None` / ends | passes it on | passes it on |
 | `label`, `filter` | replaces the message if it failed at the start | keeps it | keeps it |
 | `not` | succeeds | succeeds | passes it on |
+| `skip_then` | a peek, if it skipped input | passes it on | passes it on |
+| `and` and other sequences | passes it on | passes it on | passes it on |
 
 So `optional(p)` is not `p.map(Some).or(default(None))`: `or` also
 backtracks from `Advance::Partial` and drops that error, where `optional`
 passes it on.
 Hand-written combinators can make the same decisions with
 `match error.progress().since(start) { .. }`.
+
+`filter` rejects a value as "nothing here" at its start, so `optional` and
+repetitions stop there quietly. For a value check that should be a hard
+error, such as a number out of range, build the error after the value with
+`cursor.invalid_error(..)` in `and_then` or `parser_fn`.
 
 Leaf parsers that run out of input report `expected …, found end of input`;
 reading past the end with `cursor.value()` in a hand-written parser gives

@@ -238,7 +238,7 @@ mod tests {
         let parser = not(is_byte(b'a').and(is_byte(b'b').commit()));
         let error = parser.parse(ByteCursor::new(b"ax")).unwrap_err();
         assert!(error.progress().since(0) == crate::Advance::Committed);
-        // An uncommitted failure is still "doesn't match"
+        // A failure that isn't committed is still "doesn't match"
         let parser = not(is_byte(b'a').and(is_byte(b'b')));
         assert!(parser.parse(ByteCursor::new(b"ax")).is_ok());
     }

@@ -31,9 +31,9 @@ where
     /// [`Progress`] is greater got furthest: a committed failure, then the
     /// one whose progress counts further, then the one that failed further
     /// in. The error kept therefore also decides how far the enclosing
-    /// parsers see the `or` advance ([`Advance`]): an uncommitted alternative
-    /// that matched nothing is never kept over one that matched input,
-    /// however far in its error points.
+    /// parsers see the `or` advance ([`Advance`]): an alternative that matched
+    /// nothing (and isn't committed) is never kept over one that matched
+    /// input, however far in its error points.
     pub fn pick(first: Err1, second: Err2) -> Self {
         let first_progress = first.progress();
         Self::pick_with_progress(first, first_progress, second)
@@ -336,7 +336,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tie_keeps_a_real_problem_over_an_expectation() {
+    fn test_a_real_problem_further_in_wins_over_an_expectation() {
         use crate::ascii::u64;
         use crate::label::LabelExt;
         use crate::utf8::string::is_string;
