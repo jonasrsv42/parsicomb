@@ -27,69 +27,38 @@ use std::cmp::Ordering;
 /// then the one that failed further in.
 ///
 /// For example Parsec's `try`, where a failure counts as no progress so
-/// enclosing combinators backtrack from it, is a wrapper whose error turns
-/// its progress into a peek from where it started:
+/// enclosing combinators backtrack from it, turns its inner error's progress
+/// into a peek from where it started, with [`WithProgress`](super::WithProgress):
 ///
 /// ```
-/// use parsicomb::{AndExt, ByteCursor, Cursor, ErrorLeaf, ErrorNode, Parser, Progress, optional};
+/// use parsicomb::{AndExt, ByteCursor, Cursor, ErrorNode, Parser, WithProgress, optional, parser_fn};
 /// use parsicomb::byte::is_byte;
 /// use parsicomb::utf8::is_string;
-/// use std::fmt;
 ///
-/// struct Attempt<P>(P);
-///
-/// #[derive(Debug)]
-/// struct AttemptError<E> {
-///     inner: E,
-///     start: usize,
-/// }
-///
-/// impl<E: ErrorNode> fmt::Display for AttemptError<E> {
-///     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-///         write!(f, "{}", self.inner.likely_error())
-///     }
-/// }
-///
-/// impl<E: ErrorNode> std::error::Error for AttemptError<E> {}
-///
-/// impl<E: ErrorNode> ErrorNode for AttemptError<E> {
-///     type Element = E::Element;
-///
-///     fn likely_error(&self) -> &dyn ErrorLeaf<Element = Self::Element> {
-///         self.inner.likely_error()
-///     }
-///
-///     // Still reported where it failed, but only peeked from the start
-///     fn progress(&self) -> Progress {
-///         self.inner.progress().peeked_from(self.start)
-///     }
-/// }
-///
-/// impl<P: Parser> Parser for Attempt<P> {
-///     type Cursor = P::Cursor;
-///     type Output = P::Output;
-///     type Error = AttemptError<P::Error>;
-///
-///     fn parse(&self, cursor: Self::Cursor) -> Result<(Self::Output, Self::Cursor), Self::Error> {
+/// fn attempt<P: Parser>(
+///     parser: P,
+/// ) -> impl Parser<Cursor = P::Cursor, Output = P::Output, Error = WithProgress<P::Error>> {
+///     parser_fn(move |cursor: P::Cursor| {
 ///         let start = cursor.position();
-///         self.0.parse(cursor).map_err(|inner| AttemptError { inner, start })
-///     }
+///         parser.parse(cursor).map_err(|error| {
+///             // Still reported where it failed, but only peeked from the start
+///             let progress = error.progress().peeked_from(start);
+///             WithProgress::new(error, progress)
+///         })
+///     })
 /// }
 ///
 /// // `pub ` matches `pub`, then fails at `(`
 /// let input = ByteCursor::new(b"pub(crate)");
 /// let pub_space = || is_string("pub").and(is_byte(b' '));
 /// assert!(optional(pub_space()).parse(input).is_err());
-/// assert!(optional(Attempt(pub_space())).parse(input).unwrap().0.is_none());
+/// assert!(optional(attempt(pub_space())).parse(input).unwrap().0.is_none());
 /// ```
 ///
 /// Put a [`label`](crate::label()) inside such a wrapper: it only replaces a
 /// failure at its start, and a peek fails further in.
-///
-/// Such an error converts into [`ParsicombError`](super::ParsicombError) with
-/// [`ParsicombError::wrap`](super::ParsicombError::wrap), which keeps its
-/// progress.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Progress {
     /// Failed at `at`, with progress up to it
     Partial {

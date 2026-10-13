@@ -6,6 +6,7 @@ use std::fmt;
 
 /// Built-in error type of the atomic cursors and leaf parsers
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum ParsicombError<'code, T: Atomic = u8> {
     /// Tried to read an element at the end of input
     EndOfInput(CodeLoc<'code, T>),
@@ -271,8 +272,8 @@ mod tests {
     fn test_debug_does_not_print_the_input() {
         use crate::Parser;
         use crate::byte::is_byte;
+        use crate::combinator::PositionExt;
         use crate::cursors::ByteCursor;
-        use crate::position::PositionExt;
 
         let input = vec![b'z'; 1 << 20];
         let error = is_byte(b'a').parse(ByteCursor::new(&input)).unwrap_err();

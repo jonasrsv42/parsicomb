@@ -4,9 +4,9 @@ use super::u64::u64;
 use super::{sign, signed_value};
 use crate::ByteCursor;
 use crate::ParsicombError;
-use crate::optional::optional;
+use crate::combinator::optional;
+use crate::combinator::parser_fn;
 use crate::parser::Parser;
-use crate::parser_fn::parser_fn;
 
 /// Parser that matches ASCII integer numbers (positive or negative)
 ///

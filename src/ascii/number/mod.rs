@@ -4,13 +4,13 @@ use crate::ByteCursor;
 use crate::ParsicombError;
 use crate::atomic::skip_while1;
 use crate::byte::is_byte;
+use crate::combinator::MapErrExt;
+use crate::combinator::OrExt;
+use crate::combinator::optional;
+use crate::combinator::parser_fn;
+use crate::combinator::recognize;
 use crate::cursor::Cursor;
-use crate::map_err::MapErrExt;
-use crate::optional::optional;
-use crate::or::OrExt;
 use crate::parser::Parser;
-use crate::parser_fn::parser_fn;
-use crate::recognize::recognize;
 
 pub mod digit;
 pub mod f64;
@@ -24,6 +24,7 @@ pub use u64::u64;
 
 /// A parsed number literal
 #[derive(Debug, PartialEq)]
+#[non_exhaustive]
 pub enum Number {
     /// An integer, from [`i64()`]
     I64(i64),

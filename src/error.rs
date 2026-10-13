@@ -10,6 +10,7 @@ mod expected;
 mod parsicomb;
 mod progress;
 pub(crate) mod render;
+mod with_progress;
 
 pub use advance::Advance;
 pub use code_loc::CodeLoc;
@@ -17,6 +18,7 @@ pub(crate) use composite::composite_error;
 pub use expected::Expected;
 pub use parsicomb::ParsicombError;
 pub use progress::Progress;
+pub use with_progress::WithProgress;
 
 /// A single error: where in the input it is, and what to report
 pub trait ErrorLeaf: Error {

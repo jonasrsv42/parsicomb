@@ -3,8 +3,8 @@
 use crate::ByteCursor;
 use crate::ParsicombError;
 use crate::byte::byte;
-use crate::filter::FilterExt;
-use crate::map_err::MapErrExt;
+use crate::combinator::FilterExt;
+use crate::combinator::MapErrExt;
 use crate::parser::Parser;
 
 /// Parser that matches a single ASCII whitespace character (space, tab,
@@ -21,7 +21,7 @@ mod tests {
     use super::*;
     use crate::ByteCursor;
     use crate::Cursor;
-    use crate::many::many;
+    use crate::combinator::many;
 
     #[test]
     fn test_whitespace_parser_space() {

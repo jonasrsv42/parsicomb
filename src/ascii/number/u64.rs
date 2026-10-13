@@ -3,9 +3,9 @@
 use super::{digits, unsigned_value};
 use crate::ByteCursor;
 use crate::ParsicombError;
+use crate::combinator::parser_fn;
+use crate::combinator::recognize;
 use crate::parser::Parser;
-use crate::parser_fn::parser_fn;
-use crate::recognize::recognize;
 
 /// Parser that matches one or more ASCII digits and returns them as a u64
 ///

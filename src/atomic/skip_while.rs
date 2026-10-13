@@ -22,7 +22,7 @@ fn advance_while<Cur: Cursor>(mut cursor: Cur, pred: impl Fn(Cur::Element) -> bo
 ///
 /// Unlike `skip_many(atomic().filter(..))`, it checks each element directly
 /// and builds no error where the run ends. Pair it with
-/// [`recognize`](crate::recognize::recognize) to get the span it skipped.
+/// [`recognize`](crate::combinator::recognize) to get the span it skipped.
 #[must_use = "parsers do nothing until `.parse()` is called"]
 pub struct SkipWhile<Cur, F> {
     pred: F,
@@ -101,7 +101,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::recognize::recognize;
+    use crate::combinator::recognize;
     use crate::{AtomicCursor, ByteCursor};
 
     #[test]

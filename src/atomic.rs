@@ -7,11 +7,15 @@ use std::fmt::{self, Debug, Display};
 use std::marker::PhantomData;
 
 pub mod between;
+pub mod default;
+pub mod eof;
 pub mod is;
 pub mod sequence;
 pub mod skip_while;
 
 pub use between::{AtomicBetween, atomic_between};
+pub use default::{DefaultParser, default};
+pub use eof::{Eof, eof};
 pub use is::{IsAtomic, is_atomic};
 pub use sequence::{IsSequence, is_sequence};
 pub use skip_while::{SkipWhile, SkipWhile1, skip_while, skip_while1};
@@ -136,8 +140,8 @@ impl Atomic for u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::filter::FilterExt;
-    use crate::many::many;
+    use crate::combinator::FilterExt;
+    use crate::combinator::many;
     use crate::{ByteCursor, CodeLoc, Parser, ParsicombError};
 
     // Test implementation of Atomic for u32

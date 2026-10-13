@@ -5,9 +5,9 @@ use super::{digits, exponent_end, float_value, sign};
 use crate::ByteCursor;
 use crate::ParsicombError;
 use crate::byte::is_byte;
-use crate::optional::optional;
+use crate::combinator::optional;
+use crate::combinator::parser_fn;
 use crate::parser::Parser;
-use crate::parser_fn::parser_fn;
 
 /// Parser that matches ASCII floating point numbers in `int.uint` form with
 /// an optional exponent, or an integer with an exponent (e.g. `123.456`,

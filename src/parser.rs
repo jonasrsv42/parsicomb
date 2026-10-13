@@ -52,8 +52,8 @@ impl<P: Parser + ?Sized> Parser for &P {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::and::AndExt;
     use crate::byte::is_byte;
+    use crate::combinator::AndExt;
     use crate::{ByteCursor, many, separated_list};
 
     #[test]

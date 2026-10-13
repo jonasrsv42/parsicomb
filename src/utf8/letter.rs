@@ -2,8 +2,8 @@
 
 use crate::ByteCursor;
 use crate::ParsicombError;
-use crate::filter::FilterExt;
-use crate::map_err::MapErrExt;
+use crate::combinator::FilterExt;
+use crate::combinator::MapErrExt;
 use crate::parser::Parser;
 use crate::utf8::char::char;
 

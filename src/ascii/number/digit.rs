@@ -3,8 +3,8 @@
 use crate::ByteCursor;
 use crate::ParsicombError;
 use crate::byte::byte;
-use crate::filter::FilterExt;
-use crate::map_err::MapErrExt;
+use crate::combinator::FilterExt;
+use crate::combinator::MapErrExt;
 use crate::parser::Parser;
 
 /// Parser that matches a single ASCII digit (0-9); fails with

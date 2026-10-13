@@ -1,9 +1,9 @@
 //! [`AtomicCursor`]: a cursor over a slice of elements
 
 use crate::atomic::Atomic;
+use crate::combinator::Span;
 use crate::cursor::Cursor;
 use crate::error::Expected;
-use crate::position::Span;
 use crate::{CodeLoc, ParsicombError};
 use std::borrow::Cow;
 

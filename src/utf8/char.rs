@@ -692,8 +692,8 @@ mod tests {
 
     #[test]
     fn test_is_char_mismatch_is_at_the_character_start() {
-        use crate::label::LabelExt;
-        use crate::or::OrExt;
+        use crate::combinator::LabelExt;
+        use crate::combinator::OrExt;
 
         let error = is_char('é')
             .parse(ByteCursor::new("è".as_bytes()))
@@ -721,7 +721,7 @@ mod tests {
     #[test]
     fn test_invalid_utf8_is_reported_after_the_bytes_read() {
         use crate::ErrorNode;
-        use crate::optional::optional;
+        use crate::combinator::optional;
 
         // A bad start byte is input that is there but wrong, so `optional`
         // passes it on

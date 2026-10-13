@@ -9,6 +9,7 @@ use std::fmt;
 /// at the error location when the error is displayed. Building one does not
 /// allocate, except cloning a `Sequence` that owns its elements.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum Expected<T: Atomic> {
     /// A specific element
     Element(T),
