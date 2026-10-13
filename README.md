@@ -36,17 +36,19 @@ Syntax error at line 1, column 5 (offset 4): expected ']', found ';'
 - **No panics while parsing:** failures are `Result`s. Bound recursion with
   `max_depth` on untrusted input.
 
-**Contents:** [Install](#install) ·
-[Your first parser](#your-first-parser-json) ·
-[API overview](#api-overview) ·
-[Recursive grammars](#recursive-grammars) ·
-[Recipes](#recipes) ·
-[Error messages](#error-messages) ·
-[Controlling backtracking](#controlling-backtracking) ·
-[Untrusted input](#untrusted-input) ·
-[Hand-written parsers](#hand-written-parsers) ·
-[Custom element types](#custom-element-types) ·
-[Performance](#performance-and-compile-times)
+## Contents
+
+- [Install](#install)
+- [Your first parser: JSON](#your-first-parser-json)
+- [API overview](#api-overview)
+- [Recursive grammars](#recursive-grammars)
+- [Recipes](#recipes)
+- [Error messages](#error-messages)
+- [Controlling backtracking](#controlling-backtracking)
+- [Untrusted input](#untrusted-input)
+- [Hand-written parsers](#hand-written-parsers)
+- [Custom element types](#custom-element-types)
+- [Performance and compile times](#performance-and-compile-times)
 
 ## Install
 
