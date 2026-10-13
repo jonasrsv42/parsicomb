@@ -30,26 +30,36 @@ Syntax error at line 1, column 5 (offset 4): expected ']', found ';'
   of copying it, and messages are only formatted when an error is displayed.
 - **Statically dispatched:** combinators are plain generic types that inline
   into one function; type erasure with `.boxed()` is opt-in.
-- **Backtracking you can tune:** `or` tries every alternative and reports
-  the one that got furthest. `optional` and the repetitions stop only where
-  their parser matched nothing, as in Parsec, so errors point at the problem.
-  `commit` makes a failure final, and `attempt` makes one count as "nothing
-  here" to backtrack fully.
+- **Backtracking you can tune:** errors point at the problem by default;
+  `commit` makes failures final, and `attempt` backtracks out of a partial
+  match.
 - **No panics while parsing:** failures are `Result`s. Bound recursion with
   `max_depth` on untrusted input.
 
+**Contents:** [Install](#install) ·
+[Your first parser](#your-first-parser-json) ·
+[API overview](#api-overview) ·
+[Recursive grammars](#recursive-grammars) ·
+[Recipes](#recipes) ·
+[Error messages](#error-messages) ·
+[Controlling backtracking](#controlling-backtracking) ·
+[Untrusted input](#untrusted-input) ·
+[Hand-written parsers](#hand-written-parsers) ·
+[Custom element types](#custom-element-types) ·
+[Performance](#performance-and-compile-times)
+
 ## Install
 
-ParsiComb isn't on crates.io yet. Depend on it from GitHub, pinned to a
-commit so upgrades are deliberate (the API can still change):
+ParsiComb isn't on crates.io yet. Depend on it from GitHub:
 
 ```toml
 [dependencies]
-parsicomb = { git = "https://github.com/jonasrsv42/parsicomb", rev = "d730dc9" }
+parsicomb = { git = "https://github.com/jonasrsv42/parsicomb", branch = "main" }
 ```
 
-Use any commit from the history, or `branch = "main"` to follow the latest;
-`cargo update -p parsicomb` then moves `Cargo.lock` to the newest commit.
+`Cargo.lock` pins the commit you first built with, so upgrades are deliberate
+(the API can still change): `cargo update -p parsicomb` moves to the latest.
+To pin a commit in `Cargo.toml` instead, use `rev = "<commit>"`.
 
 It needs Rust 1.85 or newer (edition 2024). For the API docs, run
 `cargo doc -p parsicomb --open`.
@@ -167,12 +177,11 @@ Things to notice:
   `.terminated_by(eof())` requires the whole input.
 - `label` names a set of alternatives: when none of them matches, the error
   says `expected a JSON value` instead of naming the first alternative.
-- The parser-building functions return `impl Parser`, naming the error type.
-  `.map_err(Error::from)` gives every rule the same error type without
-  allocating, and recursive rules need a concrete error type (see
+- Each rule returns `impl Parser`, and `.map_err(Error::from)` gives them all
+  one concrete error type, which recursion needs (see
   [Recursive grammars](#recursive-grammars)).
 
-## Finding your way around
+## API overview
 
 `use parsicomb::prelude::*` brings in the traits for method syntax (`.and()`,
 `.or()`, `.map()`, …) and the core types: `Parser`, `Cursor`, `ByteCursor`,
@@ -184,31 +193,81 @@ Things to notice:
 | `utf8` | characters and strings | `is_string("let")`, `unicode_letter()` |
 | `ascii` | numbers and whitespace | `u64()`, `number()`, `whitespace()` |
 | `atomic` | the same for any element type, runs, end of input | `is_atomic(token)`, `skip_while(pred)`, `eof()` |
-| `combinator` | parsers built from parsers | `many`, `or`, `between`, `label`, `commit`, `attempt`, `lazy` |
+| `combinator` | parsers built from parsers | `many`, `or`, `between`, `label`, `commit`, `with_position` |
 
-The functions are also at the crate root (`parsicomb::{many, eof, …}`).
+The `atomic` and `combinator` functions are also at the crate root
+(`parsicomb::{many, eof, …}`).
 Combinators that take a parser first also come as methods, so
 `many(p)` can be written `p.many()` and `between(open, p, close)` can be written
 `p.between(open, close)`. A parser can be used in several places by
 reference: `item.and(&separator)`.
 
 Parsers that match input without collecting it, such as `recognize` and
-`is_sequence`, output a `Span`. Call `span.slice()` for the matched elements,
-or `std::str::from_utf8(span.slice())` for text.
+`is_sequence`, output a `Span`: `span.slice()` gives the matched elements,
+`span.as_string()` an owned `String` (replacing invalid UTF-8), and
+`span.start()`/`span.end()` the offsets. For source positions on AST nodes,
+`p.with_position()` outputs `(value, span)`.
 
-For the full list, see the API docs (`cargo doc -p parsicomb --open`) or
-`src/combinator/`, where the combinators are grouped by what they do:
-`sequence`, `choice`, `repeat`, `transform`, `control` and `build`.
+For the full list, see the API docs (`cargo doc -p parsicomb --open`).
+
+## Recursive grammars
+
+A parser that refers to itself goes through `lazy`, which builds the inner
+parser on first use. Its type must be erased with `.boxed()`, and its error
+type must be concrete, since both would otherwise contain themselves:
+
+- `map_err(ParsicombError::from)` makes the error concrete. A combinator's
+  error converts into the `ParsicombError` of whichever part failed,
+  allocating only for failures under `commit`, `attempt` or `skip_then`.
+- Errors of other types, such as your own error from a `map_err`, can be
+  boxed with `ParsicombError::wrap`, which allocates once per failure.
+
+```rust
+use parsicomb::prelude::*;
+use parsicomb::ascii::u64;
+use parsicomb::byte::is_byte;
+use parsicomb::lazy;
+
+#[derive(Debug, PartialEq)]
+enum Value {
+    Number(u64),
+    List(Vec<Value>),
+}
+
+fn value<'code>()
+-> impl Parser<Cursor = ByteCursor<'code>, Output = Value, Error = ParsicombError<'code>> {
+    let number = u64().map(Value::Number);
+    let list = lazy(|| value().boxed())
+        .separated_by(is_byte(b','))
+        .between(is_byte(b'['), is_byte(b']'))
+        .map(Value::List);
+
+    number.or(list).map_err(ParsicombError::from)
+}
+
+let (parsed, _) = value().parse(ByteCursor::new(b"[1,[2,3]]")).unwrap();
+assert_eq!(
+    parsed,
+    Value::List(vec![
+        Value::Number(1),
+        Value::List(vec![Value::Number(2), Value::Number(3)]),
+    ])
+);
+```
+
+The `'code` lifetime ties a built parser to one input, so call `value()`
+again for each input. Building a parser is cheap: it allocates only for
+`boxed`. Parsers that contain `boxed` or `lazy` are not `Send` or `Sync`, so
+each thread builds its own.
 
 ## Recipes
 
 ### Whitespace and keywords
 
-Skip whitespace after each token, as the JSON parser does, so that every
-token starts at its first character. A token that isn't there then matches
-nothing, and the alternatives around it get to try. In grammars that skip
-whitespace before tokens, use `skip_then(whitespace, token)`, which doesn't
-count the skipped whitespace as a match.
+Skip whitespace *after* tokens, as the JSON parser does: a missing token then
+matches nothing, and the alternatives around it get to try. To skip *before*
+tokens, use `skip_then(whitespace, token)`, which doesn't count the
+whitespace as a match.
 
 Match keywords as whole words: read the word, then check it. If you used
 `is_string("let")` instead, it would match the start of `letter`:
@@ -326,56 +385,6 @@ let (text, _) = raw.parse(ByteCursor::new(b"##\"hi\"##")).unwrap();
 assert_eq!(text.slice(), b"hi");
 ```
 
-## Recursive grammars
-
-A parser that refers to itself goes through `lazy`, which builds the inner
-parser on first use. Its type must be erased with `.boxed()`, and its error
-type must be concrete, since both would otherwise contain themselves:
-
-- `map_err(ParsicombError::from)` makes the error concrete without
-  allocating. A combinator's error converts into the `ParsicombError` of
-  whichever part failed.
-- Errors of other types, such as your own error from a `map_err`, can be
-  boxed with `ParsicombError::wrap`, which allocates once per failure.
-
-```rust
-use parsicomb::prelude::*;
-use parsicomb::ascii::u64;
-use parsicomb::byte::is_byte;
-use parsicomb::lazy;
-
-#[derive(Debug, PartialEq)]
-enum Value {
-    Number(u64),
-    List(Vec<Value>),
-}
-
-fn value<'code>()
--> impl Parser<Cursor = ByteCursor<'code>, Output = Value, Error = ParsicombError<'code>> {
-    let number = u64().map(Value::Number);
-    let list = lazy(|| value().boxed())
-        .separated_by(is_byte(b','))
-        .between(is_byte(b'['), is_byte(b']'))
-        .map(Value::List);
-
-    number.or(list).map_err(ParsicombError::from)
-}
-
-let (parsed, _) = value().parse(ByteCursor::new(b"[1,[2,3]]")).unwrap();
-assert_eq!(
-    parsed,
-    Value::List(vec![
-        Value::Number(1),
-        Value::List(vec![Value::Number(2), Value::Number(3)]),
-    ])
-);
-```
-
-The `'code` lifetime ties a built parser to one input, so call `value()`
-again for each input. Building a parser is cheap: it allocates only for
-`boxed`. Parsers that contain `boxed` or `lazy` are not `Send` or `Sync`, so
-each thread builds its own.
-
 ## Error messages
 
 Leaf parsers report what they expected and what they found. What was found
@@ -428,14 +437,9 @@ assert!(error.to_string().contains("number too large"));
 
 ## Controlling backtracking
 
-By default:
-- `or` tries every alternative and reports the one that got furthest.
-- `optional` and the repetitions stop only where their parser matched
-  nothing.
-
-Two combinators change that where you need it:
-- **`commit`** makes failures final.
-- **`attempt`** makes failures count as "nothing here".
+The default suits most grammars; `commit` makes failures final where the
+input can only mean one thing, and `attempt` makes them "nothing here" where
+a partial match should be backtracked out of.
 
 ### The default
 
@@ -493,7 +497,7 @@ assert!(tagged.or(bare()).parse(ByteCursor::new(b"#x")).is_err());
 
 Commit after the first token that decides, not around a whole repeated item.
 In `many(item.commit())`, the item's final "nothing here" is committed too,
-so the repetition can never end.
+so the repetition fails at the end of every list.
 
 ### Looser: `attempt`
 
@@ -526,9 +530,11 @@ What each combinator does when its parser fails:
 | `optional`, repetitions | `None` / ends | passes it on | passes it on |
 | `commit` | commits it | commits it | passes it on |
 | `attempt` | passes it on | makes it "nothing here" | passes it on |
-| `label`, `filter` | replaces the message | keeps it | keeps it |
+| `label`, `filter` | relabels it if it failed at the start | keeps it | keeps it |
 | `not` | succeeds | succeeds | passes it on |
 | `and` and other sequences | passes it on | passes it on | passes it on |
+
+A value that `filter` rejects counts as consumed nothing.
 
 **`optional` vs `or`:** `optional(p)` is not `p.map(Some).or(default(None))`.
 When `p` consumed input before failing, `or` drops that error and backtracks,
