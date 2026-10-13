@@ -58,6 +58,16 @@ where
     Many::new(parser)
 }
 
+/// Extension trait to add .many() method support for parsers
+pub trait ManyExt: Parser + Sized {
+    /// Match this parser zero or more times; see [`Many`]
+    fn many(self) -> Many<Self> {
+        Many::new(self)
+    }
+}
+
+impl<P: Parser> ManyExt for P {}
+
 #[cfg(test)]
 mod tests {
     use super::*;

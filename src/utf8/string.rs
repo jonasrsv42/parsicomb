@@ -300,4 +300,33 @@ mod tests {
             "got {error}"
         );
     }
+
+    #[test]
+    fn test_a_partial_match_is_no_progress() {
+        use crate::error::{Advance, ErrorNode, Progress};
+        use crate::{OrExt, many, optional};
+
+        let input = ByteCursor::new(b"push");
+        assert_eq!(optional(is_string("pub")).parse(input).unwrap().0, None);
+        let (items, rest) = many(is_string("ab"))
+            .parse(ByteCursor::new(b"abac"))
+            .unwrap();
+        assert_eq!((items.len(), rest.position()), (1, 2));
+
+        // Still reported at the mismatch
+        let error = is_string("pub").parse(input).unwrap_err();
+        assert_eq!(error.progress(), Progress::Peek { from: 0, at: 2 });
+        assert_eq!(error.progress().since(0), Advance::None);
+        assert!(error.to_string().contains(r#"found "pus""#), "got {error}");
+
+        // `or` keeps the literal that got further
+        let error = is_string("pub")
+            .or(is_string("push"))
+            .parse(ByteCursor::new(b"pusx"))
+            .unwrap_err();
+        assert!(
+            error.to_string().contains(r#"expected "push""#),
+            "got {error}"
+        );
+    }
 }

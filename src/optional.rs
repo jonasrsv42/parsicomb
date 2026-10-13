@@ -52,6 +52,16 @@ where
     Optional::new(parser)
 }
 
+/// Extension trait to add .optional() method support for parsers
+pub trait OptionalExt: Parser + Sized {
+    /// Match this parser or nothing; see [`Optional`]
+    fn optional(self) -> Optional<Self> {
+        Optional::new(self)
+    }
+}
+
+impl<P: Parser> OptionalExt for P {}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -66,6 +66,16 @@ where
     Some::new(parser)
 }
 
+/// Extension trait to add .some() method support for parsers
+pub trait SomeExt: Parser + Sized {
+    /// Match this parser one or more times; see [`Some`]
+    fn some(self) -> Some<Self> {
+        Some::new(self)
+    }
+}
+
+impl<P: Parser> SomeExt for P {}
+
 #[cfg(test)]
 mod tests {
     use super::*;

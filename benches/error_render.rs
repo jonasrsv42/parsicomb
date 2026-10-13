@@ -1,16 +1,13 @@
 //! Benchmarks for the cost of *rendering* a `ParsicombError`.
 //!
 //! Constructing a `CodeLoc`/`ParsicombError` is cheap — it just stores a slice
-//! reference and a position. But the `Display` impl computes a human-readable
-//! line/column (`readable_position`) and a context snippet (`context_lines`),
-//! and the latter calls `Atomic::format_slice(&self.code)` over the *entire*
-//! input buffer (`String::from_utf8_lossy(whole_buffer).to_string()` for `u8`).
+//! reference and a position. The `Display` impl computes a human-readable
+//! line/column and a context snippet; both are bounded: the line/column scan
+//! stops after 1 MiB (past that only the offset is shown) and the snippet
+//! formats at most 512 elements on each side of the error.
 //!
-//! For large inputs (e.g. a binary blob with a big embedded payload) this makes
-//! formatting a one-line error message O(input size) with a full-buffer
-//! allocation, even though the error position is already known.
-//!
-//! This bench pins that cost so we can prove the fix bounds it.
+//! This bench checks that rendering stays cheap however large the input is,
+//! e.g. a binary blob with a big embedded payload.
 //!
 //! Run with: `cargo bench --bench error_render`
 

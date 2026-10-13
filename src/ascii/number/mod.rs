@@ -27,14 +27,15 @@ pub use u64::u64;
 pub enum Number {
     /// An integer, from [`i64()`]
     I64(i64),
-    /// A number with a fraction, from [`f64()`]
+    /// A number with a fraction or an exponent, from [`f64()`]
     F64(f64),
 }
 
 /// Parser that matches an integer or a float and returns a [`Number`]
 ///
-/// A number is a float when its digits are followed by `.` and a digit, and
-/// an integer otherwise; it then fails as [`f64()`] or [`i64()`] would, e.g. with
+/// A number is a float when its digits are followed by `.` and a digit, or
+/// by an exponent (`e` or `E`, an optional sign and a digit), and an integer
+/// otherwise; it then fails as [`f64()`] or [`i64()`] would, e.g. with
 /// "number too large" for an integer that does not fit in an i64. The input is
 /// scanned once.
 pub fn number<'code>()
@@ -45,6 +46,10 @@ pub fn number<'code>()
 
         if let Some(fraction_start) = fraction_start(integer_end) {
             let (_, end) = digits().parse(fraction_start)?;
+            let end = exponent_end(end).unwrap_or(end);
+            return Ok((Number::F64(float_value(start, end)?), end));
+        }
+        if let Some(end) = exponent_end(integer_end) {
             return Ok((Number::F64(float_value(start, end)?), end));
         }
 
@@ -77,6 +82,20 @@ fn fraction_start(cursor: ByteCursor<'_>) -> Option<ByteCursor<'_>> {
     let is_fraction = cursor.value().is_ok_and(|b| b == b'.')
         && after_dot.value().is_ok_and(|b| b.is_ascii_digit());
     is_fraction.then_some(after_dot)
+}
+
+/// The cursor after the exponent if `cursor` is at one: `e` or `E`, an
+/// optional sign, and one or more digits
+fn exponent_end(cursor: ByteCursor<'_>) -> Option<ByteCursor<'_>> {
+    let after_e = cursor
+        .value()
+        .is_ok_and(|b| b == b'e' || b == b'E')
+        .then(|| cursor.next())?;
+    let after_sign = match after_e.value() {
+        Ok(b'+' | b'-') => after_e.next(),
+        _ => after_e,
+    };
+    digits().parse(after_sign).ok().map(|(_, end)| end)
 }
 
 /// The value of a run of ASCII digits; overflow is reported at `end`, after
@@ -124,8 +143,8 @@ fn signed_value<'code>(
     }
 }
 
-/// The float in `start..end`, which holds `[sign]digits.digits`; overflow is
-/// reported at `end`
+/// The float in `start..end`, which holds `[sign]digits[.digits][exponent]`;
+/// overflow is reported at `end`
 fn float_value<'code>(
     start: ByteCursor<'code>,
     end: ByteCursor<'code>,
@@ -226,5 +245,25 @@ mod tests {
         let (num, cursor) = number().parse(ByteCursor::new(b"1.x")).unwrap();
         assert_eq!(num, Number::I64(1));
         assert_eq!(cursor.position(), 1);
+    }
+
+    #[test]
+    fn test_number_with_an_exponent_is_a_float() {
+        let parse = |input: &[u8]| {
+            let (num, cursor) = number().parse(ByteCursor::new(input)).unwrap();
+            (num, cursor.position())
+        };
+        assert_eq!(parse(b"1.5e3"), (Number::F64(1500.0), 5));
+        assert_eq!(parse(b"2E-2,"), (Number::F64(0.02), 4));
+        assert_eq!(parse(b"-1e+2"), (Number::F64(-100.0), 5));
+        // `e` without exponent digits is left unmatched
+        assert_eq!(parse(b"1.5e"), (Number::F64(1.5), 3));
+        assert_eq!(parse(b"7ex"), (Number::I64(7), 1));
+        assert_eq!(parse(b"7e+"), (Number::I64(7), 1));
+        let error = number().parse(ByteCursor::new(b"1e999")).unwrap_err();
+        assert!(
+            error.to_string().contains("floating point overflow"),
+            "got {error}"
+        );
     }
 }

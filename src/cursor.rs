@@ -69,7 +69,9 @@ pub trait Cursor: Copy {
     /// something other than `expected`
     ///
     /// Its [`progress`](crate::ErrorNode::progress) is
-    /// [`Progress::at`](crate::Progress::at) this cursor.
+    /// [`expected.progress`](Expected::progress) at this cursor: usually
+    /// [`Progress::at`](crate::Progress::at) it, and a peek from the start of
+    /// a partly matched sequence.
     fn expected_error(&self, expected: Expected<Self::Element>) -> Self::Error;
 
     /// The span of input from this cursor up to (not including) `end`

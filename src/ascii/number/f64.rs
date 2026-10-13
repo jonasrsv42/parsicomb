@@ -1,6 +1,7 @@
-//! ASCII floats in `int.frac` form
+//! ASCII floats: `int.frac`, with an optional exponent, or `int` and an
+//! exponent
 
-use super::{digits, float_value, sign};
+use super::{digits, exponent_end, float_value, sign};
 use crate::ByteCursor;
 use crate::ParsicombError;
 use crate::byte::is_byte;
@@ -8,19 +9,29 @@ use crate::optional::optional;
 use crate::parser::Parser;
 use crate::parser_fn::parser_fn;
 
-/// Parser that matches ASCII floating point numbers in `int.uint` form
-/// (e.g. `123.456`, `-42.789`, `+0.5`)
+/// Parser that matches ASCII floating point numbers in `int.uint` form with
+/// an optional exponent, or an integer with an exponent (e.g. `123.456`,
+/// `-42.789`, `+0.5`, `1.5e3`, `2E-8`, `1e5`)
+///
+/// An `e` not followed by an exponent's digits is left unmatched: `1.5e`
+/// parses as `1.5`.
 ///
 /// Fails after the number if it overflows an f64; a number too
 /// small for an f64 becomes 0.0, as with [`str::parse`].
 pub fn f64<'code>()
 -> impl Parser<Cursor = ByteCursor<'code>, Output = f64, Error = ParsicombError<'code>> {
     parser_fn(|start: ByteCursor<'code>| {
-        // Match [+-]digits.digits
+        // Match [+-]digits(.digits[exponent] | exponent)
         let (_, end) = optional(sign()).parse(start)?;
         let (_, end) = digits().parse(end)?;
-        let (_, end) = is_byte(b'.').parse(end)?;
-        let (_, end) = digits().parse(end)?;
+        let end = match exponent_end(end) {
+            Some(end) => end,
+            None => {
+                let (_, end) = is_byte(b'.').parse(end)?;
+                let (_, end) = digits().parse(end)?;
+                exponent_end(end).unwrap_or(end)
+            }
+        };
         Ok((float_value(start, end)?, end))
     })
 }
@@ -157,5 +168,21 @@ mod tests {
     fn test_sign_only_fails() {
         assert!(f64().parse(ByteCursor::new(b"-.5")).is_err());
         assert!(f64().parse(ByteCursor::new(b"-")).is_err());
+    }
+
+    #[test]
+    fn test_exponents() {
+        let parse = |input: &[u8]| {
+            let (value, cursor) = f64().parse(ByteCursor::new(input)).unwrap();
+            (value, cursor.position())
+        };
+        assert_eq!(parse(b"1.5e3"), (1500.0, 5));
+        assert_eq!(parse(b"1.5E-1x"), (0.15, 6));
+        assert_eq!(parse(b"1e5"), (100000.0, 3));
+        assert_eq!(parse(b"-2e+1"), (-20.0, 5));
+        assert_eq!(parse(b"1.5e"), (1.5, 3));
+        assert_eq!(parse(b"1.5e+x"), (1.5, 3));
+        // An integer needs a fraction or an exponent
+        assert!(f64().parse(ByteCursor::new(b"1ex")).is_err());
     }
 }

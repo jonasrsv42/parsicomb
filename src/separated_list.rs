@@ -109,6 +109,20 @@ where
     SeparatedList::new(parser, separator)
 }
 
+/// Extension trait to add .separated_by() method support for parsers
+pub trait SeparatedListExt: Parser + Sized {
+    /// Match one or more of this parser separated by `separator`; see
+    /// [`SeparatedList`]
+    fn separated_by<PSep>(self, separator: PSep) -> SeparatedList<Self, PSep>
+    where
+        PSep: Parser<Cursor = Self::Cursor>,
+    {
+        SeparatedList::new(self, separator)
+    }
+}
+
+impl<P: Parser> SeparatedListExt for P {}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -31,7 +31,8 @@ use std::cmp::Ordering;
 /// its progress into a peek from where it started:
 ///
 /// ```
-/// use parsicomb::{ByteCursor, Cursor, ErrorLeaf, ErrorNode, Parser, Progress, optional};
+/// use parsicomb::{AndExt, ByteCursor, Cursor, ErrorLeaf, ErrorNode, Parser, Progress, optional};
+/// use parsicomb::byte::is_byte;
 /// use parsicomb::utf8::is_string;
 /// use std::fmt;
 ///
@@ -75,10 +76,11 @@ use std::cmp::Ordering;
 ///     }
 /// }
 ///
-/// // `pub` matches the start of `push`, then fails
-/// let input = ByteCursor::new(b"push");
-/// assert!(optional(is_string("pub")).parse(input).is_err());
-/// assert_eq!(optional(Attempt(is_string("pub"))).parse(input).unwrap().0, None);
+/// // `pub ` matches `pub`, then fails at `(`
+/// let input = ByteCursor::new(b"pub(crate)");
+/// let pub_space = || is_string("pub").and(is_byte(b' '));
+/// assert!(optional(pub_space()).parse(input).is_err());
+/// assert!(optional(Attempt(pub_space())).parse(input).unwrap().0.is_none());
 /// ```
 ///
 /// Put a [`label`](crate::label()) inside such a wrapper: it only replaces a

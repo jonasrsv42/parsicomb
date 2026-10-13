@@ -1,4 +1,4 @@
-use super::CodeLoc;
+use super::{CodeLoc, Progress};
 use crate::atomic::Atomic;
 use std::borrow::Cow;
 use std::fmt;
@@ -18,6 +18,10 @@ pub enum Expected<T: Atomic> {
     Label(&'static str),
     /// A run of elements, of which the first `matched` matched before the
     /// element at the error location
+    ///
+    /// A run is matched as a whole: one that matched only partly counts as no
+    /// progress, so `optional` and repetitions stop at it (see
+    /// [`Expected::progress`]).
     Sequence {
         /// The whole expected run
         expected: Cow<'static, [T]>,
@@ -36,6 +40,21 @@ impl<T: Atomic> fmt::Display for Describe<'_, T> {
 }
 
 impl<T: Atomic> Expected<T> {
+    /// The progress of an error expecting this at `position`
+    ///
+    /// [`Progress::at`] `position`, except for a partly matched
+    /// [`Sequence`](Expected::Sequence): it only peeked from the start of the
+    /// run, so it still points at the mismatch but counts as no progress.
+    pub fn progress(&self, position: usize) -> Progress {
+        let progress = Progress::at(position);
+        match self {
+            Expected::Sequence { matched, .. } => {
+                progress.peeked_from(position.saturating_sub(*matched))
+            }
+            Expected::Element(_) | Expected::Range(..) | Expected::Label(_) => progress,
+        }
+    }
+
     /// Write `expected X, found Y`, reading what was found from the input at `loc`
     pub(super) fn write_message(
         &self,

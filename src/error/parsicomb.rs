@@ -107,7 +107,10 @@ impl<'code, T: Atomic> ErrorNode for ParsicombError<'code, T> {
     fn progress(&self) -> Progress {
         match self {
             ParsicombError::WrappedError { progress, .. } => *progress,
-            _ => Progress::at(self.loc().position()),
+            ParsicombError::Expected { expected, loc } => expected.progress(loc.position()),
+            ParsicombError::EndOfInput(loc) | ParsicombError::Invalid { loc, .. } => {
+                Progress::at(loc.position())
+            }
         }
     }
 }

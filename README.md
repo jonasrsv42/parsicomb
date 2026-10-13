@@ -17,7 +17,7 @@ A parser combinator library for Rust with borrowed input and rich error reportin
 ## Quick Start
 
 ```rust
-use parsicomb::{AndExt, ByteCursor, MapExt, OrExt, Parser};
+use parsicomb::{AndExt, ByteCursor, MapExt, OrExt, Parser, TerminatedExt};
 use parsicomb::ascii::u64;
 use parsicomb::byte::is_byte;
 use parsicomb::utf8::is_string;
@@ -32,11 +32,8 @@ let boolean = is_string("true")
     .or(is_string("false").map(|_| false));
 assert_eq!(boolean.parse(ByteCursor::new(b"false")).unwrap().0, false);
 
-// Sequence parsers
-let pair = u64()
-    .and(is_byte(b','))
-    .and(u64())
-    .map(|((a, _), b)| (a, b));
+// Sequence parsers, keeping what matters
+let pair = u64().terminated_by(is_byte(b',')).and(u64());
 assert_eq!(pair.parse(ByteCursor::new(b"10,20")).unwrap().0, (10, 20));
 ```
 
@@ -121,15 +118,16 @@ own.
 | `utf8::is_string(s)` | the string `s` | `Cow<'static, str>` |
 | `utf8::unicode_letter()` and friends | a Unicode character class | `char` |
 | `ascii::u64()`, `ascii::i64()` | an integer | `u64`, `i64` |
-| `ascii::f64()` | a float in `int.frac` form | `f64` |
-| `ascii::whitespace()` | a space, tab, `\n` or `\r` | `u8` |
+| `ascii::f64()` | a float: `int.frac` with an optional exponent, or `int` and an exponent | `f64` |
+| `ascii::whitespace()` | a space, tab, `\n`, `\r` or form feed | `u8` |
 | `atomic()`, `is_atomic(e)`, `atomic_between(lo, hi)` | the same, for any element type | the element |
 | `is_sequence(&[...])` | a run of elements | the matched `Span` |
 
 ## Combinators
 
 ```rust
-use parsicomb::{ByteCursor, Parser, between, many, optional, separated_pair, some};
+use parsicomb::{ByteCursor, ManyExt, Parser, PrecededExt, between, many, optional};
+use parsicomb::{preceded, separated_pair, some, terminated};
 use parsicomb::ascii::{digit, u64};
 use parsicomb::byte::is_byte;
 use parsicomb::utf8::is_string;
@@ -150,7 +148,20 @@ assert_eq!(bracketed.parse(cursor(b"[42]")).unwrap().0, 42);
 
 let pair = separated_pair(is_string("key"), is_byte(b'='), u64());
 assert_eq!(pair.parse(cursor(b"key=42")).unwrap().0, ("key".into(), 42));
+
+// Keeping one side of a sequence
+assert_eq!(preceded(is_byte(b'#'), u64()).parse(cursor(b"#7")).unwrap().0, 7);
+assert_eq!(terminated(u64(), is_byte(b';')).parse(cursor(b"7;")).unwrap().0, 7);
+
+// Method forms read left to right
+let tags = u64().preceded_by(is_byte(b'#')).many();
+assert_eq!(tags.parse(cursor(b"#1#2")).unwrap().0, vec![1, 2]);
 ```
+
+`many`, `some`, `optional`, `separated_list`, `between`, `preceded` and
+`terminated` also come as methods: `.many()`, `.some()`, `.optional()`,
+`.separated_by(sep)`, `.between(open, close)`, `.preceded_by(prefix)` and
+`.terminated_by(suffix)`.
 
 Also available: `argument_list` (`(a, b, c)`-style lists), `filter`, `label`,
 `commit` and `skip_then` (see below), `not` (negative lookahead), `take_until`,
@@ -240,18 +251,16 @@ assert_eq!(word.parse(rest).unwrap().0.slice(), b"42");
 closing quote must repeat as many `#` as opened it, as in Rust raw strings:
 
 ```rust
-use parsicomb::{AndExt, AndThenExt, ByteCursor, FilterExt, MapExt, Parser};
+use parsicomb::{AndThenExt, BetweenExt, ByteCursor, FilterExt, MapExt, Parser, TerminatedExt};
 use parsicomb::{many, ntimes, recognize, skip_many};
 use parsicomb::byte::{byte, is_byte};
 
 let raw = many(is_byte(b'#'))
     .map(|hashes| hashes.len())
     .and_then(|n| {
-        is_byte(b'"')
-            .and(recognize(skip_many(byte().filter(|b| *b != b'"', "text"))))
-            .and(is_byte(b'"'))
-            .and(ntimes(is_byte(b'#'), n))
-            .map(|(((_, text), _), _)| text)
+        recognize(skip_many(byte().filter(|b| *b != b'"', "text")))
+            .between(is_byte(b'"'), is_byte(b'"'))
+            .terminated_by(ntimes(is_byte(b'#'), n))
     });
 
 let (text, _) = raw.parse(ByteCursor::new(b"##\"hi\"##")).unwrap();
@@ -300,8 +309,8 @@ concrete without allocating: the error of a combinator converts into the
 which allocates once per failure:
 
 ```rust
-use parsicomb::{AndExt, BoxedExt, ByteCursor, MapErrExt, MapExt, OrExt, Parser};
-use parsicomb::{ParsicombError, lazy, separated_list};
+use parsicomb::{BetweenExt, BoxedExt, ByteCursor, MapErrExt, MapExt, OrExt, Parser};
+use parsicomb::{ParsicombError, SeparatedListExt, lazy};
 use parsicomb::ascii::u64;
 use parsicomb::byte::is_byte;
 
@@ -314,10 +323,10 @@ enum Value {
 fn value<'code>()
 -> impl Parser<Cursor = ByteCursor<'code>, Output = Value, Error = ParsicombError<'code>> {
     let number = u64().map(Value::Number);
-    let list = is_byte(b'[')
-        .and(separated_list(lazy(|| value().boxed()), is_byte(b',')))
-        .and(is_byte(b']'))
-        .map(|((_, items), _)| Value::List(items));
+    let list = lazy(|| value().boxed())
+        .separated_by(is_byte(b','))
+        .between(is_byte(b'['), is_byte(b']'))
+        .map(Value::List);
 
     number.or(list).map_err(ParsicombError::from)
 }
@@ -403,6 +412,10 @@ let error = is_sequence(&LET_IDENT[..])
 assert!(error.to_string().contains(r#"expected "Let Ident", found "Let Let""#));
 ```
 
+Elements are owned (`'static`), so a token can't borrow its text from the
+source. Give tokens a span (start and end offsets) instead, and read the text
+from the source when it's needed.
+
 ## Error Messages
 
 Leaf parsers report what they expected and what they found, read from the
@@ -481,6 +494,9 @@ decide whether to backtrack:
   "nothing here" while the message still points at the missing token. Put
   `label` inside `skip_then` rather than around it, so the label replaces
   the error where the token is missing.
+  Literals are matched as a whole the same way: `is_string("pub")` on
+  `push` fails at `s` but only peeked from `p`, so `optional` and
+  repetitions stop there.
 - `Progress::Committed { at }`: it failed inside a `commit`, or fatally
   (nesting too deep).
 

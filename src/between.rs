@@ -85,6 +85,21 @@ where
     Between::new(open, content, close)
 }
 
+/// Extension trait to add .between() method support for parsers
+pub trait BetweenExt: Parser + Sized {
+    /// Match this parser between `open` and `close`, keeping only its output;
+    /// see [`Between`]
+    fn between<POpen, PClose>(self, open: POpen, close: PClose) -> Between<POpen, Self, PClose>
+    where
+        POpen: Parser<Cursor = Self::Cursor>,
+        PClose: Parser<Cursor = Self::Cursor>,
+    {
+        Between::new(open, self, close)
+    }
+}
+
+impl<P: Parser> BetweenExt for P {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
